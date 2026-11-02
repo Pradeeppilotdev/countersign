@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const args=process.argv.slice(2);
+for(let i=0;i<args.length;i++){
+ if(args[i]==='--rpc-addr'||args[i]==='--network-addr'){
+  const match=/^(?:0\.0\.0\.0|127\.0\.0\.1):(\d+)$/.exec(args[i+1]??'');
+  if(!match)throw Error('Only local sandbox listeners are allowed');
+  args[++i]=`127.0.0.1:${match[1]}`;
+ }
+}
+const child=spawn(fileURLToPath(new URL('../../work/sandbox-bin/near-sandbox',import.meta.url)),args,{stdio:'inherit'});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill(signal));
+child.on('exit',code=>process.exit(code??1));child.on('error',e=>{console.error(e.message);process.exit(1);});

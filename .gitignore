@@ -1,0 +1,14 @@
+node_modules/
+target/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+
+work/
+
+.DS_Store
+*.log
+app/*preview.png

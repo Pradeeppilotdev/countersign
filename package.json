@@ -1,0 +1,29 @@
+{
+  "name": "countersign",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test executor/*.test.ts",
+    "test:sandbox": "node --disable-warning=ExperimentalWarning --test integration/*.test.ts",
+    "test:oneclick": "node --disable-warning=ExperimentalWarning --test oneclick/*.test.ts",
+    "oneclick": "node --disable-warning=ExperimentalWarning oneclick/cli.ts",
+    "dev": "node --disable-warning=ExperimentalWarning app/server.ts",
+    "test:app": "node --disable-warning=ExperimentalWarning --test app/*.test.ts",
+    "test:agent": "node --disable-warning=ExperimentalWarning --test agent/*.test.ts",
+    "test:agent:sandbox": "node --disable-warning=ExperimentalWarning --test integration/agent.test.ts",
+    "agent:demo": "node --disable-warning=ExperimentalWarning agent/demo.ts",
+    "test:restart": "node --disable-warning=ExperimentalWarning integration/restart.mjs",
+    "test:route:sandbox": "node --disable-warning=ExperimentalWarning --test integration/route.test.ts",
+    "oneclick:approve:live": "node --disable-warning=ExperimentalWarning oneclick/live-approval.ts"
+  },
+  "engines": {
+    "node": ">=24.0"
+  },
+  "devDependencies": {
+    "near-workspaces": "^5.0.0"
+  },
+  "dependencies": {
+    "@defuse-protocol/one-click-sdk-typescript": "0.1.26",
+    "proper-lockfile": "4.1.2"
+  }
+}
