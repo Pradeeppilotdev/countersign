@@ -1,10 +1,10 @@
 # 1Click dry-run integration
 
-This module cannot move funds. Its only HTTP operation is POST to the fixed official `/v0/quote` endpoint with `dry: true`. Redirects are disabled and requests time out after 15 seconds. There are no deposit, signed-intent, wallet, vault-execution or transaction-submission methods. It is not connected to the native-NEAR vault.
+This module cannot move funds. Its only HTTP operation is POST to the fixed official `/v0/quote` endpoint with `dry: true`. Redirects are disabled and requests time out after 15 seconds. There are no deposit, signed-intent or payment-execution methods. A separate local owner transport records a non-fundable dry route commitment in the NEAR vault; it cannot execute that route as a native payment.
 
 ## Run → observe
 
-- `npm run test:oneclick` → five offline tests pass: terms enforcement, cryptographic tampering, dry-only HTTP behavior, persistent simulation/restart handling.
+- `npm run test:oneclick` → offline tests pass for terms enforcement, cryptographic tampering, dry-only HTTP behavior, persistent simulation and approval recovery.
 - `npm run oneclick -- demo` → PROCESSING followed by FAILED and then SUCCESS remains NEEDS_REVIEW. Output is explicitly simulated.
 - `npm run oneclick -- demo ./simulation.db` → same demo with durable local SQLite history. Use a fresh database for a fresh demo. Never treat these records as payment evidence.
 - Create a local owner-approved policy JSON using the fields below; run `npm run oneclick -- preview /absolute/path/policy.json` → requests a real dry quote, verifies the official SDK signature, validates policy constraints, and prints `mode: DRY_RUN`, `fundable: false`, the quote hash and expiry. Network errors, unsupported/default fields or invalid quotes fail closed. Live verification succeeded on 2026-11-02 at 09:58:53 UTC (15:28:53 India time): 1.002555 USDC on NEAR quoted for exactly 1 USDC on Base. Signature and all policy checks passed; no deposit address was returned. This expired quote is evidence of verification, not a current price.
@@ -58,4 +58,12 @@ npm run oneclick -- inspect ./previews.db invoice-2
 
 `record` only calls the dry quote endpoint and stores the result after signature/policy validation. A new quote requires a new workflow ID; existing IDs cannot be rebound to changed policy terms or quotes. These workflow IDs are simulation records, not vault payment authorizations. Policy, signed raw response, validation, timestamps and observations persist in SQLite. Local database files are gitignored; protect them because they contain route/policy data.
 
-`simulate` reads a JSON file with `status` and ISO `updatedAt`. This input is explicitly a local simulation, not an authenticated provider status. FAILED or unknown outcomes hold for review, and later SUCCESS does not clear that hold. No command funds, signs, submits or updates the vault.
+`simulate` reads a JSON file with `status` and ISO `updatedAt`. This input is explicitly a local simulation, not an authenticated provider status. FAILED or unknown outcomes hold for review, and later SUCCESS does not clear that hold. These simulation commands never fund, sign, submit or update the vault.
+
+## Durable local approval recovery
+
+`npm run oneclick:approve:live` → request a fresh signed dry quote, approve its exact commitment on a new local vault, reopen the SQLite records and recover the approval through read-only `get_route`. The command also rejects a modified refund destination and verifies unchanged balances. This full check passed on 3 November 2026 (India time); `work/live-route-approval.json` contains local evidence. It is not a live swap or settlement check.
+
+`DryRunWorkflow.approve` saves the vault, route and commitment atomically before the owner call. Concurrent callers and restarted processes never submit another approval for that workflow ID. `reconcileApproval(id, {vault, view})` requires only read access. A missing record or unavailable RPC leaves an unconfirmed attempt `UNKNOWN`; a mismatched commitment creates a persistent `NEEDS_REVIEW` hold. Neither outcome enables retries. Exact chain evidence yields `APPROVED`, still with `fundable: false`. Recovery after expiry proves only the historical approval and reports `expired: true`.
+
+`npm run oneclick -- inspect work/live-route-approval.db <invoice-id>` → see the persisted approval alongside the separately labelled settlement simulation. The live demo's vault is disposable and closes afterward; continuous recovery requires retaining the same local chain and supplying its trusted read transport. Dry quotes have no deposit address, so real settlement polling remains outside this dry-run flow.

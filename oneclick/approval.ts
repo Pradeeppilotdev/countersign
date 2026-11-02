@@ -18,12 +18,3 @@ export function prepareRoute(invoiceId:string,policy:Policy,response:unknown,now
  return {invoice_id:invoiceId,origin_asset:policy.originAsset,destination_asset:policy.destinationAsset,recipient:policy.recipient,refund_to:policy.refundTo,amount_out:policy.amountOut,max_amount_in:policy.maxAmountIn,quoted_amount_in:validated.amountIn,expires_at:String(validated.expiresAt),quote_hash:validated.quoteHash,response_hash:digest(canonical(response))};
 }
 export interface OwnerRouteTransport {vault:string;call(method:string,args:Record<string,unknown>):Promise<any>;view(method:string,args:Record<string,unknown>):Promise<any>}
-// Call with a trusted OWNER transport. The agent payment tool never receives this capability.
-export async function approveDryRoute(transport:OwnerRouteTransport,id:string,policy:Policy,response:unknown){
- const route=prepareRoute(id,structuredClone(policy),structuredClone(response));
- const expected=routeCommitment(transport.vault,route);
- await transport.call('authorize_route',{route});
- const approved=await transport.view('check_route',{route});
- if(approved?.commitment!==expected || routeCommitment(transport.vault,approved.route)!==expected)throw Error('On-chain route approval mismatch');
- return {mode:'DRY_RUN',fundable:false,approval:approved};
-}

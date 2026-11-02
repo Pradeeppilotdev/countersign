@@ -94,7 +94,7 @@ The project is Countersign. Version-one cryptographic domain strings retain `NEA
 
 The sandbox binary must be installed at `work/sandbox-bin/near-sandbox` before running the app, demos or tests. For macOS ARM, download the official archive linked above and extract its `near-sandbox` executable there. Dependencies, binaries, `.env`, disposable local keys, chain databases and generated screenshots are not part of this repository.
 
-`npm run oneclick:approve:live` requests a fresh dry quote and verifies owner approval on a new local vault without sending funds. This check currently reports HTTP 521 from the provider; offline quote tests and local route approval tests pass. It fails closed and does not substitute archived quotes.
+`npm run oneclick:approve:live` requests a fresh dry quote and verifies owner approval on a new local vault without sending funds. Live verification passed on 3 November 2026 (India time), including signature and policy checks, local owner approval, read-only recovery after reopening the records, and unchanged balances. It fails closed on outages and does not substitute archived quotes. Approval attempts are saved before the owner call; duplicates and restarts reconcile the same vault binding without submitting again. Unknown results stay unresolved, conflicting records require review, and expired approvals remain historical evidence only. Local evidence is saved at `work/live-route-approval.json`.
 
 ## Native invoice cancellation and expiry
 
@@ -117,7 +117,7 @@ npm run demo:verify
 
 The command builds the contract, checks agent restrictions and tampering, tests actual local payments and duplicate protection, checks owner cancellation and expiry, and kills/restarts a separate app and chain to verify recovery. An unexpected failure stops the runner with a nonzero exit code. `work/demo-output.txt` contains the full transcript; `work/demo.cast` is an asciicast v2 terminal recording playable with `asciinema play work/demo.cast`. These recordings are local artifacts and are not committed automatically.
 
-This repeatable demo uses fixture model proposals and archived signed quote fixtures. Live AI inference was separately verified using local payment funds; fresh 1Click quote-to-approval verification remains blocked by provider HTTP 521. Simulated status observations are not evidence of real cross-chain settlement. No live model key or 1Click availability is needed for `demo:verify`.
+This repeatable demo uses fixture model proposals and archived signed quote fixtures. Live AI inference was separately verified using local payment funds; fresh 1Click quote-to-approval verification also passed separately on 3 November 2026 (India time). Simulated status observations are not evidence of real cross-chain settlement. No live model key or 1Click availability is needed for `demo:verify`.
 
 ### Automated verification
 

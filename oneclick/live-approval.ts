@@ -26,17 +26,26 @@ try{
   view:(method,args)=>desk.vault.view(method,args),
  });
  assert.equal(result.fundable,false);
+ assert.equal(result.approvalState,'APPROVED','Dry approval is unresolved; do not submit it again');
+ assert.ok(result.approval);
  assert.equal(result.approval.commitment,routeCommitment(desk.vault.accountId,result.approval.route));
+ // Close/reopen the local records and recover through a read-only capability.
+ workflow.close();
+ workflow=new DryRunWorkflow(fileURLToPath(new URL('../work/live-route-approval.db',import.meta.url)));
+ const recovered=await workflow.reconcileApproval(id,{vault:desk.vault.accountId,view:(method,args)=>desk.vault.view(method,args)});
+ assert.deepEqual(recovered.approval,result.approval);
+ assert.equal(recovered.approvalState,'APPROVED');
  const persisted=await desk.vault.view('get_route',{invoice_id:id});
  assert.equal(persisted.commitment,result.approval.commitment);
  await assert.rejects(()=>desk.vault.view('check_route',{route:{...result.approval.route,refund_to:'attacker.near'}}),/route mismatch/);
  const after=await desk.snapshot();
  assert.equal(after.available,before.available);assert.equal(after.merchantReceived,before.merchantReceived);
- const evidence={verifiedAt:new Date().toISOString(),network:'LOCAL_SANDBOX',quoteMode:'LIVE_PREVIEW',fundable:false,invoiceId:id,vault:desk.vault.accountId,policy,validation:quote.validation,approval:result.approval,availableBefore:before.available,availableAfter:after.available,merchantReceivedBefore:before.merchantReceived,merchantReceivedAfter:after.merchantReceived};
+ const evidence={verifiedAt:new Date().toISOString(),network:'LOCAL_SANDBOX',quoteMode:'LIVE_PREVIEW',fundable:false,invoiceId:id,vault:desk.vault.accountId,policy,validation:quote.validation,approval:result.approval,recoveredAfterReopen:true,availableBefore:before.available,availableAfter:after.available,merchantReceivedBefore:before.merchantReceived,merchantReceivedAfter:after.merchantReceived};
  const evidencePath=new URL('../work/live-route-approval.json',import.meta.url);
  writeFileSync(evidencePath,JSON.stringify(evidence,null,2),{mode:0o600});
  console.log('PASS: fresh provider signature and invoice terms verified.');
  console.log('PASS: owner approval stored on the local vault; commitment matches.');
+ console.log('PASS: reopened approval records reconcile using read-only vault access.');
  console.log('PASS: changed refund address rejected; vault budget and merchant balance unchanged.');
  console.log(JSON.stringify({invoiceId:id,quoteHash:quote.validation.quoteHash,commitment:result.approval.commitment,expiresAt:new Date(quote.validation.expiresAt).toISOString(),fundable:false,evidence:fileURLToPath(evidencePath)},null,2));
 }catch(error){
