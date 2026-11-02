@@ -29,6 +29,7 @@ export class InvoicePaymentTool {
    !Object.hasOwn(input,'invoice_id')||(input as any).invoice_id!==this.#invoice.id)throw Error('Only the assigned invoice_id is accepted');
   const payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
   if(!payment || payment.commitment!==commitment(this.#invoice) || commitment(payment.invoice)!==payment.commitment)throw Error('Invoice is not approved with the assigned terms');
+  if(payment.state==='Cancelled')throw Error('Invoice cancelled by owner');
   const {auth,rail}=vaultAdapters(this.#transport,this.#invoice.id);
   const executor=new Executor(this.#db,auth,rail);
   try {

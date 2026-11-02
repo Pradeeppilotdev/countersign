@@ -39,7 +39,7 @@ The vault supports **native NEAR only**, in yoctoNEAR. It does not implement USD
 
 ## Security boundaries and limits
 
-- The owner is trusted to authorize genuine obligations. Reusing the same bill under a different invoice ID is not detected. Merchant signatures, expiry, revocation and aggregate time-based spending policies are not implemented.
+- The owner is trusted to authorize genuine obligations. Reusing the same bill under a different invoice ID is not detected. Merchant signatures and aggregate time-based spending policies are not implemented. New native authorizations expire and may be cancelled before reservation, as described below.
 - Only the designated executor can reserve/execute. It cannot change stored payment terms or invoke the private settlement callback. Reservation is not payment; the recipient receives funds only through `execute`.
 - The contract account's full-access deployment key remains an administrative trust boundary. The sandbox deployer retains this key; it could upgrade the contract or transfer its balance. Neither the agent nor executor should receive it. Production key removal/governance is not implemented or claimed. Initialization must accompany deployment atomically in a production setup.
 - Deposits are tracked separately from account balance. Storage and a 0.1 NEAR operating buffer are checked before executing. The deployer's initial balance covers storage in the sandbox. Storage funding/exhaustion policy needs further work.
@@ -72,7 +72,7 @@ To opt into a potentially billable model request, configure `NEAR_AI_API_KEY` an
 
 Run `npm run dev` → the app opens the saved local vault, or creates one on first use. Invoice terms and attempt IDs are persisted before authorization. Existing attempts are reconciled against the contract at startup without resubmitting. A directory lock prevents two app processes from managing the same records. An incomplete setup fails closed rather than funding a replacement vault. The local chain keeps running after the app exits and uses its saved database if restarted.
 
-Run `npm run test:restart` → a separate app is killed after reservation, restarted, and pays once. Another restart and replay preserve the same merchant balance. The test also restarts the chain process and verifies the original vault and balances. This uses port 4328 and separate temporary state; no live model calls. Existing ephemeral sessions from older app versions are not migrated.
+Run `npm run test:restart` → a separate app is killed after reservation, restarted, and pays once. Another restart and replay preserve the same merchant balance. The test also restarts the chain process and verifies the original vault and balances. This uses an available local port and separate temporary state; no live model calls. Existing ephemeral sessions from older app versions are not migrated.
 
 ## Owner approval of a dry 1Click route
 
@@ -95,3 +95,26 @@ The project is Countersign. Version-one cryptographic domain strings retain `NEA
 The sandbox binary must be installed at `work/sandbox-bin/near-sandbox` before running the app, demos or tests. For macOS ARM, download the official archive linked above and extract its `near-sandbox` executable there. Dependencies, binaries, `.env`, disposable local keys, chain databases and generated screenshots are not part of this repository.
 
 `npm run oneclick:approve:live` requests a fresh dry quote and verifies owner approval on a new local vault without sending funds. This check currently reports HTTP 521 from the provider; offline quote tests and local route approval tests pass. It fails closed and does not substitute archived quotes.
+
+## Native invoice cancellation and expiry
+
+New `authorize` calls accept an optional `expires_at` (decimal millisecond timestamp). Omit it for a one-hour expiry; explicit expiry must be in the next 24 hours. The owner cannot extend or replace an existing invoice's deadline. `invoice_expiry` reads the immutable deadline. The invoice terms commitment remains version one; the deadline is separate owner-controlled contract metadata bound to that invoice ID.
+
+Owner-only `cancel({invoice_id})` permanently cancels an Authorized invoice. Repeating cancellation is idempotent; it does not alter the budget. Reserved, Executing and terminal payment states cannot be cancelled. Reservation and execution independently check expiry. An expired reservation stays charged and cannot execute; automatic budget release/retry is deliberately not implemented. The agent payment capability rejects Cancelled invoices before attempting reservation.
+
+Run `npm run test:owner:sandbox` → unauthorized cancellation, cancelled-invoice execution, ID reuse, invalid deadlines, late reservation, and late execution are rejected with exact reasons; merchant balance stays unchanged and expired reserved funds remain held. Existing deployed contracts are not automatically upgraded. Legacy authorizations stored before expiry support retain no deadline; the expiry lookup returns null for them. Expiry storage uses a separate prefix and Cancelled is appended to the state enum to preserve existing stored records.
+
+## Reproducible verification and terminal demo
+
+From a fresh checkout, install Node 24+ and Rust with `wasm32-unknown-unknown`, run `npm ci --ignore-scripts`, and install the official NEAR Sandbox 2.14.0 executable at `work/sandbox-bin/near-sandbox`. For macOS ARM:
+
+```sh
+mkdir -p work/sandbox-bin
+curl --fail --location https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Darwin-arm64/2.14.0/near-sandbox.tar.gz -o work/near-sandbox.tar.gz
+tar -xzf work/near-sandbox.tar.gz -C work/sandbox-bin
+npm run demo:verify
+```
+
+The command builds the contract, checks agent restrictions and tampering, tests actual local payments and duplicate protection, checks owner cancellation and expiry, and kills/restarts a separate app and chain to verify recovery. An unexpected failure stops the runner with a nonzero exit code. `work/demo-output.txt` contains the full transcript; `work/demo.cast` is an asciicast v2 terminal recording playable with `asciinema play work/demo.cast`. These recordings are local artifacts and are not committed automatically.
+
+This repeatable demo uses fixture model proposals and archived signed quote fixtures. Live AI inference was separately verified using local payment funds; fresh 1Click quote-to-approval verification remains blocked by provider HTTP 521. Simulated status observations are not evidence of real cross-chain settlement. No live model key or 1Click availability is needed for `demo:verify`.

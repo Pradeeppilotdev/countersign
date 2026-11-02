@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 export type Invoice = { id: string; payee: string; asset: string; amount: string };
-export type Payment = { invoice: Invoice; commitment: string; state: 'Authorized' | 'Reserved' | 'Executing' | 'Settled' | 'Failed'; attempt_id: string | null };
+export type Payment = { invoice: Invoice; commitment: string; state: 'Authorized' | 'Reserved' | 'Executing' | 'Settled' | 'Failed' | 'Cancelled'; attempt_id: string | null };
 export interface Authorization { reserve(invoice: Invoice, attempt: string): Promise<Payment>; resolve(id: string, attempt: string, settled: boolean): Promise<Payment> }
 export interface Rail { submit(invoice: Invoice, attempt: string): Promise<void>; status(attempt: string): Promise<'settled' | 'failed' | 'unknown'> }
 export function commitment(i: Invoice): string {

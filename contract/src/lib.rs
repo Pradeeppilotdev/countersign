@@ -2,7 +2,7 @@ use near_sdk::{collections::LookupMap, env, json_types::{U128, U64}, near, Accou
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum State { Authorized, Reserved, Executing, Settled, Failed }
+pub enum State { Authorized, Reserved, Executing, Settled, Failed, Cancelled }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -25,6 +25,10 @@ pub struct DryRoute {
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
 pub struct RouteApproval { pub route: DryRoute, pub commitment: String }
+fn expiries() -> LookupMap<String, u64> { LookupMap::new(b"invoice-expiry-v1".to_vec()) }
+fn check_expiry(id:&String){
+    if let Some(expiry)=expiries().get(id){near_sdk::require!(env::block_timestamp_ms()<expiry,"invoice expired");}
+}
 fn routes() -> LookupMap<String, RouteApproval> { LookupMap::new(b"dry-routes-v1".to_vec()) }
 fn route_commitment(r: &DryRoute) -> String {
     let mut bytes=b"NEAR-AEGIS-DRY-ROUTE-V1\n".to_vec();
@@ -88,23 +92,37 @@ impl Contract {
         near_sdk::require!(route.expires_at.0>env::block_timestamp_ms(),"route expired");approval
     }
     pub fn available_balance(&self) -> U128 { U128(self.available) }
-    pub fn authorize(&mut self, invoice: Invoice) -> Payment {
+    pub fn authorize(&mut self, invoice: Invoice, expires_at: Option<U64>) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.owner, "owner only");
         near_sdk::require!(valid_id(&invoice.id) && valid_id(&invoice.asset) && invoice.amount.0 > 0, "invalid invoice");
         near_sdk::require!(invoice.asset == "near", "only native NEAR supported");
         near_sdk::require!(self.payments.get(&invoice.id).is_none() && routes().get(&invoice.id).is_none(), "invoice id already used");
+        let now=env::block_timestamp_ms();
+        let expiry=expires_at.map(|v|v.0).unwrap_or_else(||now.saturating_add(3_600_000));
+        near_sdk::require!(expiry>now && expiry<=now.saturating_add(86_400_000),"expiry must be within 24 hours");
+        expiries().insert(&invoice.id,&expiry);
         let p = Payment { commitment: commitment(&invoice), invoice: invoice.clone(), state: State::Authorized, attempt_id: None };
         self.payments.insert(&invoice.id, &p); p
+    }
+    pub fn invoice_expiry(&self, invoice_id:String)->Option<U64>{expiries().get(&invoice_id).map(U64)}
+    pub fn cancel(&mut self, invoice_id:String)->Payment{
+        near_sdk::require!(env::predecessor_account_id()==self.owner,"owner only");
+        let mut p=self.payments.get(&invoice_id).unwrap_or_else(||env::panic_str("unknown invoice"));
+        if p.state==State::Cancelled{return p;}
+        near_sdk::require!(p.state==State::Authorized,"only unreserved invoices can be cancelled");
+        p.state=State::Cancelled;self.payments.insert(&invoice_id,&p);p
     }
     pub fn reserve(&mut self, invoice: Invoice, attempt_id: String) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.executor, "executor only");
         near_sdk::require!(valid_id(&attempt_id), "invalid attempt id");
         let mut p = self.payments.get(&invoice.id).unwrap_or_else(|| env::panic_str("unknown invoice"));
         near_sdk::require!(p.commitment == commitment(&invoice), "invoice mismatch");
+        near_sdk::require!(p.state!=State::Cancelled,"invoice cancelled");
         if p.state != State::Authorized {
             near_sdk::require!(p.attempt_id.as_deref() == Some(attempt_id.as_str()), "already reserved");
             return p;
         }
+        check_expiry(&invoice.id);
         near_sdk::require!(self.available >= invoice.amount.0, "insufficient budget");
         self.available -= invoice.amount.0;
         p.state = State::Reserved; p.attempt_id = Some(attempt_id);
@@ -113,9 +131,11 @@ impl Contract {
     pub fn execute(&mut self, invoice_id: String, attempt_id: String) -> PromiseOrValue<Payment> {
         near_sdk::require!(env::predecessor_account_id() == self.executor, "executor only");
         let mut p = self.payments.get(&invoice_id).unwrap_or_else(|| env::panic_str("unknown invoice"));
+        near_sdk::require!(p.state!=State::Cancelled,"invoice cancelled");
         near_sdk::require!(p.attempt_id.as_deref() == Some(attempt_id.as_str()), "attempt mismatch");
         if matches!(p.state, State::Executing | State::Settled | State::Failed) { return PromiseOrValue::Value(p); }
         near_sdk::require!(p.state == State::Reserved, "not reserved");
+        check_expiry(&invoice_id);
         let storage = u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
         near_sdk::require!(env::account_balance().as_yoctonear().saturating_sub(storage + 100_000_000_000_000_000_000_000) >= p.invoice.amount.0, "insufficient liquid balance");
         p.state = State::Executing;
@@ -149,26 +169,26 @@ mod tests {
     fn invoice() -> Invoice { Invoice { id: "inv-1".into(), payee: "merchant.near".parse().unwrap(), asset: "near".into(), amount: U128(42) } }
     #[test] fn commitment_vector() { let mut i = invoice(); i.asset = "usdc".into(); assert_eq!(commitment(&i), "b5561ba22a6b4bfd4d3cc91550e27bf7e5629730521b3f648266008bae0d5506"); }
     #[test] #[should_panic(expected = "owner only")] fn unauthorized_owner_call_rejected() {
-        actor("attacker.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice());
+        actor("attacker.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice(),None);
     }
     #[test] #[should_panic(expected = "executor only")] fn unauthorized_reservation_rejected() {
-        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice());
+        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice(),None);
         actor("attacker.near"); c.reserve(invoice(), "a".into());
     }
     #[test] #[should_panic(expected = "invoice mismatch")] fn altered_payee_rejected() {
-        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice());
+        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice(),None);
         actor("executor.near"); let mut i = invoice(); i.payee = "attacker.near".parse().unwrap(); c.reserve(i, "a".into());
     }
     #[test] fn reservation_debits_budget_once() {
-        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 100; c.authorize(invoice());
+        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 100; c.authorize(invoice(),None);
         actor("executor.near"); c.reserve(invoice(), "a".into()); c.reserve(invoice(), "a".into()); assert_eq!(c.available, 58);
     }
     #[test] #[should_panic(expected = "invoice mismatch")] fn tampering_rejected() {
-        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice());
+        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice(),None);
         actor("executor.near"); let mut i = invoice(); i.amount = U128(43); c.reserve(i, "a".into());
     }
     #[test] #[should_panic(expected = "already reserved")] fn duplicate_attempt_rejected() {
-        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice());
+        actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice(),None);
         actor("executor.near"); c.reserve(invoice(), "a".into()); c.reserve(invoice(), "b".into());
     }
 }
