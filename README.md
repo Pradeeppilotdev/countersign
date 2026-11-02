@@ -111,7 +111,7 @@ From a fresh checkout, install Node 24+ and Rust with `wasm32-unknown-unknown`, 
 ```sh
 mkdir -p work/sandbox-bin
 curl --fail --location https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Darwin-arm64/2.14.0/near-sandbox.tar.gz -o work/near-sandbox.tar.gz
-tar -xzf work/near-sandbox.tar.gz -C work/sandbox-bin
+tar -xzf work/near-sandbox.tar.gz -C work/sandbox-bin --strip-components=1
 npm run demo:verify
 ```
 
