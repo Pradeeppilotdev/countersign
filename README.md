@@ -44,7 +44,7 @@ The vault supports **native NEAR only**, in yoctoNEAR. It does not implement USD
 - The contract account's full-access deployment key remains an administrative trust boundary. The sandbox deployer retains this key; it could upgrade the contract or transfer its balance. Neither the agent nor executor should receive it. Production key removal/governance is not implemented or claimed. Initialization must accompany deployment atomically in a production setup.
 - Deposits are tracked separately from account balance. Storage and a 0.1 NEAR operating buffer are checked before executing. The deployer's initial balance covers storage in the sandbox. Storage funding/exhaustion policy needs further work.
 - SQLite uniqueness spans processes sharing the same durable database. The on-chain Executing/terminal states independently prevent a second native transfer. Database recovery cannot authorize new invoice terms.
-- The mock executor suite is separate from the real sandbox test. This is not an audit or proof of production safety. The development-only near-workspaces dependency tree has reported advisories and requires review before production tooling use.
+- The mock executor suite is separate from the real sandbox test. This is not an audit or proof of production safety. The development-only near-workspaces dependency tree still has low-severity elliptic advisories. Its archive dependency is pinned to patched tar 7.5.22; `npm audit --audit-level=high` currently passes. This does not constitute production security clearance.
 
 Canonical commitment: SHA-256 of UTF-8 `NEAR-AEGIS-INVOICE-V1\n`, then invoice ID, payee, asset and positive integer amount. Each field is prefixed by its UTF-8 byte length in decimal and a colon. IDs/assets are ASCII letters, digits, `_`, `.`, `:`, `-`, length 1–128. Amounts use canonical decimal unsigned 128-bit base units. The contract authorizes only asset `near`.
 
@@ -118,3 +118,9 @@ npm run demo:verify
 The command builds the contract, checks agent restrictions and tampering, tests actual local payments and duplicate protection, checks owner cancellation and expiry, and kills/restarts a separate app and chain to verify recovery. An unexpected failure stops the runner with a nonzero exit code. `work/demo-output.txt` contains the full transcript; `work/demo.cast` is an asciicast v2 terminal recording playable with `asciinema play work/demo.cast`. These recordings are local artifacts and are not committed automatically.
 
 This repeatable demo uses fixture model proposals and archived signed quote fixtures. Live AI inference was separately verified using local payment funds; fresh 1Click quote-to-approval verification remains blocked by provider HTTP 521. Simulated status observations are not evidence of real cross-chain settlement. No live model key or 1Click availability is needed for `demo:verify`.
+
+### Automated verification
+
+Push to `main` or open a pull request → GitHub Actions builds the contract and runs the Rust unit tests, offline proposal/quote tests, local payment tests and crash recovery checks. It also rejects high/critical npm dependency advisories. The workflow uses Node 24, Rust 1.99.1 and the checksum-pinned official Linux NEAR Sandbox 2.14.0 archive. No live model key, swaps or real funds are used.
+
+Open the workflow run → download `local-verification` for the terminal recording and transcript. Only those two files are uploaded; local chain data and keys are excluded. Low-severity upstream elliptic warnings remain visible in the audit output; the archive-library override is scoped to near-sandbox.

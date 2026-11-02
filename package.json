@@ -27,5 +27,10 @@
   "dependencies": {
     "@defuse-protocol/one-click-sdk-typescript": "0.1.26",
     "proper-lockfile": "4.1.2"
+  },
+  "overrides": {
+    "near-sandbox": {
+      "tar": "7.5.22"
+    }
   }
 }

@@ -1,0 +1,60 @@
+name: Local payment verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-payments:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies without install scripts
+        run: npm ci --ignore-scripts
+      - name: Reject high and critical dependency advisories
+        run: npm audit --audit-level=high
+      - name: Install the contract toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
+          rustup override set 1.99.1
+      - name: Install pinned local test chain
+        run: |
+          mkdir -p work/sandbox-bin
+          curl --fail --silent --show-error --location --retry 3 \
+            https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/2.14.0/near-sandbox.tar.gz \
+            --output work/near-sandbox.tar.gz
+          echo 'a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691  work/near-sandbox.tar.gz' | sha256sum --check
+          tar -xzf work/near-sandbox.tar.gz --strip-components=1 -C work/sandbox-bin
+          chmod +x work/sandbox-bin/near-sandbox
+      - name: Test contract authorization rules
+        run: cargo test --locked --manifest-path contract/Cargo.toml
+      - name: Verify local payments and crash recovery
+        # Fixture proposals and quotes only. No API keys or external payment accounts.
+        run: npm run demo:verify
+      - name: Save verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: local-verification
+          # Never upload work/ itself: it can contain disposable private keys.
+          path: |
+            work/demo-output.txt
+            work/demo.cast
+          if-no-files-found: ignore
+          retention-days: 14
