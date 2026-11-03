@@ -1,4 +1,5 @@
 mod policy;
+mod merchant_auth;
 use near_sdk::{collections::LookupMap, env, json_types::{U128, U64}, near, AccountId, PanicOnDefault, NearToken, Gas, Promise, PromiseOrValue};
 
 #[near(serializers = [borsh, json])]
@@ -7,6 +8,7 @@ pub enum State { Authorized, Reserved, Executing, Settled, Failed, Cancelled }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Invoice { pub id: String, pub payee: AccountId, pub asset: String, pub amount: U128 }
 
 #[near(serializers = [borsh, json])]

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {DatabaseSync} from 'node:sqlite';
+import {commitment} from '../executor/core.ts';
 import {AgentInbox} from './inbox.ts';
 const invoice={id:'inbox-one',payee:'merchant.test.near',asset:'near',amount:'1'};
 const proposal={name:'request_payment',arguments:{invoice_id:invoice.id}};
@@ -63,4 +65,17 @@ test('cancellation requires matching terminal contract evidence and prevents lat
   assert.equal((await inbox.cancel(invoice.id,async()=>({...payment,state:'Cancelled'}))).state,'cancelled');
   assert.equal((await inbox.run(invoice.id,async()=>{throw Error('Must not call model');})).state,'cancelled');
  }finally{inbox.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('existing inbox migration preserves settled invoices and refuses the wrong vault before altering schema',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'inbox-migration-')),path=join(dir,'old.db');let inbox:AgentInbox|undefined;
+ try{
+  const old=new DatabaseSync(path);
+  old.exec("CREATE TABLE inbox_scope(id INTEGER PRIMARY KEY,vault TEXT NOT NULL); INSERT INTO inbox_scope VALUES(1,'local:vault'); CREATE TABLE inbox(id TEXT PRIMARY KEY,invoice TEXT NOT NULL,merchant TEXT NOT NULL,commitment TEXT NOT NULL,state TEXT NOT NULL,generation INTEGER NOT NULL DEFAULT 0,proposal TEXT,error TEXT)");
+  old.prepare("INSERT INTO inbox(id,invoice,merchant,commitment,state,proposal) VALUES(?,?,?,?,'settled',?)").run(invoice.id,JSON.stringify(invoice),'merchant',commitment(invoice),JSON.stringify(proposal));old.close();
+  assert.throws(()=>new AgentInbox(path,'wrong-vault',transport),/another vault/);
+  const inspect=new DatabaseSync(path);assert.ok(!inspect.prepare('PRAGMA table_info(inbox)').all().some(c=>c.name==='signed_invoice'));inspect.close();
+  inbox=new AgentInbox(path,'local:vault',transport);assert.deepEqual(inbox.get(invoice.id).invoice,invoice);assert.equal(inbox.get(invoice.id).signed_invoice,null);
+  assert.equal((await inbox.run(invoice.id,async()=>{throw Error('Unexpected model call');})).state,'settled');
+ }finally{inbox?.close();rmSync(dir,{recursive:true,force:true});}
 });

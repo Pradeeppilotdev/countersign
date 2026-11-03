@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Executor, commitment, type Invoice } from '../executor/core.ts';
+import {parseSignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
 import { vaultAdapters, type VaultTransport } from '../executor/vault.ts';
 
 export const paymentToolSchema = Object.freeze({
@@ -11,11 +12,12 @@ export const paymentToolSchema = Object.freeze({
 
 // Constructed by the trusted host, never from model output. One capability per invoice.
 export class InvoicePaymentTool {
- #db: string; #invoice: Invoice; #transport: VaultTransport; #attempt: string; #policyMerchant?:string;
- constructor(db: string, vaultIdentity: string, approvedInvoice: Invoice, transport: VaultTransport, policyMerchant?:string) {
+ #db: string; #invoice: Invoice; #transport: VaultTransport; #attempt: string; #policyMerchant?:string; #signed?:SignedInvoice;
+ constructor(db: string, vaultIdentity: string, approvedInvoice: Invoice, transport: VaultTransport, policyMerchant?:string, signed?:SignedInvoice) {
   if(!vaultIdentity || db===':memory:')throw Error('Persistent storage and a pinned vault identity are required');
   if(policyMerchant!==undefined&&!/^[A-Za-z0-9_.:-]{1,128}$/.test(policyMerchant))throw Error('Invalid policy merchant');
   this.#policyMerchant=policyMerchant;
+  if(signed){this.#signed=parseSignedInvoice(signed);if(this.#signed.merchant_id!==policyMerchant||commitment(this.#signed.invoice)!==commitment(approvedInvoice))throw Error('Signed invoice capability mismatch');}
   const hash=commitment(approvedInvoice);
   this.#db=db; this.#invoice=Object.freeze({...approvedInvoice});this.#transport=transport;
   this.#attempt=createHash('sha256').update(JSON.stringify([vaultIdentity,approvedInvoice.id,hash])).digest('hex');
@@ -32,7 +34,8 @@ export class InvoicePaymentTool {
   let payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
   // Host-selected policy capability. The model still gets only invoice_id.
   if(!payment && this.#policyMerchant){
-   await this.#transport.call('authorize_by_policy',{invoice:this.#invoice,merchant_id:this.#policyMerchant});
+   if(this.#signed)await this.#transport.call('authorize_signed_invoice',{signed:this.#signed});
+   else await this.#transport.call('authorize_by_policy',{invoice:this.#invoice,merchant_id:this.#policyMerchant});
    payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
   }
   if(!payment || payment.commitment!==commitment(this.#invoice) || commitment(payment.invoice)!==payment.commitment)throw Error('Invoice is not approved with the assigned terms');

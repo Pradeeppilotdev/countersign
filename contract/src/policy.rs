@@ -38,6 +38,7 @@ pub(super) fn check_bound(invoice:&Invoice){
   let policy=policies().get(&0).unwrap_or_else(||env::panic_str("policy revoked"));
   near_sdk::require!(policy.version.0==binding.version,"policy changed; approval invalidated");
   check(&policy,invoice,&binding.merchant);
+  merchant_auth::check_bound(invoice,&binding.merchant);
  }
 }
 pub(super) fn record_execution(invoice:&Invoice){
@@ -68,6 +69,13 @@ impl Contract {
  pub fn policy_usage(&self)->U128{U128(total(&active(self)))}
  pub fn authorize_by_policy(&mut self,invoice:Invoice,merchant_id:String,expires_at:Option<U64>)->Payment {
   near_sdk::require!(env::predecessor_account_id()==self.executor,"executor only");
+  merchant_auth::require_unsigned(&merchant_id);
+  self.authorize_policy_invoice(invoice,merchant_id,expires_at)
+ }
+}
+// Internal shared implementation: this impl has no NEAR export macro.
+impl Contract {
+ pub(super) fn authorize_policy_invoice(&mut self,invoice:Invoice,merchant_id:String,expires_at:Option<U64>)->Payment {
   let policy=policies().get(&0).unwrap_or_else(||env::panic_str("no spending policy"));
   check(&policy,&invoice,&merchant_id);
   // Same invoice terms/merchant may be retried; never charge quota twice.

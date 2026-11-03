@@ -2,6 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {commitment,type Invoice,type Payment} from '../executor/core.ts';
 import {InvoicePaymentTool,validateInvoiceProposal} from './payment-tool.ts';
 import type {VaultTransport} from '../executor/vault.ts';
+import {parseSignedInvoice,verifySignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
 import {publicError} from '../app/errors.ts';
 
 type Proposer=(invoice:Readonly<Invoice>)=>Promise<unknown>;
@@ -15,20 +16,34 @@ export class AgentInbox {
   this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
    CREATE TABLE IF NOT EXISTS inbox_scope (id INTEGER PRIMARY KEY CHECK(id=1),vault TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS inbox (id TEXT PRIMARY KEY,invoice TEXT NOT NULL,merchant TEXT NOT NULL,commitment TEXT NOT NULL,state TEXT NOT NULL,generation INTEGER NOT NULL DEFAULT 0,proposal TEXT,error TEXT);`);
-  this.db.prepare('INSERT OR IGNORE INTO inbox_scope VALUES(1,?)').run(identity);
-  if(this.db.prepare('SELECT vault FROM inbox_scope WHERE id=1').get()?.vault!==identity){this.db.close();throw Error('Inbox belongs to another vault');}
+  this.db.exec('BEGIN IMMEDIATE');
+  try{
+   this.db.prepare('INSERT OR IGNORE INTO inbox_scope VALUES(1,?)').run(identity);
+   if(this.db.prepare('SELECT vault FROM inbox_scope WHERE id=1').get()?.vault!==identity)throw Error('Inbox belongs to another vault');
+   if(!this.db.prepare('PRAGMA table_info(inbox)').all().some(c=>c.name==='signed_invoice'))this.db.exec('ALTER TABLE inbox ADD COLUMN signed_invoice TEXT');
+   this.db.exec('COMMIT');
+  }catch(error){this.db.exec('ROLLBACK');this.db.close();throw error;}
  }
  close(){this.db.close();}
- get(id:string){const row=this.db.prepare('SELECT * FROM inbox WHERE id=?').get(id);if(!row)throw Error('Unknown inbox invoice');return {...row,invoice:JSON.parse(String(row.invoice)),proposal:row.proposal?JSON.parse(String(row.proposal)):null};}
+ get(id:string){const row=this.db.prepare('SELECT * FROM inbox WHERE id=?').get(id);if(!row)throw Error('Unknown inbox invoice');return {...row,signed_invoice:row.signed_invoice?JSON.parse(String(row.signed_invoice)):null,invoice:JSON.parse(String(row.invoice)),proposal:row.proposal?JSON.parse(String(row.proposal)):null};}
  list(){return this.db.prepare('SELECT id FROM inbox ORDER BY rowid').all().map(r=>this.get(String(r.id)));}
- enqueue(invoice:Invoice,merchant:string){
+ enqueue(invoice:Invoice,merchant:string,signed?:SignedInvoice){
   if(!invoice||typeof invoice!=='object'||Array.isArray(invoice)||Object.keys(invoice).sort().join(',')!=='amount,asset,id,payee'||!Object.values(invoice).every(v=>typeof v==='string')||invoice.asset!=='near')throw Error('Only exact native invoice fields are accepted');
   if(typeof merchant!=='string'||!/^[A-Za-z0-9_.:-]{1,128}$/.test(merchant))throw Error('Invalid merchant');
   const hash=commitment(invoice);
-  this.db.prepare("INSERT OR IGNORE INTO inbox(id,invoice,merchant,commitment,state) VALUES(?,?,?,?,'queued')").run(invoice.id,JSON.stringify(invoice),merchant,hash);
+  const auth=signed?parseSignedInvoice(signed):null;
+  if(auth&&(commitment(auth.invoice)!==hash||auth.merchant_id!==merchant))throw Error('Signed invoice capability mismatch');
+  this.db.prepare("INSERT OR IGNORE INTO inbox(id,invoice,merchant,commitment,state,signed_invoice) VALUES(?,?,?,?,'queued',?)").run(invoice.id,JSON.stringify(invoice),merchant,hash,auth?JSON.stringify(auth):null);
   const row=this.get(invoice.id);
   if(row.commitment!==hash||row.merchant!==merchant)throw Error('Inbox invoice already bound to different terms');
+  if(auth&&JSON.stringify(row.signed_invoice)!==JSON.stringify(auth))throw Error('Signed invoice already bound or previously queued unsigned');
   return row;
+ }
+ async enqueueSigned(raw:unknown,vault:string){
+  const parsed=parseSignedInvoice(raw);
+  const [domain,key]=await Promise.all([this.transport.view('get_invoice_domain',{}),this.transport.view('get_merchant_key',{merchant_id:parsed.merchant_id})]);
+  const signed=verifySignedInvoice(parsed,{vault,domain,key});
+  return this.enqueue(signed.invoice,signed.merchant_id,signed);
  }
  async propose(id:string,proposer:Proposer){
   const row=this.get(id);
@@ -57,7 +72,7 @@ export class AgentInbox {
   if(row.state!=='proposal_ready')return row; // Never infer or invent consent during recovery.
   const proposal=validateInvoiceProposal(row.invoice,row.proposal);
   if(commitment(row.invoice)!==row.commitment)throw Error('Inbox commitment mismatch');
-  const tool=new InvoicePaymentTool(this.path,this.identity,row.invoice,this.transport,String(row.merchant));
+  const tool=new InvoicePaymentTool(this.path,this.identity,row.invoice,this.transport,String(row.merchant),row.signed_invoice??undefined);
   try{
    const result=await tool.request(proposal.arguments);
    const state=['settled','failed','cancelled'].includes(result.state)?result.state:'proposal_ready';
