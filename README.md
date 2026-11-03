@@ -46,11 +46,11 @@ From a fresh clone to a working demo. Run every command from the repository root
    | Darwin-arm64 | `ea53448ef97540c012e5c3d967c74d78292b0465a98cf7027811a936718fe232` |
    | Darwin-x86_64 | `b67b7bd48f18dc4dec96ca91332788670fd2e6b42a999323dfa7f62beb21ee69` |
    | Linux-x86_64 | `a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691` |
-3. Point the sandbox tests at that binary (repeat in each new shell):
+3. Point the sandbox tests at the loopback-only launcher (repeat in each new shell):
    ```sh
-   export NEAR_SANDBOX_BIN_PATH="$PWD/work/sandbox-bin/near-sandbox" NEAR_SANDBOX_BINARY_PATH="$PWD/work/sandbox-bin"
+   export NEAR_SANDBOX_BIN_PATH="$PWD/app/sandbox-launcher/near-sandbox" NEAR_SANDBOX_BINARY_PATH="$PWD/app/sandbox-launcher"
    ```
-   Without these, `npm run test:sandbox` falls back to the sandbox 2.6.2 bundled with near-workspaces, which rejects this contract with `PrepareError: Deserialization`. `npm run demo:verify` and `npm run dev` don't need them.
+   The launcher uses the installed 2.14.0 binary and rewrites RPC/P2P listeners to `127.0.0.1`; pointing tests directly at the binary bypasses that protection. Without these, `npm run test:sandbox` falls back to the sandbox 2.6.2 bundled with near-workspaces, which rejects this contract with `PrepareError: Deserialization`. `npm run demo:verify` and `npm run dev` don't need them.
 
 ### 3. Verify
 
@@ -97,7 +97,7 @@ From this project directory:
 1. `npm ci --ignore-scripts` then `npm test` → five executor tests pass, covering persistent duplicate claims, restart, tampering, status errors and terminal failure. These use mock contract/rail adapters.
 2. `cargo test --locked --manifest-path contract/Cargo.toml` → seven Rust unit tests pass.
 3. `cargo build --locked --manifest-path contract/Cargo.toml --target wasm32-unknown-unknown --release` → produces `contract/target/wasm32-unknown-unknown/release/countersign.wasm`.
-4. Set `NEAR_SANDBOX_BIN_PATH` to the full path of the 2.14.0 `near-sandbox` binary and `NEAR_SANDBOX_BINARY_PATH` to its directory. Run `npm run test:sandbox` → the local integration test exercises real native NEAR transfers using sandbox balances, with separate owner, executor, attacker and merchant accounts. Expected rejection receipts appear in the output as failures; the test runner's final result determines success.
+4. Set `NEAR_SANDBOX_BIN_PATH` to the full path of `app/sandbox-launcher/near-sandbox` and `NEAR_SANDBOX_BINARY_PATH` to its directory, as in Quick start. Run `npm run test:sandbox` → the local integration test exercises real native NEAR transfers using sandbox balances, with separate owner, executor, attacker and merchant accounts. Expected rejection receipts appear in the output as failures; the test runner's final result determines success.
 
 
 The official macOS ARM sandbox archive used here is https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Darwin-arm64/2.14.0/near-sandbox.tar.gz. Intel Mac and Linux x86_64 archives, with checksums, are listed in [Quick start](#quick-start). No mainnet/testnet credentials are required.
