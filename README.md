@@ -66,7 +66,7 @@ Run `npm run agent:demo` → a labelled fixture model response passes through th
 
 The optional live adapter follows the [NEAR AI Chat Completions API](https://docs.near.ai/api-reference/chat/create-chat-completion). It uses one bounded request, accepts one complete tool call, rejects changed terms and extra arguments, and does not retry provider failures. Only the four structured invoice fields are sent; wallet keys and invoice attachments are excluded. No attestation verification is implemented or claimed.
 
-To opt into a potentially billable model request, configure `NEAR_AI_API_KEY` and `NEAR_AI_MODEL` in your local environment, then run `npm run agent:demo -- --live-model`. Select a model supporting function calls. That command sends the synthetic test invoice to NEAR AI but still pays exclusively on a new local sandbox chain. Default mode never reads a model key or calls the model service. Keep credentials out of source control. Model availability and compatibility can change; malformed, refused or truncated responses stop before payment.
+To opt into a potentially billable model request, configure `NEAR_AI_API_KEY` and `NEAR_AI_MODEL` in your local environment or ignored project `.env`, then run `npm run agent:demo -- --live-model`. Select a model supporting function calls. That command sends the synthetic test invoice to NEAR AI but still pays exclusively on a new local sandbox chain. Only `--live-model` reads the two inference settings from `.env` (environment values take precedence); file credentials are not exported into child-chain environments. Default mode never reads a model key or calls the model service. Keep credentials out of source control. Model availability and compatibility can change; malformed, refused or truncated responses stop before payment.
 
 ## App restart recovery
 
@@ -135,7 +135,7 @@ Stop the app before upgrading an existing local vault. Build the new WASM, then 
 
 ## Delegated spending policies (native NEAR only)
 
-`npm run agent:policy:demo` → an owner sets a merchant account, a 0.1 NEAR per-payment cap, a 0.15 NEAR rolling budget and one-hour policy expiry. A fixture agent requests the assigned invoice; the contract authorizes it under those rules and the normal executor settles it once. Replaying it pays nothing; a second 0.1 NEAR invoice is rejected. No owner authorization call is needed for each invoice, no paid model inference occurs, and all funds are disposable local test NEAR.
+`npm run agent:policy:demo` → an owner sets a merchant account, a 0.1 NEAR per-payment cap, a 0.15 NEAR rolling budget and one-hour policy expiry. A fixture response passes through the same NEAR AI proposal parser and restricted tool as live inference; the contract authorizes it under those rules and the normal executor settles it once. Replaying it pays nothing; a second 0.1 NEAR invoice is rejected. No owner authorization call is needed for each invoice, no paid model inference occurs, and all funds are disposable local test NEAR.
 
 Owner-only `set_policy({merchants:[{id,payee}],per_payment,daily_limit,expires_at})` installs rules. Amounts are integer yoctoNEAR strings; expiry is decimal milliseconds within 30 days. `revoke_policy()` stops new policy authorizations and unexecuted policy payments. Only the configured executor may call `authorize_by_policy({invoice,merchant_id,expires_at?})`. An allowed merchant ID must match its pinned payout account. The trusted host can opt `InvoicePaymentTool` into that route by supplying its fifth argument, the pinned merchant ID; the model still receives only the restricted invoice-ID tool.
 
@@ -144,3 +144,17 @@ The rolling allowance counts outstanding authorizations/reservations plus transf
 This MVP permits at most 32 merchants and 128 outstanding/recent policy charges per vault to bound on-chain work. Reaching capacity rejects new policy invoices until entries are cancelled or safely age out. Policy configuration and invoice bindings use separate storage prefixes; existing native invoice commitments retain their original format. Manual `authorize` remains an explicit owner override outside policy limits. Failed policy authorization does not consume the invoice ID.
 
 `npm run test:policy:sandbox` → checks automatic payment, duplicate protection, redirected/unknown merchants, per-payment and rolling caps, concurrent requests, owner-only configuration, revocation/version changes, expiry and manual overrides. Rust tests check exact rolling-window boundaries and retained uncertain holds. Merchant allowlisting does not authenticate an invoice or identify the same bill under a different invoice ID; those remain separate requirements. 1Click approvals do not use these policies and cannot move funds.
+
+## Live agent with spending policies
+
+Set `NEAR_AI_API_KEY` and `NEAR_AI_MODEL` in the ignored project `.env` or your environment. See `.env.example` for the field names and the [NEAR AI model catalog](https://docs.near.ai/cloud/models) for current tool-calling support. Then run:
+
+```sh
+npm run agent:policy:demo -- --live-model
+```
+
+→ A fresh local vault receives disposable test funds. The owner installs merchant/cap/budget/expiry rules once. Two live model requests propose synthetic invoices: the first pays 0.1 test NEAR without per-invoice owner authorization; replay pays nothing; the second 0.1 invoice exceeds the 0.15 rolling allowance and is rejected on chain. The command verifies recipient balances, policy usage and absence of an authorization for the rejected invoice. It closes the test chain afterward and never opens the existing desk vault. Live inference consumes provider credits; payment funds are exclusively local test NEAR. There is no mainnet/RPC override or automatic fixture fallback.
+
+The model receives only structured invoice fields and `request_payment({invoice_id})`. Merchant identity, policy configuration, invoice terms, keys and execution transport remain host-controlled. A valid model response grants no authority on its own: current on-chain rules decide authorization. No 1Click execution is connected.
+
+`npm run test:agent:policy:sandbox` → the same provider adapter with offline HTTP fixtures checks malformed/redirected proposals, provider failures, interrupted authorization recovery, duplicate protection, over-budget rejection and revocation while inference is in flight. These regression tests use no API key or inference credits. `npm run agent:policy:demo` keeps the complete command offline except for its local test chain.

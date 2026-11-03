@@ -2,13 +2,9 @@ import {mkdirSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {SandboxDesk} from '../app/sandbox.ts';
 import {InvoicePaymentTool,runInvoiceAgent} from './payment-tool.ts';
-import {nearModelProposer,parseModelProposal} from './near-model.ts';
+import {demoProposer} from './demo-proposer.ts';
 
-const flags=process.argv.slice(2);
-if(flags.some(f=>f!=='--live-model')||flags.length>1)throw Error('Usage: npm run agent:demo -- [--live-model]');
-const live=flags.includes('--live-model');
-// Live inference is opt-in; default makes no external requests and uses no API key.
-const propose=live?nearModelProposer({apiKey:process.env.NEAR_AI_API_KEY??'',model:process.env.NEAR_AI_MODEL??''}):async(invoice:any)=>parseModelProposal({choices:[{finish_reason:'tool_calls',message:{tool_calls:[{type:'function',function:{name:'request_payment',arguments:JSON.stringify({invoice_id:invoice.id})}}]}}]},invoice.id);
+const {live,propose}=demoProposer(process.argv.slice(2));
 const desk=new SandboxDesk();
 try{
  console.log(live?'LIVE MODEL → LOCAL TEST FUNDS ONLY':'FIXTURE MODEL RESPONSE → LOCAL TEST FUNDS ONLY');
