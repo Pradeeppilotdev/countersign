@@ -2,6 +2,79 @@
 
 Controlled agent payments on NEAR: owner approval, exact invoice checks, duplicate protection, and persistent settlement recovery.
 
+## Quick start
+
+From a fresh clone to a working demo. Run every command from the repository root. **Windows:** use WSL2 and follow the Linux steps.
+
+### 1. Prerequisites
+
+- **Node 24+**: install from https://nodejs.org/en/download, then check `node --version`.
+- **macOS only**: Xcode Command Line Tools, Homebrew and `xz`:
+  ```sh
+  xcode-select --install
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  brew install xz
+  ```
+  Run the "Next steps" Homebrew prints so `brew` is on your PATH. `xz` is required: the macOS near-sandbox binary loads Homebrew's `liblzma.5.dylib` at runtime. Without it, every sandbox test fails with `dyld: Library not loaded: …/liblzma.5.dylib`. The Linux binary does not need it.
+- **Rust 1.99.1** with the WASM target:
+  ```sh
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.99.1
+  source "$HOME/.cargo/env"
+  rustup target add wasm32-unknown-unknown
+  ```
+
+### 2. Set up
+
+1. Install dependencies and build the contract:
+   ```sh
+   npm ci --ignore-scripts
+   cargo build --locked --manifest-path contract/Cargo.toml --target wasm32-unknown-unknown --release
+   ```
+2. Install NEAR Sandbox 2.14.0. Set `PLATFORM` to `Darwin-arm64` (Apple Silicon), `Darwin-x86_64` (Intel Mac) or `Linux-x86_64`:
+   ```sh
+   PLATFORM=Darwin-arm64
+   mkdir -p work/sandbox-bin
+   curl --fail --location "https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/$PLATFORM/2.14.0/near-sandbox.tar.gz" -o work/near-sandbox.tar.gz
+   tar -xzf work/near-sandbox.tar.gz -C work/sandbox-bin --strip-components=1
+   chmod +x work/sandbox-bin/near-sandbox
+   work/sandbox-bin/near-sandbox --version   # neard (release 2.14.0) …
+   ```
+   Optional: check the archive with `shasum -a 256 work/near-sandbox.tar.gz` (Linux: `sha256sum`):
+
+   | Platform | SHA-256 of `near-sandbox.tar.gz` |
+   |---|---|
+   | Darwin-arm64 | `ea53448ef97540c012e5c3d967c74d78292b0465a98cf7027811a936718fe232` |
+   | Darwin-x86_64 | `b67b7bd48f18dc4dec96ca91332788670fd2e6b42a999323dfa7f62beb21ee69` |
+   | Linux-x86_64 | `a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691` |
+3. Point the sandbox tests at that binary (repeat in each new shell):
+   ```sh
+   export NEAR_SANDBOX_BIN_PATH="$PWD/work/sandbox-bin/near-sandbox" NEAR_SANDBOX_BINARY_PATH="$PWD/work/sandbox-bin"
+   ```
+   Without these, `npm run test:sandbox` falls back to the sandbox 2.6.2 bundled with near-workspaces, which rejects this contract with `PrepareError: Deserialization`. `npm run demo:verify` and `npm run dev` don't need them.
+
+### 3. Verify
+
+```sh
+npm run demo:verify
+```
+
+This takes about 70 s and ends with `ALL CHECKS PASSED. No live model calls, swaps or real funds.` The transcript is saved to `work/demo-output.txt`. The recording is saved to `work/demo.cast`; replaying it needs asciinema (`brew install asciinema`, then `asciinema play work/demo.cast`).
+
+### 4. Run the payment desk
+
+```sh
+npm run dev
+```
+
+Open http://127.0.0.1:4317 and follow [Local payment desk](#local-payment-desk) below.
+
+- Use `127.0.0.1`, not `localhost`: `localhost` returns 403.
+- If port 4317 is busy, run `COUNTERSIGN_PORT=4418 npm run dev` and open http://127.0.0.1:4418.
+- Ctrl-C stops the app, but the local chain keeps running so the next launch reconnects to your vault. To stop the chain:
+  ```sh
+  kill "$(node -p "require('./work/local-vault/chain.json').pid")"
+  ```
+- To reset to a fresh vault, stop the chain, then run `rm -rf work/local-vault work/app.db`.
 
 ## Local payment desk
 
@@ -27,7 +100,7 @@ From this project directory:
 4. Set `NEAR_SANDBOX_BIN_PATH` to the full path of the 2.14.0 `near-sandbox` binary and `NEAR_SANDBOX_BINARY_PATH` to its directory. Run `npm run test:sandbox` → the local integration test exercises real native NEAR transfers using sandbox balances, with separate owner, executor, attacker and merchant accounts. Expected rejection receipts appear in the output as failures; the test runner's final result determines success.
 
 
-The official macOS ARM sandbox archive used here is https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Darwin-arm64/2.14.0/near-sandbox.tar.gz. Other platforms should use the corresponding official NEAR sandbox release. No mainnet/testnet credentials are required.
+The official macOS ARM sandbox archive used here is https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Darwin-arm64/2.14.0/near-sandbox.tar.gz. Intel Mac and Linux x86_64 archives, with checksums, are listed in [Quick start](#quick-start). No mainnet/testnet credentials are required.
 
 ## Payment path
 
@@ -92,7 +165,7 @@ Build from the project root so `.cargo/config.toml` applies `--cfg near` for the
 
 The project is Countersign. Version-one cryptographic domain strings retain `NEAR-AEGIS-*` to preserve existing invoice and route commitments; these are protocol identifiers, not current branding. Use `COUNTERSIGN_PORT` and `COUNTERSIGN_SANDBOX_DIR` to override local settings (legacy `AEGIS_*` variables remain compatible).
 
-The sandbox binary must be installed at `work/sandbox-bin/near-sandbox` before running the app, demos or tests. For macOS ARM, download the official archive linked above and extract its `near-sandbox` executable there. Dependencies, binaries, `.env`, disposable local keys, chain databases and generated screenshots are not part of this repository.
+The sandbox binary must be installed at `work/sandbox-bin/near-sandbox` before running the app, demos or tests. Follow [Quick start](#quick-start) step 2 for your platform. Dependencies, binaries, `.env`, disposable local keys, chain databases and generated screenshots are not part of this repository.
 
 `npm run oneclick:approve:live` requests a fresh dry quote and verifies owner approval on a new local vault without sending funds. Live verification passed on 3 November 2026 (India time), including signature and policy checks, local owner approval, read-only recovery after reopening the records, and unchanged balances. It fails closed on outages and does not substitute archived quotes. Approval attempts are saved before the owner call; duplicates and restarts reconcile the same vault binding without submitting again. Unknown results stay unresolved, conflicting records require review, and expired approvals remain historical evidence only. Local evidence is saved at `work/live-route-approval.json`.
 
