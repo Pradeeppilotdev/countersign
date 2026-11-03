@@ -1,10 +1,10 @@
 import { verifyQuoteSignature, quoteHash } from '@defuse-protocol/one-click-sdk-typescript';
 export class QuoteServiceError extends Error {
  readonly status:number; readonly requestId:string|undefined;
- constructor(status:number,requestId:string|null){
+ constructor(status:number,requestId:string|null,detail?:string){
   const safeId=requestId&&/^[A-Za-z0-9-]{1,100}$/.test(requestId)?requestId:undefined;
   const reason=status===521?'1Click is unavailable: its gateway reports the origin server is down':`1Click quote request failed`;
-  super(`${reason} (HTTP ${status}). No quote was accepted. Retry later.${safeId?` Request ID: ${safeId}`:''}`);
+  super(`${reason} (HTTP ${status}). No quote was accepted.${detail?` ${detail}`:status>=500?' Retry later.':' Check the route and invoice fields.'}${safeId?` Request ID: ${safeId}`:''}`);
   this.name='QuoteServiceError';this.status=status;this.requestId=safeId;
  }
 }
@@ -31,7 +31,8 @@ export function validateTerms(p: Policy, r: any, now = Date.now()) {
  for (const [k,v] of Object.entries(r.quoteRequest)) {
   if (k in expected) continue;
   if (k in defaults && v === defaults[k]) continue;
-  if (k === 'appFees' && Array.isArray(v) && v.length <= 10 && v.every((f:any) => f && Object.keys(f).every(x=>['recipient','fee'].includes(x)) && typeof f.recipient === 'string' && f.recipient.length > 0 && f.recipient.length <= 256 && Number.isInteger(f.fee) && f.fee >= 0 && f.fee <= 10000)) continue;
+  // Pinned observed provider fee: no caller-selected recipient or arbitrary fee.
+  if(k==='appFees' && Array.isArray(v) && (v.length===0 || (v.length===1 && Object.keys(v[0]??{}).sort().join(',')==='fee,recipient' && v[0].recipient==='5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd' && v[0].fee===1)))continue;
   throw Error(`unsupported quote request field: ${k}`);
  }
  const t = Date.parse(r.timestamp);
@@ -51,9 +52,24 @@ export async function preview(p: Policy, fetcher: typeof fetch = fetch) {
  const policy = structuredClone(p), body = requestFor(policy);
  const response = await fetcher('https://1click.chaindefuser.com/v0/quote', { method:'POST', redirect:'error', signal: AbortSignal.timeout(15_000), headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
  if (!response.ok) {
-  const error=new QuoteServiceError(response.status,response.headers.get('cf-ray'));
-  await response.body?.cancel();throw error;
+  const detail=await providerDetail(response);
+  throw new QuoteServiceError(response.status,response.headers.get('cf-ray'),detail);
  }
  const raw = await response.json();
  return { validation: validateQuote(policy, raw), raw, rawNotice: 'Raw provider metadata is not all signed; only validation fields are trusted. Never fund a dry quote.' };
+}
+
+// Treat provider diagnostics as untrusted data. Bound bytes before JSON parsing;
+// accept only validation messages, never HTML, stacks, or arbitrary response fields.
+async function providerDetail(response:Response){
+ if(![400,422].includes(response.status)||!response.headers.get('content-type')?.includes('application/json')){await response.body?.cancel();return;}
+ const reader=response.body?.getReader();if(!reader)return;
+ try{
+  const chunks:Uint8Array[]=[];let size=0;
+  for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>8192)return;chunks.push(value);}
+  const raw=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const message=Array.isArray(raw.message)?raw.message.filter((x:unknown)=>typeof x==='string').join('; '):raw.message;
+  if(typeof message!=='string')return;
+  return message.replace(/<[^>]*>/g,'').replace(/[\x00-\x1f\x7f]/g,' ').replace(/Bearer\s+\S+/gi,'[redacted]').slice(0,240);
+ }catch{return;}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
 }

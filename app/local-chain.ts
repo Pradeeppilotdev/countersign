@@ -1,3 +1,4 @@
+import {hardenSandbox,assertBrowserBlocked} from './sandbox-config.mjs';
 import {SandboxManager} from 'near-workspaces';
 import {spawn,execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,openSync,closeSync,fsyncSync} from 'node:fs';
@@ -25,6 +26,7 @@ export async function localChain(directory:string){
   saveJson(path,config);
  }
  if(config.network!=='sandbox'||config.rootAccountId!=='test.near'||config.homeDir!==join(directory,'chain')||![config.port,config.peerPort].every(p=>Number.isInteger(p)&&p>1024&&p<65536))throw Error('Invalid local chain configuration');
+ hardenSandbox(config.homeDir);
  const rpcAddr=`http://127.0.0.1:${config.port}`;
  async function status(){try{const r=await fetch(rpcAddr,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'countersign',method:'status',params:[]}),signal:AbortSignal.timeout(1500)});return (await r.json()).result;}catch{return null;}}
  let current=await status();
@@ -36,6 +38,7 @@ export async function localChain(directory:string){
   if(!current)throw Error('Local chain unavailable; existing data retained');
   config.pid=child.pid;
  }
+ await assertBrowserBlocked(rpcAddr);
  if(config.chainId&&config.chainId!==current.chain_id)throw Error('Local chain identity mismatch');
  config.chainId=current.chain_id;saveJson(path,config);
  const manager=new SandboxManager({...config,rpcAddr,rm:false,refDir:null});await manager.init();

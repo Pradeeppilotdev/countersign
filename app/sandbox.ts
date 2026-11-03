@@ -1,3 +1,4 @@
+import {deployVault} from './deploy-vault.ts';
 import { SandboxWorker } from 'near-workspaces';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -19,7 +20,7 @@ export class SandboxDesk {
  readonly directory?:string;
  constructor(directory?:string) {this.directory=directory;}
  persist(){if(this.directory)saveJson(join(this.directory,'desk.json'),{session:this.session,baseline:this.baseline.toString(),vault:this.vault?.accountId,invoices:[...this.invoices],events:this.events});}
- async reconcileAll(){for(const [id] of this.invoices){const runner=this.runner(id);try{if(runner.db.prepare('SELECT invoice_id FROM attempts WHERE invoice_id=?').get(id))await runner.reconcile(id);}finally{runner.close();}}}
+ async reconcileAll(){for(const [id] of this.invoices){const runner=this.runner(id);try{if(runner.db.prepare('SELECT invoice_id FROM attempts WHERE invoice_id=?').get(id))await runner.reconcile(id);}catch{this.log(`${id}: recovery requires attention; inspect the invoice before retrying.`);}finally{runner.close();}}}
  runner(id:string){const {auth,rail}=vaultAdapters({call:(method,args)=>this.executor.call(this.vault,method,args,{gas:'100000000000000'}),view:(method,args)=>this.vault.view(method,args)},id);return new Executor(this.directory?join(this.directory,'attempts.db'):fileURLToPath(new URL(`../work/sandbox-${this.session}.db`,import.meta.url)),auth,rail);}
  session=randomUUID(); worker:any; owner:any; executor:any; merchant:any; vault:any;
  baseline=0n; phase='OFFLINE'; error=''; queue=Promise.resolve();
@@ -49,8 +50,7 @@ export class SandboxDesk {
    this.persist();
    const root=this.worker.rootAccount;
    this.owner=await root.createSubAccount('owner');this.executor=await root.createSubAccount('executor');this.merchant=await root.createSubAccount('merchant');
-   this.vault=await root.devDeploy(wasm);
-   await this.vault.call(this.vault,'new',{owner:this.owner.accountId,executor:this.executor.accountId});
+   this.vault=await deployVault(root,wasm,this.owner.accountId,this.executor.accountId);
    await this.owner.call(this.vault,'fund',{}, {attachedDeposit:(5n*YOCTO).toString()});
    this.baseline=BigInt((await this.merchant.balance()).total.toString());
    this.phase='READY';this.log('Sandbox ready: vault funded with 5 test NEAR.');return this.snapshot();
@@ -68,7 +68,7 @@ export class SandboxDesk {
    if(!previous){this.invoices.set(id,{invoice,attempt:randomUUID()});this.persist();}
    const existing=await this.vault.view('get_payment',{invoice_id:id});
    if(!existing)await this.owner.call(this.vault,'authorize',{invoice});
-   this.log(`${id}: owner authorization confirmed.`);
+   this.log(`${id}: ${existing?'already authorized; no new authorization submitted':'owner authorization confirmed'}.`);
   }else{
    const entry=this.invoices.get(id);if(!entry)throw Error('Unknown invoice.');
    if(action==='reserve'){
@@ -77,8 +77,10 @@ export class SandboxDesk {
    }else if(action==='execute'){
     const p=await this.vault.view('get_payment',{invoice_id:id});if(!p||p.state==='Authorized')throw Error('Reserve the invoice first.');
     const runner=this.runner(id);
-    try{await runner.execute(entry.invoice,entry.attempt);await runner.reconcile(id);}finally{runner.close();}
-    this.log(`${id}: execution requested; state read from the vault.`);
+    try{const result=await runner.execute(entry.invoice,entry.attempt);this.log(`${id}: ${result==='settled'?'payment settled':result==='failed'?'transfer failed; budget returned':result==='cancelled'?'invoice cancelled':'payment outcome pending; refresh to reconcile'}.`);}finally{runner.close();}
+   }else if(action==='cancel'||action==='release_failed'){
+    await this.owner.call(this.vault,action,{invoice_id:id});
+    this.log(`${id}: ${action==='cancel'?'cancelled; any expired reservation released':'confirmed failure budget released'}.`);
    }else if(action==='duplicate'){
     const p=await this.vault.view('get_payment',{invoice_id:id});if(p?.state!=='Settled')throw Error('Settle the invoice before testing replay.');
     const before=(await this.merchant.balance()).total.toString();
@@ -92,7 +94,7 @@ export class SandboxDesk {
  });}
  async snapshot(){
   if(this.phase!=='READY')return {phase:this.phase,error:this.error,network:'LOCAL_SANDBOX',session:this.session,invoices:[],events:this.events};
-  const invoices=[];for(const [id,entry] of this.invoices){const payment=await this.vault.view('get_payment',{invoice_id:id});invoices.push({id,attempt:entry.attempt,...payment});}
+  const invoices=[];for(const [id,entry] of this.invoices){const payment=await this.vault.view('get_payment',{invoice_id:id});const expiry=await this.vault.view('invoice_expiry',{invoice_id:id});invoices.push({id,attempt:entry.attempt,...payment,expiresAt:expiry,expired:expiry!==null&&Date.now()>=Number(expiry)});}
   return {phase:this.phase,network:'LOCAL_SANDBOX',session:this.session,vault:this.vault.accountId,merchant:this.merchant.accountId,available:await this.vault.view('available_balance',{}),merchantReceived:(BigInt((await this.merchant.balance()).total.toString())-this.baseline).toString(),invoices,events:this.events};
  }
  async close(){await this.queue;if(this.worker)await this.worker.tearDown();await this.releaseLock?.();this.releaseLock=undefined;}

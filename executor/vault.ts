@@ -1,4 +1,4 @@
-import { type Authorization, type Invoice, type Payment, type Rail } from './core.ts';
+import { commitment, type Authorization, type Invoice, type Payment, type Rail } from './core.ts';
 // Transport is bound to one vault and its authorized executor account.
 // No recipient/amount arguments are accepted by the contract's execute method.
 export interface VaultTransport {
@@ -24,6 +24,27 @@ export function vaultAdapters(transport: VaultTransport, invoiceId: string): { a
    }
   },
   rail: {
+   // This capability is exclusive to the native vault. Contract serialization
+   // makes same-attempt reserve/execute safe even across concurrent processes.
+   // Never attach it to an external payment provider.
+   async recoverNative(expected,attempt){
+    let p=await read();
+    const check=()=>{
+     if(p.commitment!==expected || commitment(p.invoice)!==expected || p.invoice.id!==invoiceId)throw Error('recovery invoice mismatch');
+     if(p.attempt_id!==null && p.attempt_id!==attempt)throw Error('attempt mismatch');
+    };
+    check();
+    if(p.state==='Cancelled')return p;
+    if(p.state==='Authorized'){p=await transport.call('reserve',{invoice:p.invoice,attempt_id:attempt});check();}
+    if(p.state==='Reserved'){
+     // Surface a definitive contract rejection. A timeout keeps the durable
+     // record; the next recovery still uses exactly the same obligation.
+     try{await transport.call('execute',{invoice_id:invoiceId,attempt_id:attempt});}
+     catch(error){p=await read();check();if(!['Settled','Failed','Executing'].includes(p.state))throw error;}
+     p=await read();check();
+    }
+    return p;
+   },
    async submit(invoice, attempt) {
     if (invoice.id !== invoiceId) throw Error('wrong invoice');
     await transport.call('execute', { invoice_id: invoiceId, attempt_id: attempt });

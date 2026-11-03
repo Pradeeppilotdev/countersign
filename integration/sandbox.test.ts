@@ -1,3 +1,5 @@
+import '../app/test-chain.ts';
+import {deployVault} from '../app/deploy-vault.ts';
 import { vaultAdapters } from '../executor/vault.ts';
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
@@ -12,8 +14,7 @@ test('vault enforces authorization, budget, transfer and replay protection', { t
   const executor = await root.createSubAccount('executor');
   const attacker = await root.createSubAccount('attacker');
   const merchant = await root.createSubAccount('merchant');
-  const contract = await root.devDeploy('contract/target/wasm32-unknown-unknown/release/countersign.wasm');
-  await contract.call(contract, 'new', { owner: owner.accountId, executor: executor.accountId });
+  const contract = await deployVault(root,'contract/target/wasm32-unknown-unknown/release/countersign.wasm',owner.accountId,executor.accountId);
   await owner.call(contract, 'fund', {}, { attachedDeposit: '1000000000000000000000000' });
   const invoice = { id: 'invoice-1', payee: merchant.accountId, asset: 'near', amount: '600000000000000000000000' };
   await assert.rejects(() => attacker.call(contract, 'authorize', { invoice }));
@@ -47,6 +48,9 @@ test('vault enforces authorization, budget, transfer and replay protection', { t
   await executor.call(contract, 'execute', { invoice_id: failed.id, attempt_id: 'failure' }, { gas: '100000000000000' });
   assert.equal((await contract.view<any>('get_payment', { invoice_id: failed.id })).state, 'Failed');
   await executor.call(contract, 'execute', { invoice_id: failed.id, attempt_id: 'failure' });
-  assert.equal(await contract.view('available_balance', {}), '399999999999999999999999');
+  for(let i=0;i<2;i++)await owner.call(contract,'release_failed',{invoice_id:failed.id});
+  await assert.rejects(()=>attacker.call(contract,'release_failed',{invoice_id:failed.id}));
+  await assert.rejects(()=>owner.call(contract,'release_failed',{invoice_id:invoice.id}));
+  assert.equal(await contract.view('available_balance', {}), '400000000000000000000000');
  } finally { await worker.tearDown(); }
 });

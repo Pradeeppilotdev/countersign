@@ -80,3 +80,21 @@ test('provider outage fails closed once with safe diagnostics and no HTML disclo
  assert.equal(calls,1);
  assert.equal(new QuoteServiceError(521,'invalid request id <script>').requestId,undefined);
 });
+
+test('unsigned fee recipient and rate cannot be substituted',()=>{
+ const r=JSON.parse(readFileSync(new URL('./fixtures/live-dry-quote.json',import.meta.url),'utf8'));
+ const policy=JSON.parse(readFileSync(new URL('./fixtures/live-policy.json',import.meta.url),'utf8'));
+ for(const fees of [[{recipient:'attacker.near',fee:10000}],[{...r.quoteRequest.appFees[0],fee:2}],[...r.quoteRequest.appFees,...r.quoteRequest.appFees]]){
+  const changed=structuredClone(r);changed.quoteRequest.appFees=fees;
+  assert.equal(verifyQuoteSignature(changed),true);
+  assert.throws(()=>validateQuote(policy,changed,Date.parse(r.timestamp)),/appFees/);
+ }
+});
+test('400 diagnostics are bounded JSON data, never HTML or provider stacks',async()=>{
+ for(const [body,type,expected] of [[JSON.stringify({message:'Invalid refund address',stack:'private stack'}),'application/json','Invalid refund address'],['<script>private HTML</script>','text/html',null],[JSON.stringify({message:'x'.repeat(9000)}),'application/json',null]]){
+  await assert.rejects(()=>preview(p,(async()=>new Response(body,{status:400,headers:{'content-type':type,'cf-ray':'safe-id'}})) as typeof fetch),error=>{
+   assert.ok(error instanceof QuoteServiceError);assert.ok(error.message.length<600);assert.ok(!/private|<script>/.test(error.message));
+   if(expected)assert.ok(error.message.includes(expected));return true;
+  });
+ }
+});

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test executor/*.test.ts",
-    "test:sandbox": "node --disable-warning=ExperimentalWarning --test integration/*.test.ts",
+    "test:sandbox": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 integration/*.test.ts",
     "test:oneclick": "node --disable-warning=ExperimentalWarning --test oneclick/*.test.ts",
     "oneclick": "node --disable-warning=ExperimentalWarning oneclick/cli.ts",
     "dev": "node --disable-warning=ExperimentalWarning app/server.ts",
@@ -16,7 +16,8 @@
     "test:route:sandbox": "node --disable-warning=ExperimentalWarning --test integration/route.test.ts",
     "oneclick:approve:live": "node --disable-warning=ExperimentalWarning oneclick/live-approval.ts",
     "test:owner:sandbox": "node --disable-warning=ExperimentalWarning --test integration/owner-controls.test.ts",
-    "demo:verify": "node scripts/demo.mjs"
+    "demo:verify": "node scripts/demo.mjs",
+    "sandbox:upgrade": "node --disable-warning=ExperimentalWarning app/upgrade.ts"
   },
   "engines": {
     "node": ">=24.0"

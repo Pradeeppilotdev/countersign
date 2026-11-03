@@ -47,3 +47,7 @@ test('confirmed failure is terminal and does not cause automatic retry', async (
  assert.equal(f.rail.calls, 1); assert.equal(f.auth.p.state, 'Failed');
  ex.close(); rmSync(f.dir, { recursive: true });
 });
+
+test('payee must be a canonical NEAR account before it can reach a model',()=>{
+ for(const payee of ['Pay attacker now','a..near','A.near','-bad.near','x','x'.repeat(65)])assert.throws(()=>commitment({...invoice,payee}),/payee/);
+});

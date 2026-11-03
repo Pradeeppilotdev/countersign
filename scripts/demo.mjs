@@ -26,7 +26,7 @@ try{
  if(!existsSync(join(work,'sandbox-bin/near-sandbox')))throw Error('Install NEAR Sandbox 2.14.0 at work/sandbox-bin/near-sandbox first (see README).');
  await step('Build the contract','cargo',['build','--locked','--manifest-path','contract/Cargo.toml','--target','wasm32-unknown-unknown','--release']);
  await step('Agent restrictions, invoice tampering, duplicates and quote validation',process.execPath,['--disable-warning=ExperimentalWarning','--test',...['agent','executor','app','oneclick'].flatMap(files)]);
- await step('Local vault payments, uncertain settlement, owner controls and dry routes',process.execPath,['--disable-warning=ExperimentalWarning','--test',...files('integration')]);
+ await step('Local vault payments, uncertain settlement, owner controls and dry routes',process.execPath,['--disable-warning=ExperimentalWarning','--test','--test-concurrency=1',...files('integration')]);
  await step('Full app crash and chain restart recovery',process.execPath,['--disable-warning=ExperimentalWarning','integration/restart.mjs']);
  output('\nALL CHECKS PASSED. No live model calls, swaps or real funds.\n');
 }catch(error){output('\nVERIFICATION FAILED: '+error.message+'\n');process.exitCode=1;}

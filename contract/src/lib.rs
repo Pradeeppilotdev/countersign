@@ -25,6 +25,7 @@ pub struct DryRoute {
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
 pub struct RouteApproval { pub route: DryRoute, pub commitment: String }
+fn released() -> LookupMap<String, bool> { LookupMap::new(b"budget-released-v1".to_vec()) }
 fn expiries() -> LookupMap<String, u64> { LookupMap::new(b"invoice-expiry-v1".to_vec()) }
 fn check_expiry(id:&String){
     if let Some(expiry)=expiries().get(id){near_sdk::require!(env::block_timestamp_ms()<expiry,"invoice expired");}
@@ -58,6 +59,7 @@ fn valid_id(s: &str) -> bool { !s.is_empty() && s.len() <= 128 && s.bytes().all(
 #[near]
 impl Contract {
     #[init]
+    #[private]
     pub fn new(owner: AccountId, executor: AccountId) -> Self { Self { owner, executor, payments: LookupMap::new(b"p"), available: 0 } }
     #[payable]
     pub fn fund(&mut self) {
@@ -109,8 +111,24 @@ impl Contract {
         near_sdk::require!(env::predecessor_account_id()==self.owner,"owner only");
         let mut p=self.payments.get(&invoice_id).unwrap_or_else(||env::panic_str("unknown invoice"));
         if p.state==State::Cancelled{return p;}
-        near_sdk::require!(p.state==State::Authorized,"only unreserved invoices can be cancelled");
+        if p.state==State::Reserved {
+            let expiry=expiries().get(&invoice_id).unwrap_or_else(||env::panic_str("reservation has no expiry"));
+            near_sdk::require!(env::block_timestamp_ms()>=expiry,"reservation has not expired");
+            self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
+        } else { near_sdk::require!(p.state==State::Authorized,"only authorized or expired reserved invoices can be cancelled"); }
         p.state=State::Cancelled;self.payments.insert(&invoice_id,&p);p
+    }
+    // Terminal native failures have authoritative callback evidence. Older
+    // deployments retained their budget; release it once without reopening payment.
+    pub fn release_failed(&mut self, invoice_id:String)->Payment {
+        near_sdk::require!(env::predecessor_account_id()==self.owner,"owner only");
+        let p=self.payments.get(&invoice_id).unwrap_or_else(||env::panic_str("unknown invoice"));
+        near_sdk::require!(p.state==State::Failed,"only confirmed failed transfers can be released");
+        if !released().get(&invoice_id).unwrap_or(false) {
+            self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
+            released().insert(&invoice_id,&true);
+        }
+        p
     }
     pub fn reserve(&mut self, invoice: Invoice, attempt_id: String) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.executor, "executor only");
@@ -154,7 +172,11 @@ impl Contract {
         near_sdk::require!(p.attempt_id.as_deref() == Some(attempt_id.as_str()), "attempt mismatch");
         near_sdk::require!(p.state == State::Executing, "invalid transition");
         p.state = match env::promise_result_checked(0, 0) { Ok(_) => State::Settled, Err(_) => State::Failed };
-        // Failed transfers remain charged to the budget: no automatic refund reuse/retry.
+        if p.state==State::Failed {
+            self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
+            released().insert(&invoice_id,&true);
+        }
+        // A failed invoice remains terminal. Returning accounting capacity never retries it.
         self.payments.insert(&invoice_id, &p); p
     }
     pub fn get_payment(&self, invoice_id: String) -> Option<Payment> { self.payments.get(&invoice_id) }
@@ -191,4 +213,25 @@ mod tests {
         actor("owner.near"); let mut c = Contract::new("owner.near".parse().unwrap(), "executor.near".parse().unwrap()); c.available = 1000; c.authorize(invoice(),None);
         actor("executor.near"); c.reserve(invoice(), "a".into()); c.reserve(invoice(), "b".into());
     }
+    #[test] fn expired_reservation_release_is_once_and_keeps_id_used() {
+        actor("owner.near");let mut c=Contract::new("owner.near".parse().unwrap(),"executor.near".parse().unwrap());c.available=100;
+        c.authorize(invoice(),None);actor("executor.near");c.reserve(invoice(),"a".into());
+        expiries().insert(&"inv-1".into(),&0);actor("owner.near");
+        c.cancel("inv-1".into());c.cancel("inv-1".into());assert_eq!(c.available,100);
+        assert_eq!(c.get_payment("inv-1".into()).unwrap().state,State::Cancelled);
+    }
+    #[test] fn legacy_failure_budget_release_is_once() {
+        actor("owner.near");let mut c=Contract::new("owner.near".parse().unwrap(),"executor.near".parse().unwrap());c.available=100;
+        c.authorize(invoice(),None);actor("executor.near");let mut p=c.reserve(invoice(),"a".into());
+        p.state=State::Failed;c.payments.insert(&"inv-1".into(),&p);actor("owner.near");
+        c.release_failed("inv-1".into());c.release_failed("inv-1".into());assert_eq!(c.available,100);
+        assert_eq!(c.get_payment("inv-1".into()).unwrap().state,State::Failed);
+    }
+    #[test] #[should_panic(expected="only authorized or expired reserved")]
+    fn executing_cannot_be_cancelled_even_after_expiry() {
+        actor("owner.near");let mut c=Contract::new("owner.near".parse().unwrap(),"executor.near".parse().unwrap());c.available=100;
+        let mut p=c.authorize(invoice(),None);p.state=State::Executing;c.payments.insert(&"inv-1".into(),&p);
+        expiries().insert(&"inv-1".into(),&0);c.cancel("inv-1".into());
+    }
+
 }
