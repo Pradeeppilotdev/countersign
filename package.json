@@ -12,6 +12,7 @@
     "test:agent": "node --disable-warning=ExperimentalWarning --test agent/*.test.ts",
     "test:agent:sandbox": "node --disable-warning=ExperimentalWarning --test integration/agent.test.ts",
     "agent:signed:demo": "node --disable-warning=ExperimentalWarning merchant/demo.ts",
+    "test:controls:sandbox": "node --disable-warning=ExperimentalWarning --test integration/controls.test.ts",
     "test:merchant": "node --disable-warning=ExperimentalWarning --test merchant/*.test.ts",
     "test:merchant:sandbox": "node --disable-warning=ExperimentalWarning --test integration/signed-invoice.test.ts",
     "agent:desk": "node --disable-warning=ExperimentalWarning agent/desk.ts",

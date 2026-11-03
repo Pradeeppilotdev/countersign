@@ -51,6 +51,7 @@ impl Contract {
  pub fn get_invoice_auth(&self,invoice_id:String)->Option<InvoiceAuth>{receipts().get(&invoice_id)}
  pub fn authorize_signed_invoice(&mut self,signed:SignedInvoice)->Payment{
   near_sdk::require!(env::predecessor_account_id()==self.executor,"executor only");
+  controls::require_running();
   near_sdk::require!(valid_id(&signed.merchant_id)&&valid_id(&signed.bill_id),"invalid merchant bill id");
   near_sdk::require!(signed.vault==env::current_account_id(),"signed vault mismatch");
   near_sdk::require!(domains().get(&0).as_ref()==Some(&signed.domain),"signed domain mismatch");

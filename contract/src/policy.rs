@@ -76,6 +76,7 @@ impl Contract {
 // Internal shared implementation: this impl has no NEAR export macro.
 impl Contract {
  pub(super) fn authorize_policy_invoice(&mut self,invoice:Invoice,merchant_id:String,expires_at:Option<U64>)->Payment {
+  controls::require_running();
   let policy=policies().get(&0).unwrap_or_else(||env::panic_str("no spending policy"));
   check(&policy,&invoice,&merchant_id);
   // Same invoice terms/merchant may be retried; never charge quota twice.

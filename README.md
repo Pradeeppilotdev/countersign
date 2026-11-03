@@ -22,7 +22,7 @@ Prerequisites: Node 24+, Rust 1.99.1 with `wasm32-unknown-unknown`, and NEAR San
 From this project directory:
 
 1. `npm ci --ignore-scripts` then `npm test` → five executor tests pass, covering persistent duplicate claims, restart, tampering, status errors and terminal failure. These use mock contract/rail adapters.
-2. `cargo test --locked --manifest-path contract/Cargo.toml` → thirteen Rust unit tests pass.
+2. `cargo test --locked --manifest-path contract/Cargo.toml` → eighteen Rust unit tests pass.
 3. `cargo build --locked --manifest-path contract/Cargo.toml --target wasm32-unknown-unknown --release` → produces `contract/target/wasm32-unknown-unknown/release/countersign.wasm`.
 4. Set `NEAR_SANDBOX_BIN_PATH="$PWD/app/sandbox-launcher/near-sandbox"` and `NEAR_SANDBOX_BINARY_PATH="$PWD/app/sandbox-launcher"`. The launcher selects the installed 2.14.0 binary and enforces local listeners and browser restrictions. Run `npm run test:sandbox` → the local integration test exercises real native NEAR transfers using sandbox balances, with separate owner, executor, attacker and merchant accounts. Expected rejection receipts appear in the output as failures; the test runner's final result determines success.
 
@@ -198,3 +198,24 @@ Merchant-side `signInvoice` in `merchant/invoice.ts` signs the exact invoice, me
 Once a merchant has a key record, direct unsigned policy authorization is blocked, including after revocation. Existing unexecuted unsigned policy approvals for that merchant are also blocked. `revoke-key MERCHANT_ID` revokes signing authority; `merchant-key` rotates it with a new version. Both invalidate unexecuted signed approvals; they do not erase spending or bill history, cancel uncertain transfers, or release holds. Expired reserved holds still use owner `cancel`. Manual per-invoice owner approval remains an explicit override outside merchant-signature policy. Merchants with no configured key retain the legacy host-trusted fixture path.
 
 `npm run test:merchant` and `npm run test:merchant:sandbox` → check every signed term, strict encodings, expiry, wrong vault/domain, unauthorized key management, unsigned bypass, private-helper inaccessibility, duplicate bill races, replay after cancellation/rotation, payout pinning, key revocation and persistent inbox recovery. The full `demo:verify` suite includes these tests. Signed invoices currently cover native NEAR only; 1Click remains non-fundable dry-run.
+
+
+## Emergency pause and executor replacement
+
+`npm run test:controls:sandbox` → deploy disposable local vaults, pause every native payment entry point, replace the executor, reject the old credentials, and resume the original reserved attempt exactly once. A separate CLI test proves that owner commands cannot silently pay pending invoices at startup and that reconnecting reads the current executor from the chain even if local metadata is stale. No live model, inference credits, swaps or real funds are used.
+
+For your existing agent vault, build and explicitly upgrade it as described above before using these commands; existing records are retained. Then:
+
+```sh
+npm run agent:desk -- pause
+npm run agent:desk -- rotate-executor executor-recovery-1
+npm run agent:desk -- status
+npm run agent:desk -- unpause
+npm run agent:desk -- resume
+```
+
+→ Pause new native authorizations, reservations and transfer dispatch; replace the local executor while keeping the vault paused; inspect its on-chain owner/executor/pause state; deliberately unpause; explicitly reconcile saved proposals using their original attempt IDs. Rotation creates a disposable local account with 1 test NEAR for transaction costs. Repeating the same label reuses the account and key without funding it again. The chain determines the active executor; cached metadata cannot restore the old executor's vault authority. A long-running app must reconnect to pick up the new signer. The local CLI holds an exclusive directory lock for each command, including inference: stop or wait for an active command before issuing owner controls. It is not a concurrent emergency-control service.
+
+Only the owner can pause, unpause or replace the executor, and replacement requires the vault to be paused. A pause takes effect when its transaction executes; it cannot recall a transfer already dispatched. Transfer callbacks, reads, owner cancellation of eligible invoices, and release of confirmed legacy failures still work during a pause. Reservations, invoice commitments, attempt IDs, merchant bill bindings and spending history are preserved. Executing payments remain held until their callback resolves; pausing never releases an uncertain payment's budget. Policy/key revocation remains separate from replacing the executor.
+
+Agent CLI startup now leaves payment recovery to explicit `run` or `resume` commands. In particular, `pause`, `status`, `unpause` and `rotate-executor` do not pay anything merely by opening the saved vault. `run` rejects a paused vault before requesting a new model proposal. The default app restart recovery remains enabled and is subject to the same on-chain pause. Legacy contracts without emergency controls remain readable but require the explicit upgrade to gain this protection. The pause flag uses separate storage; the existing root state layout is unchanged. These controls currently cover native NEAR payments; 1Click stays non-fundable dry-run.

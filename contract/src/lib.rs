@@ -1,4 +1,5 @@
 mod policy;
+mod controls;
 mod merchant_auth;
 use near_sdk::{collections::LookupMap, env, json_types::{U128, U64}, near, AccountId, PanicOnDefault, NearToken, Gas, Promise, PromiseOrValue};
 
@@ -99,6 +100,7 @@ impl Contract {
     pub fn available_balance(&self) -> U128 { U128(self.available) }
     pub fn authorize(&mut self, invoice: Invoice, expires_at: Option<U64>) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.owner, "owner only");
+        controls::require_running();
         self.record_authorization(invoice,expires_at)
     }
     fn record_authorization(&mut self, invoice:Invoice,expires_at:Option<U64>)->Payment {
@@ -140,6 +142,7 @@ impl Contract {
     }
     pub fn reserve(&mut self, invoice: Invoice, attempt_id: String) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.executor, "executor only");
+        controls::require_running();
         near_sdk::require!(valid_id(&attempt_id), "invalid attempt id");
         let mut p = self.payments.get(&invoice.id).unwrap_or_else(|| env::panic_str("unknown invoice"));
         near_sdk::require!(p.commitment == commitment(&invoice), "invoice mismatch");
@@ -156,6 +159,7 @@ impl Contract {
     }
     pub fn execute(&mut self, invoice_id: String, attempt_id: String) -> PromiseOrValue<Payment> {
         near_sdk::require!(env::predecessor_account_id() == self.executor, "executor only");
+        controls::require_running();
         let mut p = self.payments.get(&invoice_id).unwrap_or_else(|| env::panic_str("unknown invoice"));
         near_sdk::require!(p.state!=State::Cancelled,"invoice cancelled");
         near_sdk::require!(p.attempt_id.as_deref() == Some(attempt_id.as_str()), "attempt mismatch");

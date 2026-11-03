@@ -1,3 +1,4 @@
+import {readVaultControls} from './vault-controls.ts';
 import {deployVault} from './deploy-vault.ts';
 import { SandboxWorker } from 'near-workspaces';
 import { fileURLToPath } from 'node:url';
@@ -18,8 +19,9 @@ export function parseNear(value: unknown) {
 export class SandboxDesk {
  releaseLock?:()=>Promise<void>;
  readonly directory?:string;
- constructor(directory?:string) {this.directory=directory;}
- persist(){if(this.directory)saveJson(join(this.directory,'desk.json'),{session:this.session,baseline:this.baseline.toString(),vault:this.vault?.accountId,invoices:[...this.invoices],events:this.events});}
+ readonly recoverOnStart:boolean;
+ constructor(directory?:string,options:{recoverOnStart?:boolean}={}) {this.directory=directory;this.recoverOnStart=options.recoverOnStart??true;}
+ persist(){if(this.directory)saveJson(join(this.directory,'desk.json'),{session:this.session,baseline:this.baseline.toString(),vault:this.vault?.accountId,executor:this.executor?.accountId,invoices:[...this.invoices],events:this.events});}
  async reconcileAll(){for(const [id] of this.invoices){const runner=this.runner(id);try{if(runner.db.prepare('SELECT invoice_id FROM attempts WHERE invoice_id=?').get(id))await runner.reconcile(id);}catch{this.log(`${id}: recovery requires attention; inspect the invoice before retrying.`);}finally{runner.close();}}}
  runner(id:string){const {auth,rail}=vaultAdapters({call:(method,args)=>this.executor.call(this.vault,method,args,{gas:'100000000000000'}),view:(method,args)=>this.vault.view(method,args)},id);return new Executor(this.directory?join(this.directory,'attempts.db'):fileURLToPath(new URL(`../work/sandbox-${this.session}.db`,import.meta.url)),auth,rail);}
  session=randomUUID(); worker:any; owner:any; executor:any; merchant:any; vault:any;
@@ -44,8 +46,10 @@ export class SandboxDesk {
     const saved=JSON.parse(readFileSync(join(this.directory,'desk.json'),'utf8'));
     if(!saved.vault)throw Error('Incomplete vault setup; refusing to create or fund another vault.');
     this.session=saved.session;this.baseline=BigInt(saved.baseline);this.invoices=new Map(saved.invoices);this.events=saved.events;
-    this.owner=this.worker.account('owner.test.near');this.executor=this.worker.account('executor.test.near');this.merchant=this.worker.account('merchant.test.near');this.vault=this.worker.account(saved.vault);
-    await this.reconcileAll();this.phase='READY';this.log('Reconnected to existing vault; saved attempts reconciled.');return this.snapshot();
+    this.owner=this.worker.account('owner.test.near');this.executor=this.worker.account(saved.executor??'executor.test.near');this.merchant=this.worker.account('merchant.test.near');this.vault=this.worker.account(saved.vault);
+    const controls=await readVaultControls(this.vault);
+    if(controls){if(controls.owner!==this.owner.accountId)throw Error('Local owner does not match vault');this.executor=this.worker.account(controls.executor);}
+    if(this.recoverOnStart)await this.reconcileAll();this.phase='READY';this.log(this.recoverOnStart?'Reconnected to existing vault; saved attempts reconciled.':'Reconnected to existing vault; automatic payment recovery disabled.');return this.snapshot();
    }
    this.persist();
    const root=this.worker.rootAccount;
