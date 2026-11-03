@@ -48,9 +48,14 @@ export class InvoicePaymentTool {
 
 // The proposer receives data only, and returns a single tool call. No vault transport or keys.
 // This is a capability boundary, not an OS sandbox for running untrusted JavaScript.
-export async function runInvoiceAgent(invoice: Invoice, propose: (input: Readonly<Invoice>)=>Promise<unknown>, tool: InvoicePaymentTool) {
- const proposal=await propose(Object.freeze({...invoice}));
+export function validateInvoiceProposal(invoice:Invoice,proposal:unknown) {
  if(!proposal||typeof proposal!=='object'||Array.isArray(proposal)||Object.keys(proposal).length!==2||
   (proposal as any).name!=='request_payment'||!Object.hasOwn(proposal,'arguments'))throw Error('Expected one request_payment tool call');
- return tool.request((proposal as any).arguments);
+ const args=(proposal as any).arguments;
+ if(!args||typeof args!=='object'||Array.isArray(args)||Object.keys(args).length!==1||!Object.hasOwn(args,'invoice_id')||args.invoice_id!==invoice.id)throw Error('Only the assigned invoice_id is accepted');
+ return {name:'request_payment' as const,arguments:{invoice_id:invoice.id}};
+}
+export async function runInvoiceAgent(invoice: Invoice, propose: (input: Readonly<Invoice>)=>Promise<unknown>, tool: InvoicePaymentTool) {
+ const proposal=validateInvoiceProposal(invoice,await propose(Object.freeze({...invoice})));
+ return tool.request(proposal.arguments);
 }

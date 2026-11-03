@@ -52,7 +52,7 @@ Canonical commitment: SHA-256 of UTF-8 `NEAR-AEGIS-INVOICE-V1\n`, then invoice I
 
 `HACKATHON.md` preserves the user's supplied rules. Re-read https://nearhackathon.com/HACKATHON.md before submission. This is new AI-assisted code using NEAR SDK, near-workspaces and Node SQLite. Final tracks and license remain team decisions. Publishing, live spending and submission still require explicit confirmation.
 
-Next: design 1Click quote authentication and bind deposit, final recipient and refund terms to approval before adding any live funding. Preserve uncertain-outcome holds. Relevant official references: https://docs.near.org/smart-contracts/testing/integration-test and https://docs.near-intents.org/integration/distribution-channels/1click-api/about-1click-api.
+Remaining boundaries: merchant invoice authentication and production custody are not implemented. Any future executable 1Click route must separately bind its real deposit routing and preserve uncertain-outcome holds; current dry approvals cannot fund it. Relevant official references: https://docs.near.org/smart-contracts/testing/integration-test and https://docs.near-intents.org/integration/distribution-channels/1click-api/about-1click-api.
 
 ## Restricted agent payment capability
 
@@ -158,3 +158,27 @@ npm run agent:policy:demo -- --live-model
 The model receives only structured invoice fields and `request_payment({invoice_id})`. Merchant identity, policy configuration, invoice terms, keys and execution transport remain host-controlled. A valid model response grants no authority on its own: current on-chain rules decide authorization. No 1Click execution is connected.
 
 `npm run test:agent:policy:sandbox` → the same provider adapter with offline HTTP fixtures checks malformed/redirected proposals, provider failures, interrupted authorization recovery, duplicate protection, over-budget rejection and revocation while inference is in flight. These regression tests use no API key or inference credits. `npm run agent:policy:demo` keeps the complete command offline except for its local test chain.
+
+## Persistent agent inbox (local test funds only)
+
+The live demo is disposable. For invoices and policies that survive separate command invocations, use the independent local agent vault under ignored `work/agent-vault/`:
+
+```sh
+npm run agent:desk -- init
+npm run agent:desk -- policy 0.1 0.15 60
+npm run agent:desk -- enqueue INV-001 0.1
+npm run agent:desk -- run INV-001
+npm run agent:desk -- status
+```
+
+→ Initialize once, set a 0.1 NEAR per-payment cap / 0.15 rolling allowance / 60-minute expiry, persist one invoice, pay it with a fixture proposal, and inspect the same vault's payment and policy usage. `init` on existing data does not replace the vault, fund again, reset policy or clear history. Only `init` can create a missing agent vault. The harness pins invoices to its disposable local merchant; it cannot select an external payment network or RPC. `COUNTERSIGN_AGENT_DIR` selects a separate local state directory for tests. The development owner/executor keys remain with the trusted host.
+
+For live inference, enqueue a new invoice within the remaining allowance and run `npm run agent:desk -- run INV-002 --live-model` → the same restricted NEAR AI proposer uses the saved owner policy. Live requests consume inference credits. Re-running an invoice with a saved proposal or terminal result does not call the model again. Model keys are loaded only if a new proposal is needed.
+
+Every invoice and merchant binding is durable before inference. Inference is claimed once across workers; the validated single-tool proposal is durable before any authorization or payment call. `npm run agent:desk -- resume` → reconcile all saved proposals using the original invoice and attempt; this command never calls a model. Add an invoice ID to resume just that record. Payment errors remain attached to the record for inspection, and unknown outcomes keep the saved proposal for reconciliation.
+
+If a process stopped during inference, the state is `inference_pending`; malformed/provider-failed requests become `proposal_failed`. Neither retries automatically. `npm run agent:desk -- retry-proposal INV-002`, then `run INV-002 [--live-model]` explicitly permits another inference attempt. A late response from the old attempt cannot overwrite the new one or trigger payment. This retry does not clear an accepted proposal, payment attempt, invoice ID or spending history.
+
+Owner commands: `revoke` stops new policy payments; `policy <per-payment NEAR> <rolling NEAR> <minutes>` explicitly updates rules. `cancel INV-001` asks the contract to cancel an Authorized or expired Reserved invoice and records cancellation only after confirming the exact contract result. Executing/settled payments cannot be locally cancelled or have their funds released. Pending inference remains blocked until explicitly retried. The local chain persists after the command exits, like the existing desk; your existing app vault and 1Click records are separate.
+
+`npm run test:inbox:sandbox` → kills separate worker processes during inference and after saving a proposal, reopens the same vault, resumes with deliberately empty model credentials, verifies exactly one payment, and requires explicit retry for interrupted inference. It also checks confirmed cancellation and that repeated initialization preserves the vault and policy history. All automated tests use fixture proposals and local funds.
