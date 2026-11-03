@@ -5,15 +5,17 @@ import { vaultAdapters, type VaultTransport } from '../executor/vault.ts';
 
 export const paymentToolSchema = Object.freeze({
  name: 'request_payment',
- description: 'Request payment of the assigned, owner-approved invoice. Unknown outcomes require reconciliation, never a new payment.',
+ description: 'Request payment of the assigned invoice under owner approval or an owner-configured spending policy. Unknown outcomes require reconciliation, never a new payment.',
  parameters: {type:'object',properties:{invoice_id:{type:'string'}},required:['invoice_id'],additionalProperties:false},
 });
 
 // Constructed by the trusted host, never from model output. One capability per invoice.
 export class InvoicePaymentTool {
- #db: string; #invoice: Invoice; #transport: VaultTransport; #attempt: string;
- constructor(db: string, vaultIdentity: string, approvedInvoice: Invoice, transport: VaultTransport) {
+ #db: string; #invoice: Invoice; #transport: VaultTransport; #attempt: string; #policyMerchant?:string;
+ constructor(db: string, vaultIdentity: string, approvedInvoice: Invoice, transport: VaultTransport, policyMerchant?:string) {
   if(!vaultIdentity || db===':memory:')throw Error('Persistent storage and a pinned vault identity are required');
+  if(policyMerchant!==undefined&&!/^[A-Za-z0-9_.:-]{1,128}$/.test(policyMerchant))throw Error('Invalid policy merchant');
+  this.#policyMerchant=policyMerchant;
   const hash=commitment(approvedInvoice);
   this.#db=db; this.#invoice=Object.freeze({...approvedInvoice});this.#transport=transport;
   this.#attempt=createHash('sha256').update(JSON.stringify([vaultIdentity,approvedInvoice.id,hash])).digest('hex');
@@ -27,7 +29,12 @@ export class InvoicePaymentTool {
  async request(input: unknown) {
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==1||
    !Object.hasOwn(input,'invoice_id')||(input as any).invoice_id!==this.#invoice.id)throw Error('Only the assigned invoice_id is accepted');
-  const payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
+  let payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
+  // Host-selected policy capability. The model still gets only invoice_id.
+  if(!payment && this.#policyMerchant){
+   await this.#transport.call('authorize_by_policy',{invoice:this.#invoice,merchant_id:this.#policyMerchant});
+   payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
+  }
   if(!payment || payment.commitment!==commitment(this.#invoice) || commitment(payment.invoice)!==payment.commitment)throw Error('Invoice is not approved with the assigned terms');
   if(payment.state==='Cancelled')throw Error('Invoice cancelled by owner');
   const {auth,rail}=vaultAdapters(this.#transport,this.#invoice.id);

@@ -1,3 +1,4 @@
+mod policy;
 use near_sdk::{collections::LookupMap, env, json_types::{U128, U64}, near, AccountId, PanicOnDefault, NearToken, Gas, Promise, PromiseOrValue};
 
 #[near(serializers = [borsh, json])]
@@ -96,6 +97,9 @@ impl Contract {
     pub fn available_balance(&self) -> U128 { U128(self.available) }
     pub fn authorize(&mut self, invoice: Invoice, expires_at: Option<U64>) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.record_authorization(invoice,expires_at)
+    }
+    fn record_authorization(&mut self, invoice:Invoice,expires_at:Option<U64>)->Payment {
         near_sdk::require!(valid_id(&invoice.id) && valid_id(&invoice.asset) && invoice.amount.0 > 0, "invalid invoice");
         near_sdk::require!(invoice.asset == "near", "only native NEAR supported");
         near_sdk::require!(self.payments.get(&invoice.id).is_none() && routes().get(&invoice.id).is_none(), "invoice id already used");
@@ -116,6 +120,7 @@ impl Contract {
             near_sdk::require!(env::block_timestamp_ms()>=expiry,"reservation has not expired");
             self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
         } else { near_sdk::require!(p.state==State::Authorized,"only authorized or expired reserved invoices can be cancelled"); }
+        policy::release_charge(&invoice_id);
         p.state=State::Cancelled;self.payments.insert(&invoice_id,&p);p
     }
     // Terminal native failures have authoritative callback evidence. Older
@@ -125,6 +130,7 @@ impl Contract {
         let p=self.payments.get(&invoice_id).unwrap_or_else(||env::panic_str("unknown invoice"));
         near_sdk::require!(p.state==State::Failed,"only confirmed failed transfers can be released");
         if !released().get(&invoice_id).unwrap_or(false) {
+            policy::release_charge(&invoice_id);
             self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
             released().insert(&invoice_id,&true);
         }
@@ -140,7 +146,7 @@ impl Contract {
             near_sdk::require!(p.attempt_id.as_deref() == Some(attempt_id.as_str()), "already reserved");
             return p;
         }
-        check_expiry(&invoice.id);
+        check_expiry(&invoice.id);policy::check_bound(&invoice);
         near_sdk::require!(self.available >= invoice.amount.0, "insufficient budget");
         self.available -= invoice.amount.0;
         p.state = State::Reserved; p.attempt_id = Some(attempt_id);
@@ -153,9 +159,10 @@ impl Contract {
         near_sdk::require!(p.attempt_id.as_deref() == Some(attempt_id.as_str()), "attempt mismatch");
         if matches!(p.state, State::Executing | State::Settled | State::Failed) { return PromiseOrValue::Value(p); }
         near_sdk::require!(p.state == State::Reserved, "not reserved");
-        check_expiry(&invoice_id);
+        check_expiry(&invoice_id);policy::check_bound(&p.invoice);
         let storage = u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
         near_sdk::require!(env::account_balance().as_yoctonear().saturating_sub(storage + 100_000_000_000_000_000_000_000) >= p.invoice.amount.0, "insufficient liquid balance");
+        policy::record_execution(&p.invoice);
         p.state = State::Executing;
         self.payments.insert(&invoice_id, &p);
         PromiseOrValue::Promise(Promise::new(p.invoice.payee.clone())
@@ -173,6 +180,7 @@ impl Contract {
         near_sdk::require!(p.state == State::Executing, "invalid transition");
         p.state = match env::promise_result_checked(0, 0) { Ok(_) => State::Settled, Err(_) => State::Failed };
         if p.state==State::Failed {
+            policy::release_charge(&invoice_id);
             self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
             released().insert(&invoice_id,&true);
         }

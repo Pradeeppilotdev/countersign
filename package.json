@@ -17,7 +17,9 @@
     "oneclick:approve:live": "node --disable-warning=ExperimentalWarning oneclick/live-approval.ts",
     "test:owner:sandbox": "node --disable-warning=ExperimentalWarning --test integration/owner-controls.test.ts",
     "demo:verify": "node scripts/demo.mjs",
-    "sandbox:upgrade": "node --disable-warning=ExperimentalWarning app/upgrade.ts"
+    "sandbox:upgrade": "node --disable-warning=ExperimentalWarning app/upgrade.ts",
+    "agent:policy:demo": "node --disable-warning=ExperimentalWarning agent/policy-demo.ts",
+    "test:policy:sandbox": "node --disable-warning=ExperimentalWarning --test integration/policy.test.ts"
   },
   "engines": {
     "node": ">=24.0"
