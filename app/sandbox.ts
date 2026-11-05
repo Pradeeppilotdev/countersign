@@ -1,3 +1,4 @@
+import {requireUpgradeVerified} from './upgrade-state.ts';
 import {readVaultControls} from './vault-controls.ts';
 import {deployVault} from './deploy-vault.ts';
 import { SandboxWorker } from 'near-workspaces';
@@ -34,6 +35,7 @@ export class SandboxDesk {
   this.phase='STARTING';
   try {
    if(this.directory){mkdirSync(this.directory,{recursive:true,mode:0o700});this.releaseLock=await lockfile.lock(this.directory,{stale:2000,update:1000,retries:{retries:20,minTimeout:250,maxTimeout:500}});}
+   if(this.directory)requireUpgradeVerified(this.directory);
    const binary=fileURLToPath(new URL('../work/sandbox-bin/near-sandbox',import.meta.url));
    const wasm=fileURLToPath(new URL('../contract/target/wasm32-unknown-unknown/release/countersign.wasm',import.meta.url));
    if(!existsSync(binary)||!existsSync(wasm))throw Error('Local sandbox binary or compiled contract is missing.');
