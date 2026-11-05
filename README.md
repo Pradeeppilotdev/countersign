@@ -188,7 +188,7 @@ tar -xzf work/near-sandbox.tar.gz -C work/sandbox-bin --strip-components=1
 npm run demo:verify
 ```
 
-The command builds the contract, checks agent restrictions and tampering, tests actual local payments and duplicate protection, checks owner cancellation and expiry, and kills/restarts a separate app and chain to verify recovery. An unexpected failure stops the runner with a nonzero exit code. `work/demo-output.txt` contains the full transcript; `work/demo.cast` is an asciicast v2 terminal recording playable with `asciinema play work/demo.cast`. These recordings are local artifacts and are not committed automatically.
+The command builds the contract, checks agent restrictions and tampering, tests actual local payments and duplicate protection, checks owner cancellation and expiry, and kills/restarts a separate app and chain to verify recovery. An unexpected failure stops the runner with a nonzero exit code. On macOS, the runner temporarily prevents idle system sleep for the duration of verification; display and persistent power settings are unchanged. `work/demo-output.txt` contains the full transcript; `work/demo.cast` is an asciicast v2 terminal recording playable with `asciinema play work/demo.cast`. These recordings are local artifacts and are not committed automatically.
 
 This repeatable demo uses fixture model proposals and archived signed quote fixtures. Live AI inference was separately verified using local payment funds; fresh 1Click quote-to-approval verification also passed separately on 3 November 2026 (India time). Simulated status observations are not evidence of real cross-chain settlement. No live model key or 1Click availability is needed for `demo:verify`.
 

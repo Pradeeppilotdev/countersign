@@ -9,6 +9,16 @@ const began=Date.now();let revision='uncommitted';try{revision=execFileSync('git
 writeFileSync(log,'',{mode:0o600});writeFileSync(cast,JSON.stringify({version:2,width:120,height:35,timestamp:Math.floor(began/1000),title:'Countersign local verification',env:{TERM:'xterm-256color'}})+'\n',{mode:0o600});
 function output(value){const text=String(value);process.stdout.write(text);appendFileSync(log,text);appendFileSync(cast,JSON.stringify([(Date.now()-began)/1000,'o',text.replace(/(?<!\r)\n/g,'\r\n')])+'\n');}
 function files(folder){return readdirSync(join(root,folder)).filter(n=>n.endsWith('.test.ts')).map(n=>folder+'/'+n);}
+// Local chain tests use wall-clock deadlines. Prevent idle system sleep only
+// while this runner is alive; do not change persistent power/display settings.
+let keepAwake;
+if(process.platform==='darwin'){
+ keepAwake=spawn('/usr/bin/caffeinate',['-i','-w',String(process.pid)],{stdio:'ignore'});
+ keepAwake.once('error',()=>output('Could not prevent idle sleep; keep this Mac awake during verification.\n'));
+ keepAwake.unref();
+ process.once('exit',()=>keepAwake?.kill());
+}
+
 const env={...process.env,NEAR_WORKSPACES_NETWORK:'sandbox',NEAR_SANDBOX_BIN_PATH:join(root,'app/sandbox-launcher/near-sandbox'),NEAR_SANDBOX_BINARY_PATH:join(root,'app/sandbox-launcher')};
 // This runner never loads .env or invokes the live-model / live-quote commands.
 delete env.NEAR_AI_API_KEY;
@@ -31,3 +41,5 @@ try{
  output('\nALL CHECKS PASSED. No live model calls, swaps or real funds.\n');
 }catch(error){output('\nVERIFICATION FAILED: '+error.message+'\n');process.exitCode=1;}
 output('Recording: '+cast+'\nTranscript: '+log+'\n');
+
+keepAwake?.kill();
