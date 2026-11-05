@@ -95,7 +95,7 @@ Prerequisites: Node 24+, Rust 1.99.1 with `wasm32-unknown-unknown`, and NEAR San
 From this project directory:
 
 1. `npm ci --ignore-scripts` then `npm test` → seven executor tests pass, covering persistent duplicate claims, restart, tampering, status errors and terminal failure. These use mock contract/rail adapters.
-2. `cargo test --locked --manifest-path contract/Cargo.toml` → twenty-five Rust unit tests pass.
+2. `cargo test --locked --manifest-path contract/Cargo.toml` → thirty-three Rust unit tests pass.
 3. `cargo build --locked --manifest-path contract/Cargo.toml --target wasm32-unknown-unknown --release` → produces `contract/target/wasm32-unknown-unknown/release/countersign.wasm`.
 4. Set `NEAR_SANDBOX_BIN_PATH="$PWD/app/sandbox-launcher/near-sandbox"` and `NEAR_SANDBOX_BINARY_PATH="$PWD/app/sandbox-launcher"`. The launcher selects the installed 2.14.0 binary and enforces local listeners and browser restrictions. Run `npm run test:sandbox` → the local integration test exercises real native NEAR transfers using sandbox balances, with separate owner, executor, attacker and merchant accounts. Expected rejection receipts appear in the output as failures; the test runner's final result determines success.
 
@@ -251,6 +251,18 @@ npm run agent:desk -- status
 → Initialize once, set a 0.1 NEAR per-payment cap / 0.15 rolling allowance / 60-minute expiry, persist one invoice, pay it with a fixture proposal, and inspect the same vault's payment and policy usage. `init` on existing data does not replace the vault, fund again, reset policy or clear history. Only `init` can create a missing agent vault. The harness pins invoices to its disposable local merchant; it cannot select an external payment network or RPC. `COUNTERSIGN_AGENT_DIR` selects a separate local state directory for tests. The development owner/executor keys remain with the trusted host.
 
 For live inference, enqueue a new invoice within the remaining allowance and run `npm run agent:desk -- run INV-002 --live-model` → the same restricted NEAR AI proposer uses the saved owner policy. Live requests consume inference credits. Re-running an invoice with a saved proposal or terminal result does not call the model again. Model keys are loaded only if a new proposal is needed.
+
+To renew the existing policy without replacing any limits or merchant settings, first build and upgrade the saved local vault as described above, then:
+
+```sh
+npm run agent:desk -- renew-policy 60 renewal-001
+```
+
+→ The owner extends the policy to 60 minutes from the chain's current time. The merchant list, pinned payout accounts, minimum, per-payment cap and rolling budget are preserved exactly, including a legacy minimum of 1 yoctoNEAR. Existing spending, Reserved/Executing holds, invoice records, signing keys and used bill IDs remain intact. An active policy can be renewed only to a later deadline. Renewal changes the policy version: old unexecuted approvals stay invalidated, their original invoice deadlines never extend, and in-flight payments keep their holds until confirmed settlement. Owner cancellation may release an unexecuted reservation bound to the old version; it cannot cancel Executing payments.
+
+If the command is interrupted or reports an unconfirmed outcome, repeat **the same command and renewal ID** → reconcile the fixed saved expiry and on-chain receipt without extending permission again. Even after expiry or revocation, replay cannot create new authority. A new renewal requires a new ID; another ID is blocked while a saved request is unresolved. A stale request cannot overwrite rules changed by the owner. Renewal is an explicit owner command, never a model capability or a scheduled action. The private intent records stay under `work/agent-vault/policy-renewals/`.
+
+`npm run test:policy:renewal` → kill the actual CLI after the chain accepts renewal, recover once, preserve custom settings/signatures/bills/held quota, reject competing stale renewals and verify a new fixture-agent payment stays within the original rolling budget. All funds are disposable local test NEAR. Rust tests additionally preserve uncertain Executing holds past expiry; offline tests cover lost responses before submission and expired or superseded saved requests.
 
 Every invoice and merchant binding is durable before inference. Inference is claimed once across workers; the validated single-tool proposal is durable before any authorization or payment call. `npm run agent:desk -- resume` → reconcile all saved proposals using the original invoice and attempt; this command never calls a model. Add an invoice ID to resume just that record. Payment errors remain attached to the record for inspection, and unknown outcomes keep the saved proposal for reconciliation.
 

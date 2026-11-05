@@ -1,3 +1,4 @@
+import {renewSavedPolicy} from './policy-renewal.ts';
 import {createRequire} from 'node:module';
 import {publicError} from '../app/errors.ts';
 import {runPersistentInvoice} from './run-invoice.ts';
@@ -16,8 +17,8 @@ const sdkRequire=createRequire(createRequire(import.meta.url).resolve('near-work
 sdkRequire('near-api-js').utils.Logger.overrideLogger();
 process.env.NEAR_WORKSPACES_NO_LOGS='1';
 const [command,...args]=process.argv.slice(2);
-const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1]};
-if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label>');
+const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1]};
+if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label>');
 const directory=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
 if(command!=='init'&&!existsSync(join(directory,'desk.json')))throw Error('Initialize the separate local agent vault with agent:desk init first');
 if(command==='run'){
@@ -32,7 +33,8 @@ try{
  inbox=new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,transport);
  const capacity=async()=>{try{return await desk.vault.view('policy_capacity',{});}catch(error){if(error instanceof Error&&error.message.includes('MethodNotFound'))throw Error('Upgrade the local vault before using policy capacity controls.');throw error;}};
  let result:any;
- if(command==='capacity'){result=await capacity();}
+ if(command==='renew-policy'){result=await renewSavedPolicy({directory,identity:`${desk.session}:${desk.vault.accountId}`,view:(m,a)=>desk.vault.view(m,a),call:(m,a)=>desk.owner.call(desk.vault,m,a,{gas:'100000000000000'})},args[1],Number(args[0]));}
+ else if(command==='capacity'){result=await capacity();}
  else if(command==='clear-approvals'){
   await capacity();
   result=await desk.owner.call(desk.vault,'clear_policy_approvals',{},{gas:'300000000000000'});

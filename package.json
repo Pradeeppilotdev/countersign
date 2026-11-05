@@ -29,6 +29,7 @@
     "test:agent:policy:sandbox": "node --disable-warning=ExperimentalWarning --test integration/live-policy.test.ts",
     "test:owner:inference": "node --disable-warning=ExperimentalWarning --test integration/owner-inference.test.ts",
     "test:policy:recovery": "node --disable-warning=ExperimentalWarning --test integration/policy-recovery.test.ts",
+    "test:policy:renewal": "node --disable-warning=ExperimentalWarning --test integration/policy-renewal.test.ts",
     "test:upgrade": "node --disable-warning=ExperimentalWarning --test integration/upgrade.test.ts"
   },
   "engines": {

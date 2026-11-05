@@ -1,11 +1,23 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {DatabaseSync} from 'node:sqlite';
 import {storageDigest,storedInvoiceIds,rootAccounts,localRecords,requireUpgradeVerified} from './upgrade-state.ts';
 const encode=(s:string)=>Buffer.from(s).toString('base64');
+test('upgrade detects a changed or missing owner renewal intent',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'upgrade-renewal-records-'));
+ try{
+  writeFileSync(join(dir,'desk.json'),'{}');const empty=localRecords(dir);
+  mkdirSync(join(dir,'policy-renewals'));const file=join(dir,'policy-renewals/once.json');
+  writeFileSync(file,JSON.stringify({state:'pending',request:{renewal_id:'once',expected_version:'1',expires_at:'60000'}}));
+  const before=localRecords(dir);assert.notDeepEqual(before,empty);
+  writeFileSync(file,JSON.stringify({state:'pending',request:{renewal_id:'once',expected_version:'1',expires_at:'90000'}}));
+  assert.notDeepEqual(localRecords(dir),before);
+  rmSync(file);assert.notDeepEqual(localRecords(dir),before);assert.deepEqual(localRecords(dir),empty);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
 test('upgrade compares all raw storage, including records outside the UI/inbox',()=>{
  const a=[{key:encode('STATE'),value:encode('owner')},{key:encode('merchant-bills-v1'),value:encode('used-bill')}];
  assert.equal(storageDigest(a),storageDigest([...a].reverse()));

@@ -9,6 +9,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {SandboxDesk} from '../app/sandbox.ts';
 import {AgentInbox} from '../agent/inbox.ts';
+import {renewSavedPolicy} from '../agent/policy-renewal.ts';
 import {signInvoice,publicKeyBase64} from '../merchant/invoice.ts';
 import {digest,localRecords,storageDigest} from '../app/upgrade-state.ts';
 const exec=promisify(execFile),cwd=fileURLToPath(new URL('../',import.meta.url));
@@ -24,6 +25,8 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   await desk.start();const domain=randomBytes(32).toString('hex'),keys=generateKeyPairSync('ed25519');
   await desk.owner.call(desk.vault,'set_policy',{merchants:[{id:'plain',payee:desk.merchant.accountId},{id:'signed',payee:desk.merchant.accountId}],per_payment:'1000',daily_limit:'10000',expires_at:String(Date.now()+3600000)});
   await desk.owner.call(desk.vault,'configure_invoice_auth',{domain});await desk.owner.call(desk.vault,'set_merchant_key',{merchant_id:'signed',public_key:publicKeyBase64(keys.publicKey)});
+  const renewal=await renewSavedPolicy({directory,identity:`${desk.session}:${desk.vault.accountId}`,view:(m,a)=>desk.vault.view(m,a),call:(m,a)=>desk.owner.call(desk.vault,m,a,{gas:'100000000000000'})},'before-upgrade',60);
+  assert.equal(renewal.state,'confirmed');
   const signed=signInvoice({invoice:{...unsigned('signed-paid'),amount:'500'},merchant_id:'signed',bill_id:'immutable-bill',vault:desk.vault.accountId,domain,key_version:'1',expires_at:String(Date.now()+600000)},keys.privateKey);
   const inbox=new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,{call:(m,a)=>desk.executor.call(desk.vault,m,a,{gas:'100000000000000'}),view:(m,a)=>desk.vault.view(m,a)});
   try{await inbox.enqueueSigned(signed,desk.vault.accountId);await inbox.run(signed.invoice.id,async i=>({name:'request_payment',arguments:{invoice_id:i.id}}));inbox.enqueue(unsigned('queued'),'plain');}finally{inbox.close();}
@@ -44,6 +47,9 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   const result=await child();assert.equal(result.upgraded,false);assert.equal(result.vault,desk.vault.accountId);assert.equal(result.codeHash,digest(target));
   assert.equal((await access()).nonce.toString(),nonce);assert.equal(existsSync(join(directory,'upgrade-pending.json')),false);
   assert.equal(storageDigest(await desk.vault.viewStateRaw()),storageDigest(before));assert.deepEqual(localRecords(directory),localBefore);
+  assert.ok(localBefore.files['policy-renewals/before-upgrade.json']);
+  assert.deepEqual(await desk.vault.view('get_policy_renewal',{renewal_id:'before-upgrade'}),renewal.receipt);
+  console.log('PASS: upgrade retained both the owner renewal journal and the on-chain receipt.');
   assert.deepEqual(result.invoices.map((p:any)=>p.id).sort(),['held','orphan-approved','signed-paid','ui-approved']);
   assert.equal(result.localRecords['inbox.db'].invoices,2);assert.equal(result.localRecords['inbox.db'].attempts,1);
   assert.equal(result.controls.paused,true);assert.equal(result.capacity.max_pending,16);

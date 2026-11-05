@@ -37,6 +37,8 @@ export function rootAccounts(entries:StorageEntry[]){
 }
 export function localRecords(directory:string){
  const files:Record<string,string>={'desk.json':digest(readFileSync(join(directory,'desk.json')))};
+ const renewals=join(directory,'policy-renewals');
+ if(existsSync(renewals))for(const name of readdirSync(renewals).filter(n=>n.endsWith('.json')).sort())files['policy-renewals/'+name]=digest(readFileSync(join(renewals,name)));
  const databases:Record<string,{digest:string;invoices:number;attempts:number}>={};
  for(const name of readdirSync(directory).filter(n=>n.endsWith('.db')).sort()){
   const db=new DatabaseSync(join(directory,name),{readOnly:true});

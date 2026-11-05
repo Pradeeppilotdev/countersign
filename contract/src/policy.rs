@@ -19,6 +19,10 @@ fn versions()->LookupMap<u8,u64>{LookupMap::new(b"policy-version-v1".to_vec())}
 fn bindings()->LookupMap<String,Binding>{LookupMap::new(b"invoice-policy-v1".to_vec())}
 fn ledger()->LookupMap<u8,Vec<Charge>>{LookupMap::new(b"policy-charges-v1".to_vec())}
 fn minimums()->LookupMap<u8,u128>{LookupMap::new(b"policy-minimum-v1".to_vec())}
+#[near(serializers=[borsh,json])]
+#[derive(Clone)]
+pub struct PolicyRenewal {pub renewal_id:String,pub previous_version:U64,pub version:U64,pub expires_at:U64}
+fn renewals()->LookupMap<String,PolicyRenewal>{LookupMap::new(b"policy-renewals-v1".to_vec())}
 fn active(c:&Contract)->Vec<Charge>{
  let now=env::block_timestamp_ms();
  ledger().get(&0).unwrap_or_default().into_iter().filter(|e|{
@@ -66,8 +70,32 @@ pub(super) fn release_charge(id:&String){
 }
 #[near(serializers=[json])]
 pub struct PolicyCapacity {pub min_payment:U128,pub max_pending:u32,pub max_charges:u32,pub pending:u32,pub charges:u32,pub usage:U128}
+#[near(serializers=[json])]
+pub struct PolicySnapshot {pub policy:Option<SpendingPolicy>,pub min_payment:U128,pub usage:U128,pub now:U64}
 #[near]
 impl Contract {
+ // Renewal changes only expiry/version. No caller-supplied merchant, amount or
+ // minimum can overwrite the existing rules, and no ledger entry is removed.
+ pub fn renew_policy(&mut self,renewal_id:String,expected_version:U64,expires_at:U64)->SpendingPolicy{
+  near_sdk::require!(env::predecessor_account_id()==self.owner,"owner only");
+  near_sdk::require!(valid_id(&renewal_id),"invalid renewal id");
+  let mut p=policies().get(&0).unwrap_or_else(||env::panic_str("no spending policy"));
+  if let Some(receipt)=renewals().get(&renewal_id){
+   near_sdk::require!(receipt.previous_version==expected_version&&receipt.expires_at==expires_at,"renewal id already bound");
+   near_sdk::require!(p.version==receipt.version&&p.expires_at==expires_at,"renewal superseded");
+   return p; // A late retry never extends expiry again, even if now expired.
+  }
+  near_sdk::require!(p.version==expected_version,"policy changed; renewal must be reviewed");
+  let now=env::block_timestamp_ms();
+  near_sdk::require!(expires_at.0>now&&expires_at.0<=now.saturating_add(30*WINDOW),"renewal expiry must be within 30 days");
+  near_sdk::require!(expires_at.0>p.expires_at.0,"renewal must extend policy expiry");
+  let version=versions().get(&0).unwrap_or(0).checked_add(1).unwrap_or_else(||env::panic_str("policy version overflow"));
+  p.version=U64(version);p.expires_at=expires_at;
+  versions().insert(&0,&version);policies().insert(&0,&p);
+  renewals().insert(&renewal_id,&PolicyRenewal{renewal_id:renewal_id.clone(),previous_version:expected_version,version:p.version,expires_at});p
+ }
+ pub fn get_policy_renewal(&self,renewal_id:String)->Option<PolicyRenewal>{renewals().get(&renewal_id)}
+ pub fn policy_snapshot(&self)->PolicySnapshot{PolicySnapshot{policy:policies().get(&0),min_payment:U128(minimums().get(&0).unwrap_or(1)),usage:self.policy_usage(),now:U64(env::block_timestamp_ms())}}
  pub fn set_policy(&mut self,merchants:Vec<Merchant>,per_payment:U128,daily_limit:U128,expires_at:U64,min_payment:Option<U128>)->SpendingPolicy {
   near_sdk::require!(env::predecessor_account_id()==self.owner,"owner only");
   near_sdk::require!(!merchants.is_empty()&&merchants.len()<=32,"one to 32 merchants required");
@@ -213,6 +241,31 @@ mod tests {
   let mut c=setup();c.available=300;context("executor.near",1000);
   c.authorize_by_policy(invoice("flight"),"merchant".into(),None);let mut p=c.reserve(invoice("flight"),"flight".into());p.state=State::Executing;c.payments.insert(&"flight".into(),&p);
   context("owner.near",1001);c.revoke_policy();c.cancel("flight".into());
+ }
+ #[test] fn renewal_preserves_terms_and_pending_holds_and_retries_do_not_extend_expiry(){
+  let mut c=setup();c.available=300;context("executor.near",1000);
+  c.authorize_by_policy(invoice("held"),"merchant".into(),None);c.reserve(invoice("held"),"held".into());
+  c.authorize_by_policy(invoice("in-flight"),"merchant".into(),None);c.reserve(invoice("in-flight"),"flight".into());
+  record_execution(&invoice("in-flight"));let mut flight=c.payments.get(&"in-flight".into()).unwrap();flight.state=State::Executing;c.payments.insert(&"in-flight".into(),&flight);
+  let old=c.get_policy().unwrap();let budget=c.available;
+  context("owner.near",3*WINDOW+1);c.set_paused(true);
+  let next=c.renew_policy("renew-once".into(),old.version,U64(4*WINDOW));
+  assert_eq!(next.per_payment,old.per_payment);assert_eq!(next.daily_limit,old.daily_limit);assert_eq!(next.merchants[0].id,old.merchants[0].id);assert_eq!(next.merchants[0].payee,old.merchants[0].payee);
+  assert_eq!(c.policy_usage().0,200);assert_eq!(c.available,budget);assert_eq!(c.policy_capacity().min_payment.0,1);
+  context("owner.near",5*WINDOW);let retry=c.renew_policy("renew-once".into(),old.version,U64(4*WINDOW));
+  assert_eq!(retry.version,next.version);assert_eq!(retry.expires_at,U64(4*WINDOW));assert_eq!(c.policy_usage().0,200);
+  assert!(c.get_policy_renewal("renew-once".into()).is_some());
+ }
+ #[test] #[should_panic(expected="owner only")] fn executor_cannot_renew_policy(){let mut c=setup();context("executor.near",1000);c.renew_policy("r".into(),U64(1),U64(4*WINDOW));}
+ #[test] #[should_panic(expected="policy changed; renewal must be reviewed")] fn stale_renewal_cannot_overwrite_new_rules(){let mut c=setup();c.renew_policy("first".into(),U64(1),U64(4*WINDOW));c.renew_policy("stale".into(),U64(1),U64(5*WINDOW));}
+ #[test] #[should_panic(expected="renewal id already bound")] fn renewal_id_cannot_change_its_deadline(){let mut c=setup();c.renew_policy("same".into(),U64(1),U64(4*WINDOW));c.renew_policy("same".into(),U64(1),U64(5*WINDOW));}
+ #[test] #[should_panic(expected="renewal superseded")] fn old_renewal_cannot_restore_a_replaced_policy(){let mut c=setup();c.renew_policy("first".into(),U64(1),U64(4*WINDOW));c.renew_policy("later".into(),U64(2),U64(5*WINDOW));c.renew_policy("first".into(),U64(1),U64(4*WINDOW));}
+ #[test] #[should_panic(expected="invoice expired")] fn renewal_cannot_revive_an_expired_invoice(){let mut c=setup();context("executor.near",1000);c.authorize_by_policy(invoice("expired"),"merchant".into(),Some(U64(2000)));context("owner.near",3*WINDOW+1);c.renew_policy("r".into(),U64(1),U64(4*WINDOW));context("executor.near",3*WINDOW+2);c.reserve(invoice("expired"),"a".into());}
+ #[test] #[should_panic(expected="renewal expiry must be within 30 days")] fn renewal_cannot_create_unbounded_authority(){let mut c=setup();c.renew_policy("r".into(),U64(1),U64(40*WINDOW));}
+ #[test] fn renewal_keeps_legacy_minimum_and_custom_minimum(){
+  let mut c=setup();minimums().remove(&0);c.renew_policy("legacy".into(),U64(1),U64(4*WINDOW));assert!(minimums().get(&0).is_none());assert_eq!(c.policy_snapshot().min_payment.0,1);
+  c.set_policy(vec![Merchant{id:"merchant".into(),payee:"merchant.near".parse().unwrap()}],U128(100),U128(200),U64(5*WINDOW),Some(U128(7)));
+  c.renew_policy("custom".into(),U64(3),U64(6*WINDOW));assert_eq!(c.policy_snapshot().min_payment.0,7);
  }
 
 }
