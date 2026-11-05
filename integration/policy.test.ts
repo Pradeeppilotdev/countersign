@@ -50,7 +50,7 @@ test('owner policies authorize agent payments with pinned merchants, caps, rolli
   await d.worker.provider.fastForward(100);
   await rejected(d.executor,'authorize_by_policy',{invoice:{...base,id:'policy-expired',amount:'1'},merchant_id:'merchant'},'policy expired');
   // A real failed native transfer releases policy quota and vault budget once.
-  await d.owner.call(d.vault,'set_policy',{...config,daily_limit:'3000',merchants:[{id:'missing',payee:'missing-policy-payee.test.near'}],expires_at:String(Date.now()+3600000)});
+  await d.owner.call(d.vault,'set_policy',{...config,min_payment:'1',daily_limit:'3000',merchants:[{id:'missing',payee:'missing-policy-payee.test.near'}],expires_at:String(Date.now()+3600000)});
   const quota=await d.vault.view('policy_usage',{}),budget=await d.vault.view('available_balance',{});
   const badInvoice={...base,id:'failed-policy',payee:'missing-policy-payee.test.near',amount:'1'};
   const failedTool=new InvoicePaymentTool(join(directory,'failed.db'),d.vault.accountId,badInvoice,transport,'missing');

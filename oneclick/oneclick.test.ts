@@ -10,7 +10,7 @@ import { requestFor, validateTerms, validateQuote, preview, QuoteServiceError } 
 import { SimulationTracker } from './tracker.ts';
 const now = Date.now();
 const p = {originAsset:'nep141:fixture.near',destinationAsset:'nep141:base-fixture.near',recipient:'fixture-payee',refundTo:'fixture-refund',amountOut:'1000000',maxAmountIn:'1100000',deadline:new Date(now+600000).toISOString()};
-function fixture(): any {return {timestamp:new Date(now).toISOString(),quoteRequest:requestFor(p,now),quote:{amountIn:'1050000',amountOut:'1000000',minAmountOut:'1000000'},signature:'invalid'};}
+function fixture(): any {return {timestamp:new Date(now).toISOString(),quoteRequest:{...requestFor(p,now),appFees:[{recipient:'5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd',fee:1}]},quote:{amountIn:'1050000',amountOut:'1000000',minAmountOut:'1000000'},signature:'invalid'};}
 test('valid terms, exact output, cap and immutable routing',()=>{
  assert.equal(validateTerms(p,fixture(),now).fundable,false);
  for (const [field,value] of Object.entries({recipient:'attacker',refundTo:'attacker',originAsset:'other',destinationAsset:'other',amount:'1',dry:false,swapType:'EXACT_INPUT'})) {
@@ -84,7 +84,7 @@ test('provider outage fails closed once with safe diagnostics and no HTML disclo
 test('unsigned fee recipient and rate cannot be substituted',()=>{
  const r=JSON.parse(readFileSync(new URL('./fixtures/live-dry-quote.json',import.meta.url),'utf8'));
  const policy=JSON.parse(readFileSync(new URL('./fixtures/live-policy.json',import.meta.url),'utf8'));
- for(const fees of [[{recipient:'attacker.near',fee:10000}],[{...r.quoteRequest.appFees[0],fee:2}],[...r.quoteRequest.appFees,...r.quoteRequest.appFees]]){
+ for(const fees of [undefined,[],[{recipient:'attacker.near',fee:10000}],[{...r.quoteRequest.appFees[0],fee:2}],[...r.quoteRequest.appFees,...r.quoteRequest.appFees]]){
   const changed=structuredClone(r);changed.quoteRequest.appFees=fees;
   assert.equal(verifyQuoteSignature(changed),true);
   assert.throws(()=>validateQuote(policy,changed,Date.parse(r.timestamp)),/appFees/);
@@ -96,5 +96,17 @@ test('400 diagnostics are bounded JSON data, never HTML or provider stacks',asyn
    assert.ok(error instanceof QuoteServiceError);assert.ok(error.message.length<600);assert.ok(!/private|<script>/.test(error.message));
    if(expected)assert.ok(error.message.includes(expected));return true;
   });
+ }
+});
+
+test('unsigned timing and fee estimates are labelled and excluded from trusted amounts',()=>{
+ const r=JSON.parse(readFileSync(new URL('./fixtures/live-dry-quote.json',import.meta.url),'utf8'));
+ const policy=JSON.parse(readFileSync(new URL('./fixtures/live-policy.json',import.meta.url),'utf8'));
+ const expected=validateQuote(policy,r,Date.parse(r.timestamp));
+ for(const field of ['timeEstimate','refundFee','withdrawFee']){
+  const changed=structuredClone(r);changed.quote[field]='attacker-controlled metadata';
+  assert.equal(verifyQuoteSignature(changed),true);
+  const result=validateQuote(policy,changed,Date.parse(r.timestamp));
+  assert.deepEqual(result,expected);assert.ok(result.unsignedMetadata.includes(`quote.${field}`));assert.ok(!(field in result));
  }
 });

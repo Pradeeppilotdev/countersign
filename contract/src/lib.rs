@@ -120,8 +120,10 @@ impl Contract {
         let mut p=self.payments.get(&invoice_id).unwrap_or_else(||env::panic_str("unknown invoice"));
         if p.state==State::Cancelled{return p;}
         if p.state==State::Reserved {
-            let expiry=expiries().get(&invoice_id).unwrap_or_else(||env::panic_str("reservation has no expiry"));
-            near_sdk::require!(env::block_timestamp_ms()>=expiry,"reservation has not expired");
+            if !policy::invalidated(&invoice_id) {
+                let expiry=expiries().get(&invoice_id).unwrap_or_else(||env::panic_str("reservation has no expiry"));
+                near_sdk::require!(env::block_timestamp_ms()>=expiry,"reservation has not expired");
+            }
             self.available=self.available.checked_add(p.invoice.amount.0).unwrap_or_else(||env::panic_str("overflow"));
         } else { near_sdk::require!(p.state==State::Authorized,"only authorized or expired reserved invoices can be cancelled"); }
         policy::release_charge(&invoice_id);

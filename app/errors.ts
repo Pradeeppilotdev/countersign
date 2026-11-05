@@ -1,11 +1,11 @@
+import {vaultReason} from '../executor/errors.ts';
 import {QuoteServiceError} from '../oneclick/quotes.ts';
 export function publicError(error:unknown){
  if(error instanceof QuoteServiceError)return error.message;
  const message=error instanceof Error?error.message:'';
- for(const reason of ['vault payments paused','pause before replacing executor','merchant signature required','merchant key revoked','merchant key changed; approval invalidated','merchant key version mismatch','invalid merchant signature','merchant bill already used','signed invoice already bound','signed invoice expired or excessive lifetime','signed vault mismatch','signed domain mismatch','no spending policy','merchant not allowed','merchant payout mismatch','per-payment cap exceeded','rolling daily budget exceeded','policy expired','policy revoked','policy changed; approval invalidated','policy history capacity reached','invoice expired','invoice cancelled','insufficient budget','insufficient liquid balance','reservation has not expired','only confirmed failed transfers can be released','only authorized or expired reserved invoices can be cancelled','owner only','executor only','attempt mismatch','invoice mismatch']){
-  if(message.includes(reason))return reason[0].toUpperCase()+reason.slice(1)+'.';
- }
- if(/^(Enter a positive|Sandbox invoices must|Invalid invoice reference|Invoice already bound|Unknown invoice|Reserve the invoice first|Settle the invoice|Unsupported simulation|invalid route|invalid positive|deadline must|quote request mismatch|unsupported quote request field|input exceeds|invalid 1Click signature|stale or future quote|Only a fresh|workflow id already|Base recipient|NEAR refund|Only NEAR-to-Base)/.test(message))return message.slice(0,300);
+ const reason=vaultReason(error);if(reason)return reason[0].toUpperCase()+reason.slice(1)+'.';
+
+ if(/^(Enter a positive|Sandbox invoices must|Invalid invoice reference|Invoice already bound|Unknown invoice|Reserve the invoice first|Settle the invoice|Unsupported simulation|invalid route|invalid positive|deadline must|quote request mismatch|unsupported quote request field|input exceeds|invalid 1Click signature|stale or future quote|Only a fresh|workflow id already|Base recipient|NEAR refund|Only NEAR-to-Base|Upgrade the local vault|Usage:|Initialize the separate|Set NEAR_AI|Unknown inbox invoice|Vault identity changed|Vault request could not be confirmed|Signed invoice|Invalid merchant signature|Only interrupted|Proposal superseded)/.test(message))return message.slice(0,300);
  return 'Request could not be confirmed. Refresh the invoice state before retrying.';
 }
 export function validateDeskPolicy(p:any){

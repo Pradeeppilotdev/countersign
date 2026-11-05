@@ -1,3 +1,5 @@
+import {DatabaseSync} from 'node:sqlite';
+import {commitment} from '../executor/core.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes} from 'node:crypto';
@@ -43,6 +45,18 @@ test('signed bills enforce merchant identity on chain, block unsigned bypass and
   await inbox.enqueueSigned(signed,d.vault.accountId);
   await inbox.propose(invoice.id,async input=>{assert.deepEqual(Object.keys(input).sort(),['amount','asset','id','payee']);return {name:'request_payment',arguments:{invoice_id:input.id}};});
   inbox.close();inbox=new AgentInbox(db,identity,transport);
+  // A DB writer can update the invoice and its hash together, but cannot forge the merchant signature.
+  const protectedInvoice=signInvoice({...base,invoice:{...invoice,id:'db-protected',amount:'500'},bill_id:'db-protected-bill'},pair.privateKey);
+  await inbox.enqueueSigned(protectedInvoice,d.vault.accountId);
+  await inbox.propose('db-protected',async input=>({name:'request_payment',arguments:{invoice_id:input.id}}));
+  const forged={...protectedInvoice,invoice:{...protectedInvoice.invoice,amount:'1000'}},writer=new DatabaseSync(db);
+  try{
+   writer.prepare('UPDATE inbox SET invoice=?,commitment=?,signed_invoice=? WHERE id=?').run(JSON.stringify(forged.invoice),commitment(forged.invoice),JSON.stringify(forged),'db-protected');
+   await assert.rejects(()=>inbox!.resume('db-protected'),/invalid merchant signature/);
+   writer.prepare('UPDATE inbox SET signed_invoice=NULL WHERE id=?').run('db-protected');
+   await assert.rejects(()=>inbox!.resume('db-protected'),/merchant signature required/);
+   assert.equal(await d.vault.view('get_payment',{invoice_id:'db-protected'}),null);assert.equal(await d.vault.view('policy_usage',{}),'0');
+  }finally{writer.close();}
   const before=BigInt((await d.merchant.balance()).total.toString());
   assert.equal((await inbox.resume(invoice.id)).state,'settled');assert.equal((await inbox.resume(invoice.id)).state,'settled');
   assert.equal(BigInt((await d.merchant.balance()).total.toString())-before,1000n);
@@ -53,7 +67,7 @@ test('signed bills enforce merchant identity on chain, block unsigned bypass and
   const results=await Promise.all(racers.map(signed=>d.executor.callRaw(d.vault,'authorize_signed_invoice',{signed},{gas:'100000000000000'})));
   assert.equal(results.filter(r=>!r.failed).length,1);
   assert.ok(results.find(r=>r.failed)!.receiptFailureMessagesContain('merchant bill already used'));
-  const winner=racers[results.findIndex(r=>!r.failed)];await d.owner.call(d.vault,'cancel',{invoice_id:winner.invoice.id});
+  const winner=racers[results.findIndex(r=>!r.failed)];assert.ok((await d.owner.call(d.vault,'clear_policy_approvals',{},{gas:'300000000000000'})).includes(winner.invoice.id));
   await reject(d.executor,'authorize_signed_invoice',{signed:signInvoice({...base,invoice:{...invoice,id:'replay-after-cancel'},bill_id:'same-racing-bill'},pair.privateKey)},'merchant bill already used');
   const held=signInvoice({...base,invoice:{...invoice,id:'held'},bill_id:'held-bill'},pair.privateKey);
   await d.executor.call(d.vault,'authorize_signed_invoice',{signed:held});await d.executor.call(d.vault,'reserve',{invoice:held.invoice,attempt_id:'held-attempt'});

@@ -32,16 +32,18 @@ export function validateTerms(p: Policy, r: any, now = Date.now()) {
   if (k in expected) continue;
   if (k in defaults && v === defaults[k]) continue;
   // Pinned observed provider fee: no caller-selected recipient or arbitrary fee.
-  if(k==='appFees' && Array.isArray(v) && (v.length===0 || (v.length===1 && Object.keys(v[0]??{}).sort().join(',')==='fee,recipient' && v[0].recipient==='5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd' && v[0].fee===1)))continue;
+  if(k==='appFees')continue; // Checked as a required pinned entry below.
   throw Error(`unsupported quote request field: ${k}`);
  }
+ const fees=r.quoteRequest.appFees;
+ if(!Array.isArray(fees)||fees.length!==1||Object.keys(fees[0]??{}).sort().join(',')!=='fee,recipient'||fees[0].recipient!=='5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd'||fees[0].fee!==1)throw Error('unsupported quote request field: appFees (required pinned fee)');
  const t = Date.parse(r.timestamp);
  if (!Number.isFinite(t) || t > now + 5000 || now - t > 60_000) throw Error('stale or future quote');
  for (const k of ['depositAddress','depositMemo','chainDepositAddresses','virtualChainRecipient','virtualChainRefundRecipient','customRecipientMsg']) if (r.quote[k] !== undefined) throw Error('execution fields forbidden in dry quote');
  if (uint(r.quote.amountIn) > uint(p.maxAmountIn)) throw Error('input exceeds spending cap');
  if (uint(r.quote.amountOut) !== uint(p.amountOut) || uint(r.quote.minAmountOut) < uint(p.amountOut)) throw Error('invoice output not guaranteed');
  if (uint(r.quote.minAmountOut) > uint(r.quote.amountOut)) throw Error('inconsistent output');
- return { mode: 'DRY_RUN' as const, fundable: false as const, quoteHash: quoteHash(r), amountIn: r.quote.amountIn, amountOut: r.quote.amountOut, expiresAt: Math.min(t + 60_000, Date.parse(p.deadline)) };
+ return { mode: 'DRY_RUN' as const, fundable: false as const, quoteHash: quoteHash(r), unsignedMetadata: ['quoteRequest.appFees','quote.timeEstimate','quote.refundFee','quote.withdrawFee'], amountIn: r.quote.amountIn, amountOut: r.quote.amountOut, expiresAt: Math.min(t + 60_000, Date.parse(p.deadline)) };
 }
 export function validateQuote(p: Policy, r: any, now = Date.now()) {
  if (!verifyQuoteSignature(r)) throw Error('invalid 1Click signature');
@@ -56,7 +58,7 @@ export async function preview(p: Policy, fetcher: typeof fetch = fetch) {
   throw new QuoteServiceError(response.status,response.headers.get('cf-ray'),detail);
  }
  const raw = await response.json();
- return { validation: validateQuote(policy, raw), raw, rawNotice: 'Raw provider metadata is not all signed; only validation fields are trusted. Never fund a dry quote.' };
+ return { validation: validateQuote(policy, raw), raw, rawNotice: 'Raw appFees, timeEstimate, refundFee and withdrawFee are NOT signature-authenticated. They are excluded from trusted payment amounts; appFees is checked against a local pin. Never fund a dry quote.' };
 }
 
 // Treat provider diagnostics as untrusted data. Bound bytes before JSON parsing;

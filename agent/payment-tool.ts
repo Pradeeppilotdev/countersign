@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Executor, commitment, type Invoice } from '../executor/core.ts';
 import {parseSignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
-import { vaultAdapters, type VaultTransport } from '../executor/vault.ts';
+import { callVault, vaultAdapters, type VaultTransport } from '../executor/vault.ts';
 
 export const paymentToolSchema = Object.freeze({
  name: 'request_payment',
@@ -34,12 +34,12 @@ export class InvoicePaymentTool {
   let payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
   // Host-selected policy capability. The model still gets only invoice_id.
   if(!payment && this.#policyMerchant){
-   if(this.#signed)await this.#transport.call('authorize_signed_invoice',{signed:this.#signed});
-   else await this.#transport.call('authorize_by_policy',{invoice:this.#invoice,merchant_id:this.#policyMerchant});
+   if(this.#signed)await callVault(this.#transport,'authorize_signed_invoice',{signed:this.#signed});
+   else await callVault(this.#transport,'authorize_by_policy',{invoice:this.#invoice,merchant_id:this.#policyMerchant});
    payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
   }
   if(!payment || payment.commitment!==commitment(this.#invoice) || commitment(payment.invoice)!==payment.commitment)throw Error('Invoice is not approved with the assigned terms');
-  if(payment.state==='Cancelled')throw Error('Invoice cancelled by owner');
+  if(payment.state==='Cancelled')return {invoice_id:this.#invoice.id,state:'cancelled'};
   const {auth,rail}=vaultAdapters(this.#transport,this.#invoice.id);
   const executor=new Executor(this.#db,auth,rail);
   try {

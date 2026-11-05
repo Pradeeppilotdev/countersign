@@ -37,6 +37,6 @@ test('agent refuses an owner-cancelled invoice without reserving or submitting',
  const transport={async call(){calls++;throw Error('Unexpected transaction');},async view(){return {invoice,commitment:commitment(invoice),state:'Cancelled' as const,attempt_id:null};}};
  try{
   const tool=new InvoicePaymentTool(join(dir,'attempts.db'),'local:vault',invoice,transport);
-  await assert.rejects(()=>tool.request({invoice_id:invoice.id}),/cancelled by owner/);assert.equal(calls,0);
+  assert.equal((await tool.request({invoice_id:invoice.id})).state,'cancelled');assert.equal(calls,0);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

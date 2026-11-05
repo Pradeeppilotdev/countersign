@@ -79,3 +79,14 @@ test('existing inbox migration preserves settled invoices and refuses the wrong 
   assert.equal((await inbox.run(invoice.id,async()=>{throw Error('Unexpected model call');})).state,'settled');
  }finally{inbox?.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('owner bulk cancellation is recovered from chain evidence after a missed local update',async()=>{
+ const {dir,db,inbox}=setup();let reopened:AgentInbox|undefined;
+ try{
+  inbox.enqueue(invoice,'merchant');await inbox.propose(invoice.id,async()=>proposal);
+  const cancelled={invoice,commitment:commitment(invoice),state:'Cancelled' as const,attempt_id:null};
+  reopened=new AgentInbox(db,'local:vault',{call:async()=>{throw Error('Cancellation must not transact');},view:async()=>cancelled});
+  assert.equal((await reopened.resume(invoice.id)).state,'cancelled');
+  assert.equal((await reopened.run(invoice.id,async()=>{throw Error('Cancellation must not infer');})).state,'cancelled');
+ }finally{reopened?.close();inbox.close();rmSync(dir,{recursive:true,force:true});}
+});
