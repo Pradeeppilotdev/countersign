@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Executor, commitment, type Invoice } from '../executor/core.ts';
-import {parseSignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
+import {parseSignedInvoice,signingBytes,type SignedInvoice} from '../merchant/invoice.ts';
 import { callVault, vaultAdapters, type VaultTransport } from '../executor/vault.ts';
 
 export const paymentToolSchema = Object.freeze({
@@ -32,6 +32,12 @@ export class InvoicePaymentTool {
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==1||
    !Object.hasOwn(input,'invoice_id')||(input as any).invoice_id!==this.#invoice.id)throw Error('Only the assigned invoice_id is accepted');
   let payment=await this.#transport.view('get_payment',{invoice_id:this.#invoice.id});
+  if(payment && this.#signed){
+   // Equal transfer terms alone do not establish which signed bill or week was paid.
+   const receipt:unknown=await this.#transport.view('get_invoice_auth',{invoice_id:this.#invoice.id});
+   const hash=createHash('sha256').update(signingBytes(this.#signed)).digest('hex');
+   if(!receipt||typeof receipt!=='object'||!('payload_hash' in receipt)||receipt.payload_hash!==hash)throw Error('Signed invoice differs from the vault authorization.');
+  }
   // Host-selected policy capability. The model still gets only invoice_id.
   if(!payment && this.#policyMerchant){
    if(this.#signed)await callVault(this.#transport,'authorize_signed_invoice',{signed:this.#signed});

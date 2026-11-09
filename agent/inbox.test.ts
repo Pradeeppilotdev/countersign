@@ -4,6 +4,8 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {DatabaseSync} from 'node:sqlite';
+import {generateKeyPairSync} from 'node:crypto';
+import {signInvoice} from '../merchant/invoice.ts';
 import {commitment} from '../executor/core.ts';
 import {AgentInbox} from './inbox.ts';
 const invoice={id:'inbox-one',payee:'merchant.test.near',asset:'near',amount:'1'};
@@ -89,4 +91,31 @@ test('owner bulk cancellation is recovered from chain evidence after a missed lo
   assert.equal((await reopened.resume(invoice.id)).state,'cancelled');
   assert.equal((await reopened.run(invoice.id,async()=>{throw Error('Cancellation must not infer');})).state,'cancelled');
  }finally{reopened?.close();inbox.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('a weekly duplicate becomes terminal only when the vault identifies the other invoice',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'inbox-weekly-'));
+ const service={agreement_id:'compute',period_start_ms:'0'};
+ const signed=signInvoice({invoice,service,merchant_id:'supplier',bill_id:'bill',vault:'vault.near',domain:'a'.repeat(64),key_version:'1',expires_at:'2000'},generateKeyPairSync('ed25519').privateKey);
+ let confirmed=false,calls=0;
+ const inbox=new AgentInbox(join(dir,'inbox.db'),'vault.near',{
+  async call(){calls++;throw Error('service period already claimed by [Unverified-ID]');},
+  async view(method,args):Promise<any>{
+   if(method==='get_payment')return null;
+   assert.equal(method,'get_service_claim');assert.deepEqual(args,{service});
+   if(!confirmed)throw Error('lost claim response');
+   return 'Signed-Winner';
+  },
+ });
+ try {
+  inbox.enqueue(invoice,'supplier',signed);
+  await assert.rejects(()=>inbox.run(invoice.id,async()=>proposal),/claim could not be confirmed/);
+  assert.equal(inbox.get(invoice.id).state,'proposal_ready');
+  confirmed=true;
+  const blocked=await inbox.resume(invoice.id);
+  assert.equal(blocked.state,'period_claimed');
+  assert.equal(blocked.error,'Service period already claimed by [Signed-Winner].');
+  assert.equal((await inbox.resume(invoice.id)).state,'period_claimed');
+  assert.equal(calls,2);
+ } finally {inbox.close();rmSync(dir,{recursive:true,force:true});}
 });

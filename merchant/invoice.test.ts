@@ -25,3 +25,19 @@ test('signed intake rejects extra fields and ambiguous encodings; property order
  assert.throws(()=>parseSignedInvoice({...signed,expires_at:'02000'}));
  const reversed=Object.fromEntries(Object.entries(signed).reverse());assert.deepEqual(parseSignedInvoice(reversed),signed);
 });
+
+test('weekly signatures bind the agreement and exact start and cannot be converted to or from V1',()=>{
+ const service={agreement_id:'compute',period_start_ms:'0'};
+ const signed=signInvoice({...base,service},pair.privateKey);
+ assert.deepEqual(verifySignedInvoice(signed,expected,1000),signed);
+ const {service:unused,...stripped}=signed;
+ const legacy=signInvoice(base,pair.privateKey);
+ for(const altered of [stripped,{...legacy,service},{...signed,service:{...service,agreement_id:'gpu'}},
+     {...signed,service:{...service,period_start_ms:'604800000'}}]){
+  assert.throws(()=>verifySignedInvoice(altered,expected,1000),/Invalid merchant signature/);
+ }
+ for(const malformed of [null,{},[],{...service,extra:true},{...service,agreement_id:'a/b'},
+     ...['-1','01','18446744073709551616',604800000].map(period_start_ms=>({...service,period_start_ms}))]){
+  assert.throws(()=>parseSignedInvoice({...signed,service:malformed}),/Invalid signed service period/);
+ }
+});

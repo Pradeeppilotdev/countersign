@@ -8,6 +8,8 @@ pub struct MerchantKey { pub version:U64, pub public_key:Option<Base64VecU8> }
 #[serde(deny_unknown_fields)]
 pub struct SignedInvoice {
  pub invoice:Invoice, pub merchant_id:String, pub bill_id:String, pub vault:AccountId,
+ #[serde(default, skip_serializing_if = "Option::is_none")]
+ pub service: Option<service::ServicePeriod>,
  pub domain:String, pub key_version:U64, pub expires_at:U64, pub signature:Base64VecU8,
 }
 #[near(serializers=[borsh,json])]
@@ -18,8 +20,21 @@ fn keys()->LookupMap<String,MerchantKey>{LookupMap::new(b"merchant-keys-v1".to_v
 fn receipts()->LookupMap<String,InvoiceAuth>{LookupMap::new(b"invoice-auth-v1".to_vec())}
 fn bills()->LookupMap<(String,String),String>{LookupMap::new(b"merchant-bills-v1".to_vec())}
 fn bytes(s:&SignedInvoice)->Vec<u8>{
- let mut out=b"COUNTERSIGN-SIGNED-INVOICE-V1\n".to_vec();
- for field in [s.domain.clone(),s.vault.to_string(),s.merchant_id.clone(),s.bill_id.clone(),s.key_version.0.to_string(),s.expires_at.0.to_string(),s.invoice.id.clone(),s.invoice.payee.to_string(),s.invoice.asset.clone(),s.invoice.amount.0.to_string()]{out.extend_from_slice(format!("{}:",field.len()).as_bytes());out.extend_from_slice(field.as_bytes());}out
+ let mut fields = vec![s.domain.clone(), s.vault.to_string(), s.merchant_id.clone(), s.bill_id.clone(),
+     s.key_version.0.to_string(), s.expires_at.0.to_string(), s.invoice.id.clone(),
+     s.invoice.payee.to_string(), s.invoice.asset.clone(), s.invoice.amount.0.to_string()];
+ let mut out = if let Some(period) = &s.service {
+     fields.push(period.agreement_id.clone());
+     fields.push(period.period_start_ms.0.to_string());
+     b"COUNTERSIGN-SIGNED-INVOICE-V2\n".to_vec()
+ } else {
+     b"COUNTERSIGN-SIGNED-INVOICE-V1\n".to_vec()
+ };
+ for field in fields {
+     out.extend_from_slice(format!("{}:", field.len()).as_bytes());
+     out.extend_from_slice(field.as_bytes());
+ }
+ out
 }
 pub(super) fn require_unsigned(merchant:&String){near_sdk::require!(keys().get(merchant).is_none(),"merchant signature required");}
 pub(super) fn check_bound(invoice:&Invoice,merchant:&String){
@@ -67,7 +82,12 @@ impl Contract {
   if let Some(id)=bills().get(&bill){near_sdk::require!(id==signed.invoice.id,"merchant bill already used");}
   if let Some(old)=receipts().get(&signed.invoice.id){near_sdk::require!(old.payload_hash==hash,"signed invoice already bound");}
   else{near_sdk::require!(self.payments.get(&signed.invoice.id).is_none(),"invoice already authorized without signature");}
+  let expiry = service::authorization_expiry(&signed);
   let p=self.authorize_policy_invoice(signed.invoice.clone(),signed.merchant_id.clone(),Some(signed.expires_at));
+  if let Some(period) = &signed.service {
+      expiries().insert(&signed.invoice.id, &expiry.0);
+      service::record(&signed.invoice.id, period);
+  }
   bills().insert(&bill,&signed.invoice.id);
   receipts().insert(&signed.invoice.id,&InvoiceAuth{merchant_id:signed.merchant_id,key_version:signed.key_version,payload_hash:hash});p
  }

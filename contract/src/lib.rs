@@ -1,6 +1,7 @@
 mod policy;
 mod controls;
 mod merchant_auth;
+mod service;
 use near_sdk::{collections::LookupMap, env, json_types::{U128, U64}, near, AccountId, PanicOnDefault, NearToken, Gas, Promise, PromiseOrValue};
 
 #[near(serializers = [borsh, json])]
@@ -101,6 +102,7 @@ impl Contract {
     pub fn authorize(&mut self, invoice: Invoice, expires_at: Option<U64>) -> Payment {
         near_sdk::require!(env::predecessor_account_id() == self.owner, "owner only");
         controls::require_running();
+        service::require_manual_payee(&invoice.payee);
         self.record_authorization(invoice,expires_at)
     }
     fn record_authorization(&mut self, invoice:Invoice,expires_at:Option<U64>)->Payment {

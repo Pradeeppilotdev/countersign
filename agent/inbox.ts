@@ -4,6 +4,7 @@ import {InvoicePaymentTool,validateInvoiceProposal} from './payment-tool.ts';
 import type {VaultTransport} from '../executor/vault.ts';
 import {parseSignedInvoice,verifySignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
 import {publicError} from '../app/errors.ts';
+import {vaultReason} from '../executor/errors.ts';
 
 type Proposer=(invoice:Readonly<Invoice>)=>Promise<unknown>;
 export class AgentInbox {
@@ -78,6 +79,17 @@ export class AgentInbox {
    const state=['settled','failed','cancelled'].includes(result.state)?result.state:'proposal_ready';
    this.db.prepare("UPDATE inbox SET state=?,error=? WHERE id=? AND state='proposal_ready'").run(state,state==='proposal_ready'?'Payment outcome pending; resume the same invoice':null,id);
   }catch(error){
+   const signed:SignedInvoice|null=row.signed_invoice;
+   if(signed?.service && vaultReason(error)?.startsWith('service period already claimed by [')){
+    // Only a permanent on-chain claim can make this rejection terminal. A
+    // timeout or an unverifiable error leaves the saved proposal retryable.
+    const winner:unknown=await this.transport.view('get_service_claim',{service:signed.service}).catch(()=>null);
+    if(typeof winner==='string' && winner!==id && /^[A-Za-z0-9_.:-]{1,128}$/.test(winner)){
+     this.db.prepare("UPDATE inbox SET state='period_claimed',error=? WHERE id=? AND state='proposal_ready'").run(`Service period already claimed by [${winner}].`,id);
+     return this.get(id);
+    }
+    error=Error('Service period claim could not be confirmed. Resume the saved invoice.');
+   }
    this.db.prepare("UPDATE inbox SET error=? WHERE id=? AND state='proposal_ready'").run(publicError(error),id);
    throw error;
   }

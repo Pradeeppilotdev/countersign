@@ -10,6 +10,7 @@ import {readVaultControls,replaceLocalExecutor} from '../app/vault-controls.ts';
 import {SandboxDesk,parseNear} from '../app/sandbox.ts';
 import {AgentInbox} from './inbox.ts';
 import {demoProposer} from './demo-proposer.ts';
+import {validMillis} from '../merchant/invoice.ts';
 async function main(){
 // Configure the same CommonJS SDK instance used by near-workspaces. Raw receipt
 // logging is diagnostic; callers receive the bounded error below and a nonzero exit.
@@ -17,8 +18,8 @@ const sdkRequire=createRequire(createRequire(import.meta.url).resolve('near-work
 sdkRequire('near-api-js').utils.Logger.overrideLogger();
 process.env.NEAR_WORKSPACES_NO_LOGS='1';
 const [command,...args]=process.argv.slice(2);
-const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1]};
-if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label>');
+const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],'weekly-service':[4],'service-status':[1,2],'revoke-service':[1],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1]};
+if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | weekly-service <agreement> <merchant> <cap NEAR> <anchor UTC ms> | service-status <agreement> [period start ms] | revoke-service <agreement> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label>');
 const directory=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
 if(command!=='init'&&!existsSync(join(directory,'desk.json')))throw Error('Initialize the separate local agent vault with agent:desk init first');
 if(command==='run'){
@@ -50,6 +51,19 @@ try{
   }
   result=await desk.owner.call(desk.vault,'set_merchant_key',{merchant_id:args[0],public_key:command==='merchant-key'?args[1]:null});
   result={...result,vault:desk.vault.accountId,domain:await desk.vault.view('get_invoice_domain',{})};
+ }else if(command==='weekly-service'){
+  const [agreement_id,merchant_id,amount,anchor_ms]=args;
+  if(!validMillis(anchor_ms))throw Error('Enter a UTC timestamp in integer milliseconds.');
+  result=await desk.owner.call(desk.vault,'add_weekly_service',{agreement_id,merchant_id,cap:parseNear(amount),anchor_ms});
+ }else if(command==='revoke-service'){
+  result=await desk.owner.call(desk.vault,'revoke_weekly_service',{agreement_id:args[0]});
+ }else if(command==='service-status'){
+  const [agreement_id,period_start_ms]=args;
+  if(period_start_ms!==undefined&&!validMillis(period_start_ms))throw Error('Enter a UTC timestamp in integer milliseconds.');
+  const agreement=await desk.vault.view('get_weekly_service',{agreement_id});
+  if(!agreement)throw Error('unknown service agreement');
+  const service=period_start_ms===undefined?await desk.vault.view('current_service_period',{agreement_id}):{agreement_id,period_start_ms};
+  result={agreement,service,claimed_by:service?await desk.vault.view('get_service_claim',{service}):null};
  }else if(command==='import'){
   if(statSync(args[0]).size>16384)throw Error('Signed invoice file too large');
   result=await inbox.enqueueSigned(JSON.parse(readFileSync(args[0],'utf8')),desk.vault.accountId);

@@ -1,8 +1,16 @@
 import {createPublicKey,sign,verify,type KeyObject} from 'node:crypto';
 import {commitment,type Invoice} from '../executor/core.ts';
-export type SignedInvoice={invoice:Invoice;merchant_id:string;bill_id:string;vault:string;domain:string;key_version:string;expires_at:string;signature:string};
+export type ServicePeriod = {agreement_id:string; period_start_ms:string};
+export type SignedInvoice={invoice:Invoice;merchant_id:string;bill_id:string;vault:string;domain:string;key_version:string;expires_at:string;service?:ServicePeriod;signature:string};
 export type MerchantKey={version:string;public_key:string|null};
-const fields=['invoice','merchant_id','bill_id','vault','domain','key_version','expires_at','signature'].sort().join(',');
+const fields=['invoice','merchant_id','bill_id','vault','domain','key_version','expires_at','signature'];
+const legacyFields=[...fields].sort().join(',');
+const serviceFields=[...fields,'service'].sort().join(',');
+const idPattern=/^[A-Za-z0-9_.:-]{1,128}$/;
+const u64Max=(1n<<64n)-1n;
+export function validMillis(value:unknown):value is string {
+ return typeof value==='string' && /^(0|[1-9][0-9]{0,19})$/.test(value) && BigInt(value)<=u64Max;
+}
 function base64(value:unknown,length:number){
  if(typeof value!=='string')throw Error('Invalid signature/key encoding');
  const bytes=Buffer.from(value,'base64');
@@ -10,18 +18,29 @@ function base64(value:unknown,length:number){
 }
 export function parseSignedInvoice(value:unknown):SignedInvoice{
  const s=value as SignedInvoice;
- if(!s||typeof s!=='object'||Array.isArray(s)||Object.keys(s).sort().join(',')!==fields)throw Error('Invalid signed invoice fields');
+ if(!s||typeof s!=='object'||Array.isArray(s))throw Error('Invalid signed invoice fields');
+ const hasService=Object.hasOwn(s,'service');
+ if(Object.keys(s).sort().join(',')!==(hasService?serviceFields:legacyFields))throw Error('Invalid signed invoice fields');
+ let service:ServicePeriod|undefined;
+ if(hasService){
+  const period=s.service;
+  if(!period||typeof period!=='object'||Array.isArray(period)||Object.keys(period).sort().join(',')!=='agreement_id,period_start_ms'||
+     typeof period.agreement_id!=='string'||!idPattern.test(period.agreement_id)||!validMillis(period.period_start_ms))throw Error('Invalid signed service period');
+  service={agreement_id:period.agreement_id,period_start_ms:period.period_start_ms};
+ }
  if(!s.invoice||Object.keys(s.invoice).sort().join(',')!=='amount,asset,id,payee'||!Object.values(s.invoice).every(v=>typeof v==='string')||s.invoice.asset!=='near')throw Error('Invalid signed invoice terms');
  commitment(s.invoice);
- for(const id of [s.merchant_id,s.bill_id])if(typeof id!=='string'||!/^[A-Za-z0-9_.:-]{1,128}$/.test(id))throw Error('Invalid merchant bill id');
+ for(const id of [s.merchant_id,s.bill_id])if(typeof id!=='string'||!idPattern.test(id))throw Error('Invalid merchant bill id');
  commitment({...s.invoice,payee:s.vault});
  if(typeof s.domain!=='string'||!/^[0-9a-f]{64}$/.test(s.domain))throw Error('Invalid signing domain');
  for(const n of [s.key_version,s.expires_at])if(typeof n!=='string'||!/^([1-9][0-9]*)$/.test(n)||BigInt(n)>(1n<<64n)-1n)throw Error('Invalid signature version/expiry');
- base64(s.signature,64);return {invoice:{id:s.invoice.id,payee:s.invoice.payee,asset:s.invoice.asset,amount:s.invoice.amount},merchant_id:s.merchant_id,bill_id:s.bill_id,vault:s.vault,domain:s.domain,key_version:s.key_version,expires_at:s.expires_at,signature:s.signature};
+ base64(s.signature,64);return {invoice:{id:s.invoice.id,payee:s.invoice.payee,asset:s.invoice.asset,amount:s.invoice.amount},merchant_id:s.merchant_id,bill_id:s.bill_id,vault:s.vault,domain:s.domain,key_version:s.key_version,expires_at:s.expires_at,...(service?{service}:{}),signature:s.signature};
 }
 export function signingBytes(s:SignedInvoice){
  const values=[s.domain,s.vault,s.merchant_id,s.bill_id,s.key_version,s.expires_at,s.invoice.id,s.invoice.payee,s.invoice.asset,s.invoice.amount];
- return Buffer.from('COUNTERSIGN-SIGNED-INVOICE-V1\n'+values.map(v=>`${Buffer.byteLength(v)}:${v}`).join(''));
+ if(s.service)values.push(s.service.agreement_id,s.service.period_start_ms);
+ const prefix=s.service?'COUNTERSIGN-SIGNED-INVOICE-V2\n':'COUNTERSIGN-SIGNED-INVOICE-V1\n';
+ return Buffer.from(prefix+values.map(v=>`${Buffer.byteLength(v)}:${v}`).join(''));
 }
 // Merchant-side utility: callers retain the private key; no agent/model receives it.
 export function signInvoice(unsigned:Omit<SignedInvoice,'signature'>,privateKey:KeyObject):SignedInvoice{
