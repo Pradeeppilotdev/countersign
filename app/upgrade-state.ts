@@ -4,6 +4,15 @@ import {readFileSync,readdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 
 export type StorageEntry={key:string,value:string};
+export function checkWeeklyUpgradeMethods(methods:ReadonlySet<string>,journalStorage?:StorageEntry[]){
+ const required=['add_weekly_service','revoke_weekly_service','get_weekly_service','current_service_period','get_service_claim','authorize_signed_invoice','get_invoice_auth'];
+ const missing=required.find(name=>!methods.has(name));
+ if(!missing)return;
+ // A pre-weekly journal can finish its original pinned deployment. Once a
+ // weekly record exists, recovery must preserve the ability to enforce it.
+ if(journalStorage && !journalStorage.some(entry=>Buffer.from(entry.key,'base64').toString('utf8').startsWith('weekly-')))return;
+ throw Error('Build the current contract before upgrading. Missing weekly billing method '+missing+'.');
+}
 export const digest=(data:string|Uint8Array)=>createHash('sha256').update(data).digest('hex');
 const json=(value:unknown)=>JSON.stringify(value,(_k,v)=>typeof v==='bigint'?{integer:v.toString()}:v);
 export function storageDigest(entries:StorageEntry[]){

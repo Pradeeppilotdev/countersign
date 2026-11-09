@@ -4,8 +4,18 @@ import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {DatabaseSync} from 'node:sqlite';
-import {storageDigest,storedInvoiceIds,rootAccounts,localRecords,requireUpgradeVerified} from './upgrade-state.ts';
+import {checkWeeklyUpgradeMethods,storageDigest,storedInvoiceIds,rootAccounts,localRecords,requireUpgradeVerified} from './upgrade-state.ts';
 const encode=(s:string)=>Buffer.from(s).toString('base64');
+test('only a pinned pre-weekly upgrade can resume without the weekly billing methods',()=>{
+ const oldMethods=new Set(['get_payment','get_invoice_auth','authorize_signed_invoice']);
+ const legacy=[{key:encode('STATE'),value:encode('old-vault')}];
+ assert.doesNotThrow(()=>checkWeeklyUpgradeMethods(oldMethods,legacy));
+ assert.throws(()=>checkWeeklyUpgradeMethods(oldMethods),/Missing weekly billing method/);
+ for(const prefix of ['weekly-agreements-v1','weekly-claims-v1']){
+  const withService=[...legacy,{key:encode(prefix+'compute'),value:encode('claimed-week')}];
+  assert.throws(()=>checkWeeklyUpgradeMethods(oldMethods,withService),/Missing weekly billing method/);
+ }
+});
 test('upgrade detects a changed or missing owner renewal intent',()=>{
  const dir=mkdtempSync(join(tmpdir(),'upgrade-renewal-records-'));
  try{

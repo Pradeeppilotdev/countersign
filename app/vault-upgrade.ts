@@ -6,7 +6,7 @@ import {join,resolve,dirname,basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import lockfile from 'proper-lockfile';
 import {localChain,saveJson} from './local-chain.ts';
-import {digest,storageDigest,storedInvoiceIds,rootAccounts,localRecords,type StorageEntry} from './upgrade-state.ts';
+import {checkWeeklyUpgradeMethods,digest,storageDigest,storedInvoiceIds,rootAccounts,localRecords,type StorageEntry} from './upgrade-state.ts';
 
 const artifact=fileURLToPath(new URL('../contract/target/wasm32-unknown-unknown/release/countersign.wasm',import.meta.url));
 type Snapshot={blockId:string;storage:StorageEntry[];storageHash:string;available:string;accounts:{owner:string;executor:string};payments:any[];payeeBalances:Record<string,string>;accessKeys:any[]};
@@ -79,7 +79,7 @@ export async function upgradeLocalVault(directory:string,wasmPath=artifact){
  directory=resolve(directory);const deskPath=join(directory,'desk.json'),chainPath=join(directory,'chain.json'),pendingPath=join(directory,'upgrade-pending.json');
  if(!existsSync(deskPath)||!existsSync(chainPath))throw Error('No saved local vault to upgrade; refusing to create one');
  const code=readFileSync(wasmPath);if(!WebAssembly.validate(code))throw Error('Compiled contract is not valid WebAssembly');
- const exports=new Set(WebAssembly.Module.exports(new WebAssembly.Module(code)).map(e=>e.name));
+ const exports=new Set(WebAssembly.Module.exports(new WebAssembly.Module(code)).filter(e=>e.kind==='function').map(e=>e.name));
  for(const name of ['get_payment','available_balance','get_vault_controls','policy_capacity','clear_policy_approvals'])if(!exports.has(name))throw Error('Build the current contract before upgrading');
  const targetHash=digest(code),unlock=await lockfile.lock(directory,{stale:2000,update:1000,retries:0});
  try{
@@ -90,6 +90,7 @@ export async function upgradeLocalVault(directory:string,wasmPath=artifact){
    pending=JSON.parse(readFileSync(pendingPath,'utf8'));
    if(pending?.version!==1||pending.vault!==saved.vault||pending.chainId!==config.chainId||pending.targetHash!==targetHash||!equal(pending.local,local))throw Error('Interrupted upgrade does not match this artifact or saved records; retain the backup and investigate');
   }
+  checkWeeklyUpgradeMethods(exports,pending?.before.storage);
   let backup=pending?.backup;
   if(!pending){
    await stopSavedChain(config);await requireOffline(config.port);checkTree(directory);

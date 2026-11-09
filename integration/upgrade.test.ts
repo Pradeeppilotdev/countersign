@@ -10,7 +10,8 @@ import {promisify} from 'node:util';
 import {SandboxDesk} from '../app/sandbox.ts';
 import {AgentInbox} from '../agent/inbox.ts';
 import {renewSavedPolicy} from '../agent/policy-renewal.ts';
-import {signInvoice,publicKeyBase64} from '../merchant/invoice.ts';
+import {signInvoice,publicKeyBase64,type SignedInvoice} from '../merchant/invoice.ts';
+import {upgradeLocalVault} from '../app/vault-upgrade.ts';
 import {digest,localRecords,storageDigest} from '../app/upgrade-state.ts';
 const exec=promisify(execFile),cwd=fileURLToPath(new URL('../',import.meta.url));
 test('saved-vault upgrade preserves full state, blocks interrupted startup and resumes without a second deployment',{timeout:180000},async()=>{
@@ -28,16 +29,37 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   const renewal=await renewSavedPolicy({directory,identity:`${desk.session}:${desk.vault.accountId}`,view:(m,a)=>desk.vault.view(m,a),call:(m,a)=>desk.owner.call(desk.vault,m,a,{gas:'100000000000000'})},'before-upgrade',60);
   assert.equal(renewal.state,'confirmed');
   const signed=signInvoice({invoice:{...unsigned('signed-paid'),amount:'500'},merchant_id:'signed',bill_id:'immutable-bill',vault:desk.vault.accountId,domain,key_version:'1',expires_at:String(Date.now()+600000)},keys.privateKey);
-  const inbox=new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,{call:(m,a)=>desk.executor.call(desk.vault,m,a,{gas:'100000000000000'}),view:(m,a)=>desk.vault.view(m,a)});
-  try{await inbox.enqueueSigned(signed,desk.vault.accountId);await inbox.run(signed.invoice.id,async i=>({name:'request_payment',arguments:{invoice_id:i.id}}));inbox.enqueue(unsigned('queued'),'plain');}finally{inbox.close();}
+  const openInbox=()=>new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,{call:(m,a)=>desk.executor.call(desk.vault,m,a,{gas:'100000000000000'}),view:(m,a)=>desk.vault.view(m,a)});
+  const runBill=async(inbox:AgentInbox,bill:SignedInvoice)=>{
+   await inbox.enqueueSigned(bill,desk.vault.accountId);
+   return inbox.run(bill.invoice.id,async i=>({name:'request_payment',arguments:{invoice_id:i.id}}));
+  };
+  const inbox=openInbox();
+  try{assert.equal((await runBill(inbox,signed)).state,'settled');inbox.enqueue(unsigned('queued'),'plain');}finally{inbox.close();}
   for(const id of ['orphan-approved','held'])await desk.executor.call(desk.vault,'authorize_by_policy',{invoice:unsigned(id),merchant_id:'plain'});
   await desk.executor.call(desk.vault,'reserve',{invoice:unsigned('held'),attempt_id:'held-attempt'});
   await desk.action('authorize',{id:'ui-approved',amount:'0.001'});
+  const service={agreement_id:'compute',period_start_ms:(await desk.vault.view('policy_snapshot',{})).now};
+  const grant=await desk.owner.call(desk.vault,'add_weekly_service',{agreement_id:service.agreement_id,merchant_id:'signed',anchor_ms:service.period_start_ms,cap:'500'});
+  const weeklyBill=(id:string,bill_id:string)=>signInvoice({...signed,invoice:{...signed.invoice,id},bill_id,service},keys.privateKey);
+  const firstBill=weeklyBill('weekly-first','compute-bill-111'),secondBill=weeklyBill('weekly-second','compute-bill-875');
+  const beforeUpgrade=openInbox();
+  try{assert.equal((await runBill(beforeUpgrade,firstBill)).state,'settled');}finally{beforeUpgrade.close();}
   const route={invoice_id:'dry-approval',origin_asset:'near',destination_asset:'base-usdc',recipient:'0x1111111111111111111111111111111111111111',refund_to:desk.owner.accountId,amount_out:'1',max_amount_in:'2',quoted_amount_in:'1',expires_at:String(Date.now()+60000),quote_hash:'1'.repeat(32),response_hash:'a'.repeat(64)};
   await desk.owner.call(desk.vault,'authorize_route',{route});await desk.owner.call(desk.vault,'set_paused',{paused:true});
   const before=await desk.vault.viewStateRaw(),localBefore=localRecords(directory),merchantBefore=(await desk.merchant.balance()).total.toString();
   const available=await desk.vault.view('available_balance',{}),policy=await desk.vault.view('get_policy',{}),key=await desk.vault.view('get_merchant_key',{merchant_id:'signed'}),bill=await desk.vault.view('get_invoice_auth',{invoice_id:'signed-paid'});
   await desk.close();closed=true;
+  // Model a valid older artifact that has the legacy controls and lacks a
+  // weekly entry point. Keep the export's byte length and all other methods.
+  const stale=Buffer.from(original),method='get_service_claim';
+  for(let i=stale.indexOf(method);i!==-1;i=stale.indexOf(method,i+method.length))stale[i]='x'.charCodeAt(0);
+  const stalePath=wasm+'.pre-weekly';writeFileSync(stalePath,stale);
+  const methods=WebAssembly.Module.exports(new WebAssembly.Module(stale)).map(e=>e.name);
+  assert.ok(methods.includes('clear_policy_approvals')&&!methods.includes(method));
+  await assert.rejects(()=>upgradeLocalVault(directory,stalePath),/Missing weekly billing method get_service_claim/);
+  assert.equal(existsSync(join(directory,'upgrade-pending.json')),false);
+  assert.equal(storageDigest(await desk.vault.viewStateRaw()),storageDigest(before));
   await assert.rejects(()=>child(true),(error:any)=>error.signal==='SIGKILL');
   assert.equal(existsSync(join(directory,'upgrade-pending.json')),true);
   const blocked=new SandboxDesk(directory);await assert.rejects(()=>blocked.start(),/upgrade needs verification/);await blocked.close();
@@ -50,8 +72,8 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   assert.ok(localBefore.files['policy-renewals/before-upgrade.json']);
   assert.deepEqual(await desk.vault.view('get_policy_renewal',{renewal_id:'before-upgrade'}),renewal.receipt);
   console.log('PASS: upgrade retained both the owner renewal journal and the on-chain receipt.');
-  assert.deepEqual(result.invoices.map((p:any)=>p.id).sort(),['held','orphan-approved','signed-paid','ui-approved']);
-  assert.equal(result.localRecords['inbox.db'].invoices,2);assert.equal(result.localRecords['inbox.db'].attempts,1);
+  assert.deepEqual(result.invoices.map((p:any)=>p.id).sort(),['held','orphan-approved','signed-paid','ui-approved','weekly-first']);
+  assert.equal(result.localRecords['inbox.db'].invoices,3);assert.equal(result.localRecords['inbox.db'].attempts,2);
   assert.equal(result.controls.paused,true);assert.equal(result.capacity.max_pending,16);
   assert.equal(await desk.vault.view('available_balance',{}),available);assert.equal((await desk.merchant.balance()).total.toString(),merchantBefore);
   assert.deepEqual(await desk.vault.view('get_policy',{}),policy);assert.deepEqual(await desk.vault.view('get_merchant_key',{merchant_id:'signed'}),key);assert.deepEqual(await desk.vault.view('get_invoice_auth',{invoice_id:'signed-paid'}),bill);
@@ -65,6 +87,20 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   assert.equal((await desk.merchant.balance()).total.toString(),merchantBefore);
   const replay=signInvoice({...signed,invoice:{...signed.invoice,id:'renamed-bill'}},keys.privateKey);
   const rejected=await desk.executor.callRaw(desk.vault,'authorize_signed_invoice',{signed:replay},{gas:'100000000000000'});assert.ok(rejected.receiptFailureMessagesContain('merchant bill already used'));
+  assert.deepEqual(await desk.vault.view('get_weekly_service',{agreement_id:service.agreement_id}),grant);
+  assert.equal(await desk.vault.view('get_service_claim',{service}),firstBill.invoice.id);
+  const usage=await desk.vault.view('policy_usage',{});
+  const recovered=openInbox();
+  try{
+   assert.deepEqual(recovered.get(firstBill.invoice.id).signed_invoice,firstBill);
+   assert.equal((await runBill(recovered,firstBill)).state,'settled');
+   const duplicate=await runBill(recovered,secondBill);
+   assert.equal(duplicate.state,'period_claimed');assert.equal(duplicate.error,'Service period already claimed by [weekly-first].');
+  }finally{recovered.close();}
+  assert.equal(await desk.vault.view('get_payment',{invoice_id:secondBill.invoice.id}),null);
+  assert.equal(await desk.vault.view('available_balance',{}),available);
+  assert.equal(await desk.vault.view('policy_usage',{}),usage);
+  assert.equal((await desk.merchant.balance()).total.toString(),merchantBefore);
   // A local-only injected in-flight record must prevent any code deployment,
   // including one omitted from both the UI and inbox. No transfer is submitted.
   const held=(await desk.vault.viewStateRaw()).find((e:any)=>{const k=Buffer.from(e.key,'base64');return k[0]===112&&k.subarray(5).toString()==='held';})!;
