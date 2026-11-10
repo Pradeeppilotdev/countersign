@@ -69,6 +69,16 @@ export class AgentInbox {
   if(!changed.changes)throw Error('Only interrupted or failed proposals can be retried');
   return this.get(id);
  }
+ // An external agent's ID-only tool call is already its proposal. Save it in
+ // one SQLite update so a crash before dispatch can resume that exact request.
+ async requestSignedPayment(id:string){
+  const {signed}=this.checkedInvoice(id);
+  if(!signed)throw Error('Signed invoice required for an external payment request.');
+  const proposal=validateInvoiceProposal(signed.invoice,{name:'request_payment',arguments:{invoice_id:id}});
+  this.db.prepare("UPDATE inbox SET state='proposal_ready',proposal=?,error=NULL WHERE id=? AND state='queued'")
+   .run(JSON.stringify(proposal),id);
+  return this.resume(id);
+ }
  async resume(id:string){
   let row=this.get(id);
   if(row.state==='period_claimed' && row.signed_invoice?.service){
