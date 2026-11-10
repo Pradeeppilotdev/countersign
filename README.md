@@ -24,6 +24,8 @@ npm run test:upgrade:weekly
 
 Look for `PASS crash` and `PASS weekly`. Either bill can win. The merchant balance must increase by 0.04 once, with 0.00 extra on retry. The command prints the path to your own `result.json`.
 
+If a supplier corrects a bill before reservation, the owner can transfer that week's claim to the exact signed replacement. Run `npm run test:weekly:correction` after the local build to race a 0.03 correction against the original 0.04 bill and crash the paying worker in each order. [Owner commands](docs/local-guide.md#one-payment-per-service-week)
+
 ## What runs
 
 The demo executes native NEAR transfers on a disposable local chain. It uses fixed agent proposals so anyone can reproduce it without a model key. The optional NEAR AI Cloud adapter receives structured invoice fields and can propose only `request_payment({invoice_id})`. The vault checks the merchant signature, payout, spending limits and service week, and records settlement from the transfer callback.

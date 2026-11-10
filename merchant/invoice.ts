@@ -43,10 +43,13 @@ export function signingBytes(s:SignedInvoice){
  return Buffer.from(prefix+values.map(v=>`${Buffer.byteLength(v)}:${v}`).join(''));
 }
 // The vault keeps this signed payload hash even after the key rotates or the bill expires.
+export function signedInvoiceHash(signed:SignedInvoice):string {
+ return createHash('sha256').update(signingBytes(signed)).digest('hex');
+}
 export function matchesInvoiceReceipt(signed:SignedInvoice|null,receipt:unknown):boolean{
  if(signed===null)return receipt===null;
  if(!receipt||typeof receipt!=='object'||!('payload_hash' in receipt))return false;
- return receipt.payload_hash===createHash('sha256').update(signingBytes(signed)).digest('hex');
+ return receipt.payload_hash===signedInvoiceHash(signed);
 }
 // Merchant-side utility: callers retain the private key; no agent/model receives it.
 export function signInvoice(unsigned:Omit<SignedInvoice,'signature'>,privateKey:KeyObject):SignedInvoice{

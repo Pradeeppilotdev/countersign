@@ -31,6 +31,7 @@
     "test:policy:recovery": "node --disable-warning=ExperimentalWarning --test integration/policy-recovery.test.ts",
     "test:policy:renewal": "node --disable-warning=ExperimentalWarning --test integration/policy-renewal.test.ts",
     "test:weekly": "node --disable-warning=ExperimentalWarning --test integration/weekly-service.test.ts",
+    "test:weekly:correction": "node --disable-warning=ExperimentalWarning --test integration/weekly-correction.test.ts",
     "test:upgrade": "node --disable-warning=ExperimentalWarning --test integration/upgrade.test.ts",
     "test:upgrade:weekly": "node --disable-warning=ExperimentalWarning scripts/verify-upgrade-weekly.mjs"
   },

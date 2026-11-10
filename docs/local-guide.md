@@ -300,7 +300,19 @@ npm run agent:desk -- service-status compute
 
 The owner pins the agreement to the merchant's policy payout account, a maximum payment and a UTC anchor in Unix milliseconds. Each period lasts exactly seven days from that anchor. The merchant passes the returned `service` object to `signInvoice` alongside its usual invoice fields. V2 signs the same fields as V1 under `COUNTERSIGN-SIGNED-INVOICE-V2\n`, followed by the agreement ID and exact period start in the same length-prefixed encoding. Import and run the signed file using the existing desk commands.
 
-The vault checks the current week on its own clock. The first valid authorization claims the week atomically with its policy charge. Dispatch must begin before both the invoice expiry and the end of the week. The claim survives cancellation, confirmed failure, lost responses and policy or key replacement. A failed or cancelled winner therefore uses that week's slot even when its spending allowance is returned. To inspect an earlier week, run `service-status compute <period-start-ms>`.
+The vault checks the current week on its own clock. The first valid authorization claims the week atomically with its policy charge. Dispatch must begin before both the invoice expiry and the end of the week. Cancellation, confirmed failure, lost responses and policy or key replacement all preserve the claim. To inspect an earlier week, run `service-status compute <period-start-ms>`.
+
+**Correct a weekly bill before reservation.** Import both merchant-signed bills into the local agent desk. Use `prepare-weekly` to authorize the original under the spending policy and stop before reservation. Skip that step if it already holds the current week. The owner can also correct a previously cancelled, never-reserved bill.
+
+```sh
+npm run agent:desk -- prepare-weekly ORIGINAL-ID
+npm run agent:desk -- correct-weekly ORIGINAL-ID CORRECTED-ID
+npm run agent:desk -- run CORRECTED-ID
+```
+
+The correction returns the replacement authorization. It switches the weekly claim and spending allowance together, checks both bill identities and keeps the original cancelled. The replacement needs fresh invoice and merchant bill IDs, the same merchant, payout account and service week, and an equal or lower amount within current policy. Repeating the same correction returns the replacement's recorded state. The final command runs the usual agent payment and recovery flow.
+
+Run `npm run test:weekly:correction` after building the contract. When the correction wins, the merchant receives 0.03 local test NEAR. When reservation wins, the owner sees “Correction requires a never-reserved bill” and the merchant receives 0.04. Each run kills the paying worker after settlement and checks that retrying both bills adds 0.00.
 
 Enrollment protects future dispatches to that payout account, including older unexecuted plain approvals and alternate merchant names. Payments already dispatched keep their original outcome. The owner can stop future authorizations and dispatches with `revoke-service compute`. Revocation preserves claims and the signature requirement. Each separately approved agreement has its own weekly allowance. Duplicate detection outside a defined service period still relies on the merchant's bill ID.
 

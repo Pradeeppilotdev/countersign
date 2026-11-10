@@ -18,7 +18,7 @@ test('owner cancel rejects both signed ID collisions and reconciles a killed CLI
  const directory = mkdtempSync(join(tmpdir(), 'countersign-signed-cancel-'));
  const desk = new SandboxDesk(directory, {recoverOnStart:false});
  const cli = async (args:string[], crashAfterCancel=false) => {
-  const preload = crashAfterCancel ? ['--import','./integration/helpers/crash-after-cancel.ts'] : [];
+  const preload = crashAfterCancel ? ['--import','./integration/helpers/crash-after-owner-call.ts'] : [];
   const {stdout} = await exec(process.execPath, ['--disable-warning=ExperimentalWarning',...preload,'agent/desk.ts',...args], {
    cwd, env:{...process.env, COUNTERSIGN_AGENT_DIR:directory, NEAR_AI_API_KEY:'', NEAR_AI_MODEL:''}, timeout:60_000,
   });
