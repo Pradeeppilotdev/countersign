@@ -563,3 +563,42 @@ test('vault-wide statements are rendered from the facts pack and can never come 
  assert.deepEqual([verdict.ok,verdict.text],[false,UNVERIFIED]);
  assert.equal((await askQuestion(running,'Is my vault paused?',async()=>select('pause'))).text.split('\n')[0],'The vault’s payment pause is off.');
 });
+
+test('"How is my agent doing?" renders a per-invoice report card from code, under the count line',async()=>{
+ const pack=await cafePack();
+ const lines=verifyAnswer(pack,select('activity')).text.split('\n');
+ const count=`The inbox contains 3 bills. The agent recorded proposals for 3. Current outcomes include ${Object.entries(pack.totals.counts).map(([name,count])=>`${count} ${name}`).join(', ')}.`;
+ const budget=GLOSSARY['rolling daily budget exceeded'];
+ assert.deepEqual(lines,[count,
+  '[INV-BEANS-001] local-merchant, 0.1 NEAR: Paid once.',
+  '[INV-CUPS-004] local-merchant, 0.1 NEAR: Paid once.',
+  `[INV-BEANS-003] local-merchant, 0.5 NEAR: Blocked. ${budget.meaning} ${budget.what_to_do}`,
+  `Sources: ${vaultId} at block 9, INV-BEANS-001, INV-CUPS-004, INV-BEANS-003`]);
+ const card=lines.slice(1,-1);
+ // Every invoice line carries its invoice ID.
+ assert.deepEqual(card.map(l=>l.match(/^\[([^\]]+)\]/)?.[1]),pack.invoices.map(i=>i.id));
+ // A paid invoice never shows a block reason.
+ for(const line of card.filter(l=>l.includes('Paid once.'))){
+  assert.ok(!/Blocked|Failed|Reason recorded/.test(line),line);
+  for(const entry of Object.values(GLOSSARY))assert.ok(!line.includes(entry.meaning)&&!line.includes(entry.what_to_do),line);
+ }
+ // Queued and pending invoices are stated plainly.
+ const extra=(id:string,state:string,error:string|null=null)=>({...cafeInbox()[2],id,state,error,has_proposal:false,attempt_state:null,
+  invoice:{id,payee,asset:'near',amount:near('0.2')},commitment:commitmentOf({id,payee,asset:'near',amount:near('0.2')})});
+ const mixed=await cafePack(undefined,cafeView,[extra('INV-Q-1','queued'),extra('INV-P-1','inference_pending')]);
+ const text=verifyAnswer(mixed,select('activity')).text;
+ assert.ok(text.includes('[INV-Q-1] local-merchant, 0.2 NEAR: Queued. Not paid yet.'));
+ assert.ok(text.includes('[INV-P-1] local-merchant, 0.2 NEAR: Pending. Not paid yet.'));
+});
+
+test('report card: an unknown reason is shown exactly as stored, never invented, and never reaches the model',async()=>{
+ const odd='Teapot  overflow\nat the vault.';
+ const pack=await cafePack(odd);
+ const bill=pack.invoices.find(i=>i.id==='INV-BEANS-003')!;
+ assert.deepEqual([bill.outcome,bill.reason,bill.explanation],['blocked','other',null]);
+ const text=verifyAnswer(pack,select('activity')).text;
+ assert.ok(text.includes('[INV-BEANS-003] local-merchant, 0.5 NEAR: Blocked. Reason recorded: Teapot overflow at the vault.'),text);
+ for(const entry of Object.values(GLOSSARY))assert.ok(!text.includes(entry.meaning));
+ assert.ok(!JSON.stringify(buildMessages(pack,'How is my agent doing?')).includes('Teapot'));
+ assert.equal((await askQuestion(pack,'How is my agent doing?',async()=>select('activity'))).text,text);
+});

@@ -12,12 +12,29 @@ const SYSTEM=[
  'Use invoice:<id> for a particular bill, weekly for signed service weeks, suppliers for all-time supplier totals, and flags for unusual activity. Use pause for the current payment pause and activity for agent outcomes.',
 ].join('\n');
 
-type Evidence={text:string;ids:string[]};
+// report: lines rendered to the owner after text. Never sent to the model, so raw stored reasons stay out of the prompt.
+type Evidence={text:string;ids:string[];report?:string[]};
 export type Verdict={ok:true;text:string;sources:string[]}|{ok:false;text:string;why:string};
+
+type Bill=FactsPack['invoices'][number];
+const PLAIN:Record<string,string>={queued:'Queued. Not paid yet.',proposed:'Proposed. Not paid yet.',pending:'Pending. Not paid yet.',cancelled:'Cancelled. Not paid.'};
+// One report-card line per invoice, all from the facts pack: glossary text when the reason has an entry, otherwise the reason exactly as stored.
+function reportLine(bill:Bill){
+ const amount=bill.amount_near===null?'amount unavailable':bill.amount_near+' NEAR';
+ let outcome:string;
+ if(bill.outcome==='paid')outcome='Paid once.'+(bill.attribution==='verified'?'':' Its supplier attribution is unverified.');
+ else if(bill.outcome==='blocked'||bill.outcome==='failed'){
+  const label=bill.outcome==='blocked'?'Blocked.':'Failed.';
+  const stored=(bill.error??bill.reason??'').replace(/\s+/g,' ').trim();
+  outcome=bill.explanation?`${label} ${bill.explanation.meaning} ${bill.explanation.what_to_do}`:`${label} Reason recorded: ${stored||'none'}.`;
+ }
+ else outcome=PLAIN[bill.outcome]??`${bill.outcome}.`;
+ return `[${bill.id}] ${bill.merchant}, ${amount}: ${outcome}`;
+}
 
 function evidenceFor(pack:FactsPack){
  const facts=new Map<string,Evidence>();
- const add=(key:string,text:string,ids:string[]=[])=>facts.set(key,{text,ids});
+ const add=(key:string,text:string,ids:string[]=[],report?:string[])=>facts.set(key,report?{text,ids,report}:{text,ids});
  const {invoices,vault,totals}=pack;
  const ids=invoices.map(i=>i.id);
  for(const bill of invoices){
@@ -43,7 +60,7 @@ function evidenceFor(pack:FactsPack){
  }else if(vault.policy_snapshot?.policy===null)add('budget','The vault has no spending policy.');
  if(pack.source.inbox_present){
   const counts=Object.entries(totals.counts).map(([name,count])=>`${count} ${name}`).join(', ');
-  add('activity',`The inbox contains ${invoices.length} bills. The agent recorded proposals for ${invoices.filter(i=>i.agent.has_proposal).length}. Current outcomes include ${counts}.`,ids);
+  add('activity',`The inbox contains ${invoices.length} bills. The agent recorded proposals for ${invoices.filter(i=>i.agent.has_proposal).length}. Current outcomes include ${counts}.`,ids,invoices.map(reportLine));
   const suppliers=totals.per_merchant.map(m=>`${m.merchant} received ${m.paid_near} NEAR in verified payments.`);
   if(totals.unattributed.payments.length)suppliers.push(`A further ${totals.unattributed.paid_near} NEAR in recorded transfers has no verified supplier attribution.`);
   add('suppliers',suppliers.join(' ')||'The inbox has no supplier payment records.',ids);
@@ -58,7 +75,7 @@ function evidenceFor(pack:FactsPack){
 }
 
 function messagesFor(facts:Map<string,Evidence>,question:string):ChatMessage[]{
- const data=JSON.stringify(Object.fromEntries(facts)).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
+ const data=JSON.stringify(Object.fromEntries([...facts].map(([key,{text,ids}])=>[key,{text,ids}]))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
  return [{role:'system',content:SYSTEM},{role:'user',content:`<<<VAULT_DATA\n${data}\nVAULT_DATA>>>\n\nQuestion from the vault owner:\n${question}`}];
 }
 export function buildMessages(pack:FactsPack,question:string){
@@ -88,7 +105,7 @@ function render(pack:FactsPack,facts:Map<string,Evidence>,raw:string,question:st
  }
  const sources=[...new Set(selected.flatMap(e=>e.ids))];
  const source=[`${pack.source.vault} at block ${pack.source.block_height}`,...sources].join(', ');
- return {ok:true,text:selected.map(e=>e.text).join('\n')+'\nSources: '+source,sources};
+ return {ok:true,text:selected.flatMap(e=>[e.text,...e.report??[]]).join('\n')+'\nSources: '+source,sources};
 }
 
 export function verifyAnswer(pack:FactsPack,raw:string,question=''):Verdict{
