@@ -522,3 +522,44 @@ test('pause status comes from the pinned control, including after a historical p
   }
  }
 });
+
+test('vault-wide statements are rendered from the facts pack and can never come from the model',async()=>{
+ const select=(...facts:string[])=>JSON.stringify({facts});
+ // Four vaults: running, paused, policy expired, and a different amount spent.
+ const variant=(over:{paused?:boolean;now?:string;usage?:string})=>async(method:string,args:any)=>{
+  const value:any=await cafeView(method,args);
+  if(method==='get_vault_controls')return {...value,paused:over.paused??false};
+  if(method==='policy_snapshot')return {...value,now:over.now??value.now,usage:over.usage??value.usage};
+  return value;
+ };
+ const cases:[Parameters<typeof variant>[0],string,string,string,string][]=[
+  [{},'off','0.2','0.4','is active'],
+  [{paused:true},'on','0.2','0.4','is active'],
+  [{now:'9000001'},'off','0.2','0.4','has expired'],
+  [{usage:near('0.55')},'off','0.55','0.05','is active'],
+ ];
+ for(const [over,pause,used,left,policy] of cases){
+  const pack=await cafePack(undefined,variant(over) as any);
+  // What the owner is told equals the facts pack, field for field.
+  assert.equal(pack.vault.controls.paused,pause==='on');
+  assert.deepEqual([pack.totals.per_day.used_near,pack.totals.per_day.remaining_near,pack.vault.rules!.expired],[used,left,policy==='has expired']);
+  assert.equal(verifyAnswer(pack,select('pause')).text.split('\n')[0],`The vault’s payment pause is ${pause}.`);
+  assert.equal(verifyAnswer(pack,select('budget')).text.split('\n')[0],`The per-payment limit is 0.5 NEAR. The rolling 24-hour budget is 0.6 NEAR: ${used} NEAR used, ${left} NEAR remaining. The spending policy ${policy}.`);
+  assert.equal(verifyAnswer(pack,select('balance')).text.split('\n')[0],`The vault has ${pack.vault.available_near} NEAR available.`);
+  const totals=verifyAnswer(pack,select('activity','suppliers')).text;
+  assert.ok(totals.includes(`Current outcomes include ${Object.entries(pack.totals.counts).map(([name,count])=>`${count} ${name}`).join(', ')}.`));
+  assert.ok(totals.includes(`local-merchant received ${pack.totals.per_merchant[0].paid_near} NEAR in verified payments.`));
+  // Any vault-wide claim written by the model is rejected, whether it is false or happens to be true.
+  for(const prose of ['Your vault is paused.','Your vault is not paused.','Your spending policy is active.','Your spending policy has expired.',
+   'You have used 0.2 NEAR of your 0.6 NEAR budget.','You have 0.4 NEAR left today.','You have 5 NEAR left today.','In total you paid 0.2 NEAR.','In total you paid 9 NEAR.','2 invoices were paid.','Nothing was blocked.']){
+   for(const raw of [prose,JSON.stringify({answer:prose,claims:[]}),JSON.stringify({facts:['pause'],answer:prose}),JSON.stringify({facts:['budget'],note:prose}),select(prose),select('pause',prose)])
+    assert.deepEqual([verifyAnswer(pack,raw).ok,verifyAnswer(pack,raw).text],[false,UNVERIFIED],raw);
+  }
+ }
+ // The regression from the request: paused:false, and the model says "Your vault is paused."
+ const running=await cafePack();
+ assert.equal(running.vault.controls.paused,false);
+ const verdict=await askQuestion(running,'Is my vault paused?',async()=>'Your vault is paused.');
+ assert.deepEqual([verdict.ok,verdict.text],[false,UNVERIFIED]);
+ assert.equal((await askQuestion(running,'Is my vault paused?',async()=>select('pause'))).text.split('\n')[0],'The vault’s payment pause is off.');
+});

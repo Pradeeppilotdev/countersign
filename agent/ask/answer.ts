@@ -36,7 +36,10 @@ function evidenceFor(pack:FactsPack){
  if(vault.available_near!==null)add('balance',`The vault has ${vault.available_near} NEAR available.`);
  const rules=vault.rules;
  if(rules&&rules.per_payment_near!==null&&totals.per_day.remaining_near!==null){
-  add('budget',`The per-payment limit is ${rules.per_payment_near} NEAR. The rolling 24-hour budget has ${totals.per_day.remaining_near} NEAR remaining.`+(rules.expired===true?' The spending policy has expired.':''));
+  // Every figure and the policy state are copied from the facts pack; the model cannot supply or alter them.
+  const day=totals.per_day;
+  const budget=day.used_near!==null&&day.limit_near!==null?`The rolling 24-hour budget is ${day.limit_near} NEAR: ${day.used_near} NEAR used, ${day.remaining_near} NEAR remaining.`:`The rolling 24-hour budget has ${day.remaining_near} NEAR remaining.`;
+  add('budget',`The per-payment limit is ${rules.per_payment_near} NEAR. ${budget}`+(rules.expired===true?' The spending policy has expired.':rules.expired===false?' The spending policy is active.':''));
  }else if(vault.policy_snapshot?.policy===null)add('budget','The vault has no spending policy.');
  if(pack.source.inbox_present){
   const counts=Object.entries(totals.counts).map(([name,count])=>`${count} ${name}`).join(', ');
