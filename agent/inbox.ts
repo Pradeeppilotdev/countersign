@@ -2,11 +2,12 @@ import {DatabaseSync} from 'node:sqlite';
 import {commitment,type Invoice,type Payment} from '../executor/core.ts';
 import {InvoicePaymentTool,validateInvoiceProposal} from './payment-tool.ts';
 import type {VaultTransport} from '../executor/vault.ts';
-import {parseSignedInvoice,verifySignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
+import {matchesInvoiceReceipt,parseSignedInvoice,verifySignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
 import {publicError} from '../app/errors.ts';
 import {vaultReason} from '../executor/errors.ts';
 
 type Proposer=(invoice:Readonly<Invoice>)=>Promise<unknown>;
+export class CancellationMismatch extends Error {}
 export class AgentInbox {
  private db:DatabaseSync;
  private path:string; private identity:string; private transport:VaultTransport;
@@ -95,12 +96,30 @@ export class AgentInbox {
   }
   return this.get(id);
  }
- // Operator-only cancellation is separate from the agent capability. Trust only
- // a confirmed contract cancellation; never release an uncertain execution locally.
- async cancel(id:string,cancelOnChain:(id:string)=>Promise<Payment>){
-  const row=this.get(id),payment=await cancelOnChain(id);
-  if(payment.state!=='Cancelled'||payment.commitment!==row.commitment||commitment(payment.invoice)!==row.commitment)throw Error('Cancellation not confirmed for this invoice');
-  this.db.prepare("UPDATE inbox SET state='cancelled',generation=generation+1,error=NULL WHERE id=?").run(id);
+ // Terms and signed receipts are immutable once the vault authorizes an ID.
+ // The vault checks the current state again when the owner submits cancel.
+ async cancel(id: string, cancelOnChain: (id: string) => Promise<Payment>) {
+  const row = this.get(id);
+  const expected = commitment(row.invoice);
+  if (row.invoice.id !== id || row.commitment !== expected) throw new CancellationMismatch('Inbox invoice commitment mismatch.');
+  const signed = row.signed_invoice === null ? null : parseSignedInvoice(row.signed_invoice);
+  if (signed && (signed.merchant_id !== row.merchant || commitment(signed.invoice) !== expected)) {
+   throw new CancellationMismatch('Signed invoice does not match the inbox record.');
+  }
+
+  const args = {invoice_id:id};
+  const payment = await this.transport.view('get_payment', args);
+  if (!payment) throw Error('Unknown invoice in the vault.');
+  const matchesTerms = (p: Payment) => p.commitment === expected && commitment(p.invoice) === expected;
+  if (!matchesTerms(payment)) throw new CancellationMismatch('Invoice already bound to different terms in the vault.');
+  const receipt = await this.transport.view('get_invoice_auth', args);
+  if (!matchesInvoiceReceipt(signed, receipt)) throw new CancellationMismatch('Signed invoice differs from the vault authorization.');
+
+  if (payment.state !== 'Cancelled') {
+   const result = await cancelOnChain(id);
+   if (result?.state !== 'Cancelled' || !matchesTerms(result)) throw Error('Cancellation not confirmed for this invoice');
+  }
+  this.db.prepare("UPDATE inbox SET state='cancelled',generation=generation+1,error=NULL WHERE id=? AND state!='cancelled'").run(id);
   return this.get(id);
  }
  async run(id:string,proposer:Proposer){await this.propose(id,proposer);return this.resume(id);}

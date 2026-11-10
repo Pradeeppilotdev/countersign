@@ -8,7 +8,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readVaultControls,replaceLocalExecutor} from '../app/vault-controls.ts';
 import {SandboxDesk,parseNear} from '../app/sandbox.ts';
-import {AgentInbox} from './inbox.ts';
+import {AgentInbox,CancellationMismatch} from './inbox.ts';
 import {demoProposer} from './demo-proposer.ts';
 import {validMillis} from '../merchant/invoice.ts';
 async function main(){
@@ -40,7 +40,14 @@ try{
   await capacity();
   result=await desk.owner.call(desk.vault,'clear_policy_approvals',{},{gas:'300000000000000'});
   const known=new Set(inbox.list().map(row=>row.id));
-  for(const id of result)if(known.has(id))await inbox.cancel(id,invoice_id=>desk.vault.view('get_payment',{invoice_id}));
+  for(const id of result){
+   if(!known.has(id))continue;
+   try{await inbox.cancel(id,invoice_id=>desk.vault.view('get_payment',{invoice_id}));}
+   catch(error){
+    // The bulk operation already cleared this vault ID. A different inbox bill must keep its own state.
+    if(!(error instanceof CancellationMismatch))throw error;
+   }
+  }
  }
  else if(command==='pause'||command==='unpause'){result=await desk.owner.call(desk.vault,'set_paused',{paused:command==='pause'});}
  else if(command==='rotate-executor'){result=await replaceLocalExecutor(desk,args[0]);}

@@ -7,11 +7,12 @@ import {DatabaseSync} from 'node:sqlite';
 import {generateKeyPairSync} from 'node:crypto';
 import {signInvoice} from '../merchant/invoice.ts';
 import {commitment} from '../executor/core.ts';
+import type {VaultTransport} from '../executor/vault.ts';
 import {AgentInbox} from './inbox.ts';
 const invoice={id:'inbox-one',payee:'merchant.test.near',asset:'near',amount:'1'};
 const proposal={name:'request_payment',arguments:{invoice_id:invoice.id}};
 const transport={async call(){throw Error('Unexpected transaction');},async view(){throw Error('Unexpected view');}};
-function setup(){const dir=mkdtempSync(join(tmpdir(),'inbox-test-'));const db=join(dir,'inbox.db');return {dir,db,inbox:new AgentInbox(db,'local:vault',transport)};}
+function setup(vault:VaultTransport=transport){const dir=mkdtempSync(join(tmpdir(),'inbox-test-'));const db=join(dir,'inbox.db');return {dir,db,inbox:new AgentInbox(db,'local:vault',vault)};}
 test('inbox pins exact invoice, merchant and vault before inference',()=>{
  const {dir,db,inbox}=setup();try{
   inbox.enqueue(invoice,'merchant');assert.equal(inbox.enqueue(invoice,'merchant').state,'queued');
@@ -58,7 +59,11 @@ test('late inference cannot overwrite a retry generation or trigger payment',asy
  }finally{inbox.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('cancellation requires matching terminal contract evidence and prevents later inference',async()=>{
- const {dir,inbox}=setup();try{
+ const approved={invoice,commitment:commitment(invoice),state:'Authorized' as const,attempt_id:null};
+ const {dir,inbox}=setup({...transport,async view(method){
+  if(method==='get_payment')return approved;
+  assert.equal(method,'get_invoice_auth');return null;
+ }});try{
   const row=inbox.enqueue(invoice,'merchant');await inbox.propose(invoice.id,async()=>proposal);
   const payment={invoice,commitment:String(row.commitment),state:'Executing' as const,attempt_id:'one'};
   await assert.rejects(()=>inbox.cancel(invoice.id,async()=>payment),/not confirmed/);
@@ -66,6 +71,33 @@ test('cancellation requires matching terminal contract evidence and prevents lat
   assert.equal(inbox.get(invoice.id).state,'proposal_ready');
   assert.equal((await inbox.cancel(invoice.id,async()=>({...payment,state:'Cancelled'}))).state,'cancelled');
   assert.equal((await inbox.run(invoice.id,async()=>{throw Error('Must not call model');})).state,'cancelled');
+ }finally{inbox.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('cancellation refuses missing or conflicting evidence before calling the owner',async()=>{
+ const {privateKey}=generateKeyPairSync('ed25519');
+ const signed=signInvoice({invoice,merchant_id:'beans',bill_id:'beans-bill',domain:'a'.repeat(64),vault:'vault.near',key_version:'1',expires_at:'2000'},privateKey);
+ const approved={invoice,commitment:commitment(invoice),state:'Authorized' as const,attempt_id:null};
+ let receipt:unknown=null, readsFail=false, calls=0;
+ const {dir,db,inbox}=setup({...transport,async view(method):Promise<any>{
+  if(method==='get_payment')return approved;
+  assert.equal(method,'get_invoice_auth');
+  if(readsFail)throw Error('receipt unavailable');
+  return receipt;
+ }});
+ const cancel=()=>inbox.cancel(invoice.id,async()=>{calls++;return {...approved,state:'Cancelled'};});
+ try{
+  inbox.enqueue(invoice,'beans',signed);
+  await assert.rejects(cancel,/Signed invoice/); // Signed local bill, unsigned vault approval.
+  receipt={merchant_id:'beans',key_version:'1',payload_hash:'0'.repeat(64)};
+  await assert.rejects(cancel,/Signed invoice/);
+  const editor=new DatabaseSync(db);
+  try{editor.prepare('UPDATE inbox SET signed_invoice=NULL WHERE id=?').run(invoice.id);}finally{editor.close();}
+  await assert.rejects(cancel,/Signed invoice/); // A stripped envelope cannot act on a signed receipt.
+  readsFail=true;
+  await assert.rejects(cancel,/receipt unavailable/);
+  assert.equal(calls,0);
+  assert.equal(inbox.get(invoice.id).state,'queued');
  }finally{inbox.close();rmSync(dir,{recursive:true,force:true});}
 });
 
