@@ -1,0 +1,239 @@
+{
+  "result": "PASS",
+  "network": "LOCAL_SANDBOX",
+  "oldCommit": "aa5efa2547940ee852c2b42c9e5d6c8962db61e5",
+  "newCommit": "ba8241315a5f269fb0d84d16c0ae297c8436631b",
+  "contractHashes": {
+    "before": "59def079447ac4e56f76b1305d4ca1b41d56a4fb9bce4d0870cbe769e858f5ba",
+    "after": "b6989f25d7867e0bea82f11af72a1f736a440e8b608140d361e115b12aa6dace"
+  },
+  "vault": "vault-f3568d21.test.near",
+  "payee": "merchant.test.near",
+  "beforeUpgrade": {
+    "height": 50,
+    "vault": "vault-f3568d21.test.near",
+    "chain": "test-chain-C8zKS",
+    "codeHash": "59def079447ac4e56f76b1305d4ca1b41d56a4fb9bce4d0870cbe769e858f5ba",
+    "merchantBalance": "200030000000000000000000000",
+    "available": "4970000000000000000000000",
+    "usage": "30000000000000000000000",
+    "claim": null,
+    "records": [
+      {
+        "id": "OLD-01",
+        "payment": {
+          "invoice": {
+            "id": "OLD-01",
+            "payee": "merchant.test.near",
+            "asset": "near",
+            "amount": "10000000000000000000000"
+          },
+          "commitment": "7d2f2041635a518468829cb3a4de69b18b764d453e7ae1a62778de36ff9b493e",
+          "state": "Settled",
+          "attempt_id": "4ac9e500c25ea6d51f66dc2486131ce073cab19d6057d99d8bbf889a3069822f"
+        },
+        "auth": {
+          "merchant_id": "local-merchant",
+          "key_version": "1",
+          "payload_hash": "9f92e7a434376b8a2e7275573f9fdd6c05f52bd85d29ddcb154ad34b89dfbbe5"
+        }
+      },
+      {
+        "id": "OLD-02",
+        "payment": {
+          "invoice": {
+            "id": "OLD-02",
+            "payee": "merchant.test.near",
+            "asset": "near",
+            "amount": "20000000000000000000000"
+          },
+          "commitment": "2d9f3076eee62c0bc50487b711ba829ab2cae6f06bfa55a1cbf3a8bc8705e98c",
+          "state": "Settled",
+          "attempt_id": "b3d7e5a7a413158abdc14e85bc49555ba5f7db799c39f8bf4660238921f88117"
+        },
+        "auth": {
+          "merchant_id": "local-merchant",
+          "key_version": "1",
+          "payload_hash": "ee9c1e3eea753b793ca206838759f144a51b82072711521ab39614972d9ca9f5"
+        }
+      }
+    ]
+  },
+  "afterUpgrade": {
+    "height": 58,
+    "vault": "vault-f3568d21.test.near",
+    "chain": "test-chain-C8zKS",
+    "codeHash": "b6989f25d7867e0bea82f11af72a1f736a440e8b608140d361e115b12aa6dace",
+    "merchantBalance": "200030000000000000000000000",
+    "available": "4970000000000000000000000",
+    "usage": "30000000000000000000000",
+    "claim": null,
+    "records": [
+      {
+        "id": "OLD-01",
+        "payment": {
+          "invoice": {
+            "id": "OLD-01",
+            "payee": "merchant.test.near",
+            "asset": "near",
+            "amount": "10000000000000000000000"
+          },
+          "commitment": "7d2f2041635a518468829cb3a4de69b18b764d453e7ae1a62778de36ff9b493e",
+          "state": "Settled",
+          "attempt_id": "4ac9e500c25ea6d51f66dc2486131ce073cab19d6057d99d8bbf889a3069822f"
+        },
+        "auth": {
+          "merchant_id": "local-merchant",
+          "key_version": "1",
+          "payload_hash": "9f92e7a434376b8a2e7275573f9fdd6c05f52bd85d29ddcb154ad34b89dfbbe5"
+        }
+      },
+      {
+        "id": "OLD-02",
+        "payment": {
+          "invoice": {
+            "id": "OLD-02",
+            "payee": "merchant.test.near",
+            "asset": "near",
+            "amount": "20000000000000000000000"
+          },
+          "commitment": "2d9f3076eee62c0bc50487b711ba829ab2cae6f06bfa55a1cbf3a8bc8705e98c",
+          "state": "Settled",
+          "attempt_id": "b3d7e5a7a413158abdc14e85bc49555ba5f7db799c39f8bf4660238921f88117"
+        },
+        "auth": {
+          "merchant_id": "local-merchant",
+          "key_version": "1",
+          "payload_hash": "ee9c1e3eea753b793ca206838759f144a51b82072711521ab39614972d9ca9f5"
+        }
+      }
+    ]
+  },
+  "legacyReplayDelta": "0.00",
+  "weekly": {
+    "service": {
+      "agreement_id": "weekly-compute",
+      "period_start_ms": "1794182400000"
+    },
+    "billIds": [
+      {
+        "invoice": "WEEK-A",
+        "bill": "WEEKLY-801"
+      },
+      {
+        "invoice": "WEEK-B",
+        "bill": "WEEKLY-947"
+      }
+    ],
+    "winner": "WEEK-B",
+    "loser": "WEEK-A",
+    "attempt": "89c056448c3a5af8bf0695f335ebb158e697bcaa414e8365287cf18c6c58db5a",
+    "reason": "Service period already claimed by [WEEK-B].",
+    "signal": "SIGKILL",
+    "stateAtCrash": "claimed",
+    "finalAttempts": [
+      {
+        "invoice_id": "WEEK-B",
+        "attempt_id": "89c056448c3a5af8bf0695f335ebb158e697bcaa414e8365287cf18c6c58db5a",
+        "state": "settled"
+      }
+    ],
+    "base": {
+      "height": 67,
+      "vault": "vault-f3568d21.test.near",
+      "chain": "test-chain-C8zKS",
+      "codeHash": "b6989f25d7867e0bea82f11af72a1f736a440e8b608140d361e115b12aa6dace",
+      "merchantBalance": "200030000000000000000000000",
+      "available": "4970000000000000000000000",
+      "usage": "30000000000000000000000",
+      "claim": null,
+      "records": [
+        {
+          "id": "WEEK-A",
+          "payment": null,
+          "auth": null
+        },
+        {
+          "id": "WEEK-B",
+          "payment": null,
+          "auth": null
+        }
+      ]
+    },
+    "paid": {
+      "height": 81,
+      "vault": "vault-f3568d21.test.near",
+      "chain": "test-chain-C8zKS",
+      "codeHash": "b6989f25d7867e0bea82f11af72a1f736a440e8b608140d361e115b12aa6dace",
+      "merchantBalance": "200070000000000000000000000",
+      "available": "4930000000000000000000000",
+      "usage": "70000000000000000000000",
+      "claim": "WEEK-B",
+      "records": [
+        {
+          "id": "WEEK-A",
+          "payment": null,
+          "auth": null
+        },
+        {
+          "id": "WEEK-B",
+          "payment": {
+            "invoice": {
+              "id": "WEEK-B",
+              "payee": "merchant.test.near",
+              "asset": "near",
+              "amount": "40000000000000000000000"
+            },
+            "commitment": "548d1b2c0a9fb85a65a3dd5c2ebc9f1304f7248cd462494e462017c8154a8147",
+            "state": "Settled",
+            "attempt_id": "89c056448c3a5af8bf0695f335ebb158e697bcaa414e8365287cf18c6c58db5a"
+          },
+          "auth": {
+            "merchant_id": "local-merchant",
+            "key_version": "1",
+            "payload_hash": "0e41983beb4a86f88af69de197b1eacee76b50815bad6a5c9b946bf57ba875fe"
+          }
+        }
+      ]
+    },
+    "final": {
+      "height": 86,
+      "vault": "vault-f3568d21.test.near",
+      "chain": "test-chain-C8zKS",
+      "codeHash": "b6989f25d7867e0bea82f11af72a1f736a440e8b608140d361e115b12aa6dace",
+      "merchantBalance": "200070000000000000000000000",
+      "available": "4930000000000000000000000",
+      "usage": "70000000000000000000000",
+      "claim": "WEEK-B",
+      "records": [
+        {
+          "id": "WEEK-A",
+          "payment": null,
+          "auth": null
+        },
+        {
+          "id": "WEEK-B",
+          "payment": {
+            "invoice": {
+              "id": "WEEK-B",
+              "payee": "merchant.test.near",
+              "asset": "near",
+              "amount": "40000000000000000000000"
+            },
+            "commitment": "548d1b2c0a9fb85a65a3dd5c2ebc9f1304f7248cd462494e462017c8154a8147",
+            "state": "Settled",
+            "attempt_id": "89c056448c3a5af8bf0695f335ebb158e697bcaa414e8365287cf18c6c58db5a"
+          },
+          "auth": {
+            "merchant_id": "local-merchant",
+            "key_version": "1",
+            "payload_hash": "0e41983beb4a86f88af69de197b1eacee76b50815bad6a5c9b946bf57ba875fe"
+          }
+        }
+      ]
+    },
+    "merchantDeltaNEAR": "0.04",
+    "retryDeltaNEAR": "0.00",
+    "vaultAvailableNEAR": "4.93"
+  }
+}

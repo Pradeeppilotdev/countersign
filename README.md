@@ -2,6 +2,8 @@
 
 Controlled agent payments on NEAR: owner approval, exact invoice checks, duplicate protection, and persistent settlement recovery.
 
+[**Attack results**](docs/attack-results/README.md) · Two signed bills covered the same week. The merchant received 0.04 local test NEAR before the worker crashed. Retrying both bills added 0.00. Inspect the recorded balances or reproduce the run.
+
 ## Quick start
 
 From a fresh clone to a working demo. Run every command from the repository root. **Windows:** use WSL2 and follow the Linux steps.

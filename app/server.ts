@@ -9,7 +9,12 @@ import { preview } from '../oneclick/quotes.ts';
 mkdirSync(new URL('../work/',import.meta.url),{recursive:true});
 const workflow = new DryRunWorkflow(process.env.COUNTERSIGN_WORKFLOW_DB ?? fileURLToPath(new URL('../work/app.db',import.meta.url)));
 const port=Number(process.env.COUNTERSIGN_PORT ?? process.env.AEGIS_PORT ?? 4317), origin=`http://127.0.0.1:${port}`;
-const assets: Record<string,[string,string]>={'/':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/sandbox.js':['sandbox.js','text/javascript'],'/style.css':['style.css','text/css']};
+const assets: Record<string,[string,string]>={
+ '/':['public/index.html','text/html'], '/app.js':['public/app.js','text/javascript'],
+ '/sandbox.js':['public/sandbox.js','text/javascript'], '/style.css':['public/style.css','text/css'],
+ '/attack-results/style.css':['public/attack-results.css','text/css'],
+ '/attack-results/result.json':['../docs/attack-results/result.json','application/json'],
+};
 const sandbox=new SandboxDesk(process.env.COUNTERSIGN_SANDBOX_DIR ?? process.env.AEGIS_SANDBOX_DIR ?? fileURLToPath(new URL('../work/local-vault/',import.meta.url)));
 await sandbox.start();
 const server=createServer(async(req,res)=>{
@@ -19,7 +24,18 @@ const server=createServer(async(req,res)=>{
  try {
   if(req.headers.host!==`127.0.0.1:${port}`) return json(403,{error:'Use the local app address.'});
   const url=new URL(req.url!,origin);
-  if(req.method==='GET' && assets[url.pathname]) {const [file,type]=assets[url.pathname];res.writeHead(200,{'Content-Type':type});return res.end(readFileSync(new URL(`public/${file}`,import.meta.url)));}
+  if(req.method==='GET' && url.pathname==='/attack-results') {
+   res.writeHead(308,{Location:'/attack-results/'});return res.end();
+  }
+  if(req.method==='GET' && url.pathname==='/attack-results/') {
+   // GitHub renders this same repository-owned HTML fragment in its README viewer.
+   const report=readFileSync(new URL('../docs/attack-results/README.md',import.meta.url),'utf8');
+   const template=readFileSync(new URL('public/attack-results.html',import.meta.url),'utf8');
+   res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
+   return res.end(template.replace('<!-- attack-results -->',()=>report));
+  }
+  if(req.method==='GET' && assets[url.pathname]) {const [file,type]=assets[url.pathname];res.writeHead(200,{'Content-Type':type});return res.end(readFileSync(new URL(file,import.meta.url)));}
   if(req.method==='GET' && url.pathname==='/api/sandbox') return json(200,await sandbox.snapshot());
   if(req.method==='GET' && url.pathname==='/api/workflows') {
    const ids=workflow.tracker.db.prepare('SELECT id FROM dry_quotes ORDER BY recorded DESC LIMIT 100').all();

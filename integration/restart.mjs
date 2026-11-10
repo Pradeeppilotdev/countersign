@@ -10,8 +10,36 @@ const directory=mkdtempSync(join(tmpdir(),'countersign-restart-'));const port=aw
 async function api(action='',data){const r=await fetch(base+'/api/sandbox'+(action?'/'+action:''),action?{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify(data??{})}:{});const b=await r.json();assert.equal(r.status,200,JSON.stringify(b));return b;}
 async function start(){child=spawn(process.execPath,['--disable-warning=ExperimentalWarning','app/server.ts'],{cwd,env:{...process.env,COUNTERSIGN_PORT:String(port),COUNTERSIGN_SANDBOX_DIR:directory},stdio:['ignore','pipe','pipe']});child.stdout.on('data',d=>logs+=d);child.stderr.on('data',d=>logs+=d);for(let i=0;i<160;i++){if(child.exitCode!==null)throw Error(logs);try{return await api();}catch{}await new Promise(r=>setTimeout(r,250));}throw Error('App readiness timed out '+logs);}
 async function stop(signal){const p=child;if(p.exitCode!==null){child=null;return;}await new Promise(resolve=>{p.once('exit',resolve);p.kill(signal);});child=null;}
+async function checkAttackResults() {
+ const desk = await fetch(base);
+ assert.match(await desk.text(), /href="\/attack-results\/"/);
+ const redirect = await fetch(base + '/attack-results', {redirect:'manual'});
+ assert.equal(redirect.status, 308);
+ assert.equal(redirect.headers.get('location'), '/attack-results/');
+ const page = await fetch(base + '/attack-results/');
+ assert.equal(page.status, 200);
+ const article = await page.text();
+ assert.ok(article.includes('npm run test:upgrade:weekly'));
+ assert.ok(article.includes('href="result.json"'));
+ const response = await fetch(new URL('result.json', page.url));
+ assert.equal(response.status, 200);
+ const report = await response.json();
+ assert.equal(report.network, 'LOCAL_SANDBOX');
+ assert.equal(report.result, 'PASS');
+ const {base:before, paid, final, attempt, finalAttempts, winner, loser, signal, stateAtCrash} = report.weekly;
+ assert.equal(signal, 'SIGKILL');
+ assert.equal(stateAtCrash, 'claimed');
+ assert.deepEqual([winner, loser].sort(), ['WEEK-A', 'WEEK-B']);
+ assert.equal(BigInt(paid.merchantBalance) - BigInt(before.merchantBalance), 4n * 10n ** 22n);
+ assert.equal(final.merchantBalance, paid.merchantBalance);
+ assert.equal(final.available, paid.available);
+ assert.equal(final.claim, winner);
+ assert.deepEqual(finalAttempts, [{invoice_id:winner, attempt_id:attempt, state:'settled'}]);
+ console.log('PASS: the desk links to the recorded weekly race, one 0.04 local test NEAR payment and zero extra on retry.');
+}
 try{
  const first=await start();assert.equal(first.available,'5000000000000000000000000');
+ await checkAttackResults();
  await api('authorize',{id:'restart-1',amount:'0.1'});const reserved=await api('reserve',{id:'restart-1'});assert.equal(reserved.invoices[0].state,'Reserved');
  await stop('SIGKILL');const resumed=await start();assert.equal(resumed.vault,first.vault);assert.equal(resumed.session,first.session);assert.equal(resumed.available,reserved.available);assert.equal(resumed.invoices[0].attempt,reserved.invoices[0].attempt);
  const paid=await api('execute',{id:'restart-1'});assert.equal(paid.invoices[0].state,'Settled');assert.equal(paid.merchantReceived,'100000000000000000000000');

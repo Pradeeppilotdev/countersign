@@ -1,0 +1,38 @@
+:root {
+  color-scheme: light;
+  font: 100%/1.55 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #17382f;
+  background: #f6f7f2;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+header, main { width: min(55rem, calc(100% - 2.5rem)); margin-inline: auto; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1.4rem 0; border-bottom: 1px solid #acbcb1; }
+header > a { color: inherit; text-decoration: none; font-weight: 750; font-size: 1.2rem; }
+nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .85rem; }
+a { color: #175b49; text-underline-offset: .17em; }
+a:hover { color: #0d3529; }
+a:focus-visible { outline: 2px solid #175b49; outline-offset: 3px; }
+main { padding: clamp(2rem, 6vw, 4.5rem) 0 4rem; }
+h1, h2 { text-wrap: balance; line-height: 1.08; }
+h1 { max-width: 17ch; font-size: clamp(2.25rem, 6vw, 4.25rem); font-weight: 600; letter-spacing: -.045em; margin: 0; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -.035em; margin: 2.6rem 0 1rem; }
+p { max-width: 74ch; margin: 1rem 0; }
+.lead { max-width: 62ch; font-size: 1.12rem; margin: 1.4rem 0 1.8rem; }
+table { width: 100%; border-spacing: 0; text-align: left; margin-block: 1rem 1.4rem; }
+th, td { padding: .85rem 1rem; border-bottom: 1px solid #cbd6ca; vertical-align: top; }
+thead th { color: #375443; background: #e1e9de; font-size: .86rem; line-height: 1.4; }
+tbody th { font-weight: 600; }
+.balances { font-variant-numeric: tabular-nums; }
+.balances td, .balances thead th:not(:first-child) { text-align: right; }
+.balances tbody tr:last-child { background: #eaf1dd; }
+.balances tbody tr:last-child td { font-weight: 700; }
+.attacks tbody th { width: 28%; }
+code { font: .92em ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+pre { color: #f1f7e9; background: #17382f; padding: 1rem 1.2rem; border-radius: .4rem; overflow-x: auto; }
+@media (max-width: 38rem) {
+  header, main { width: calc(100% - 2rem); }
+  nav { gap: .7rem; }
+  th, td { padding: .65rem .4rem; }
+  table { font-size: .9rem; }
+}
