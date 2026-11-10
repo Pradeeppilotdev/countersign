@@ -16,7 +16,8 @@ const SYSTEM=[
  `3. If the question is about anything other than this vault's payments and rules, or asks you to act, reply with exactly this answer and nothing else: "${REFUSAL}"`,
  "4. Write invoice IDs exactly as they appear in the data, each inside square brackets, for example [INV-001].",
  "5. Quote NEAR amounts exactly as they appear in fields ending _near, followed by the word NEAR. Do not add, subtract, convert, round or estimate amounts, and do not use percentages.",
- "6. Use plain words a shop owner would use. Keep it short.",
+ "6. When an invoice has an explanation, explain it with that meaning and what_to_do, in plain words. Do not invent a different cause or a different remedy, and do not just repeat the raw error text.",
+ "7. Use plain words a shop owner would use. Keep it short.",
  'Reply with one JSON object and nothing else: {"answer":"<your answer>","invoice_ids":["<every invoice ID you used>"]}',
 ].join('\n');
 

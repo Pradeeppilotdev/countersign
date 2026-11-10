@@ -6,6 +6,7 @@ import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {AskError,openVaultReader,type View} from './views.ts';
 import {readInbox,type InboxCopy,type InboxRow} from './inbox-reader.ts';
+import {explain} from './glossary.ts';
 
 const YOCTO=10n**24n;
 const digits=(value:unknown):value is string=>typeof value==='string'&&/^[0-9]{1,39}$/.test(value);
@@ -97,6 +98,8 @@ export async function buildFacts(source:FactsSource){
    id:invoice_id,merchant:row.merchant,payee:row.invoice.payee,
    amount_near:formatNear(amount),amount_yocto:row.invoice.amount,
    state:row.state,error:row.error,outcome,reason,
+   // Fixed glossary text for this error or outcome; null when there is nothing to explain.
+   explanation:explain(row.error,reason),
    signed:row.signed?{bill_id:row.signed.bill_id,key_version:row.signed.key_version,expires_at_ms:row.signed.expires_at,expires_at:iso(row.signed.expires_at),service:row.signed.service}:null,
    agent:{generation:row.generation,has_proposal:row.has_proposal,attempt_state:row.attempt_state},
    chain:{
@@ -168,6 +171,7 @@ export async function buildFacts(source:FactsSource){
    views_unavailable:[...unavailable],
    notes:[
     'Amounts ending _near are decimal NEAR; _yocto are exact integer strings.',
+    'Each invoice explanation is fixed glossary text for its error or outcome: what it means and what the owner can do.',
     'The inbox stores no payment timestamps. Daily spend is the contract\'s rolling 24-hour policy usage; weekly spend is grouped by signed service week. Calendar-day history is not available.',
     'Invoices refused when first imported, for example an edited signed file, are never stored and do not appear here.',
     'Weekly services are listed only when a bill in the inbox names them.',

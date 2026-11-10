@@ -101,6 +101,10 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
    ['INV-NAPKINS-005','local-merchant','0.02','queued',null,'queued',null,null,[]],
   ]);
   const [paid,tampered]=pack.invoices;
+  assert.equal(paid.explanation,null);
+  assert.match(tampered.explanation.meaning,/does not match what the supplier signed/);
+  assert.deepEqual(pack.invoices[2].explanation,{meaning:'This supplier bill was already paid under another invoice number, so paying it again would be a double payment.',what_to_do:'Nothing to do. The duplicate was stopped.'});
+  assert.match(pack.invoices[3].explanation.meaning,/over your daily budget/);
   assert.equal(paid.amount_yocto,parseNear('0.4'));assert.equal(paid.payee,state.merchant);
   assert.deepEqual(paid.signed,{bill_id:'BEANS-NOV-A',key_version:'1',expires_at_ms:beans.expires_at,expires_at:new Date(Number(beans.expires_at)).toISOString(),service:null});
   assert.equal(paid.chain.payment.amount_near,'0.4');assert.equal(paid.chain.payment.commitment,commitment(beans.invoice));
@@ -160,6 +164,7 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
    ['INV-WEEK-B','local-merchant','0.05','period_claimed','Service period already claimed by [INV-WEEK-A].','blocked','period_claimed',null,['blocked_attempt','period_claimed']],
   ]);
   assert.equal(weekly.invoices[7].chain.service_claim,'INV-WEEK-A');
+  assert.match(weekly.invoices[7].explanation.meaning,/one bill per weekly service per week/);
   assert.deepEqual(weekly.totals.counts,{queued:1,proposed:0,pending:0,paid:3,blocked:4,failed:0,cancelled:0});
   assert.equal(weekly.totals.per_day.used_near,'0.55');assert.equal(weekly.vault.available_near,'4.45');
   if(process.env.COUNTERSIGN_ASK_FACTS_OUT)writeFileSync(process.env.COUNTERSIGN_ASK_FACTS_OUT.replace(/\.json$/,'')+'-weekly.json',JSON.stringify(weekly,null,2));
