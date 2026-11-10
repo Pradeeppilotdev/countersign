@@ -354,7 +354,7 @@ Expired never-reserved approvals disappear from `policy_usage` immediately at th
 Start the saved local chain with `npm run agent:desk -- status`. Ask Dave reads the inbox and consults the vault at a single block. It has no signing key or payment tools.
 
 - `npm run agent:desk -- ask --facts` → see the invoice outcomes, supplier totals, available balance, spending rules and unusual activity. This command runs locally.
-- `npm run agent:desk -- ask --check /absolute/path/signed-invoice.json` → see whether the signature, payout account, amount and service week fit the vault’s rules at that block. A bill without a service week gets a red flag if either the supplier or payout account is enrolled, even before the first weekly invoice arrives. An older vault without the lookup reports `cannot verify`.
+- `npm run agent:desk -- ask --check /absolute/path/signed-invoice.json` → see whether the signature, payout account, amount and service week fit the vault’s rules at that block. A bill without a service week gets a red flag if either the supplier or payout account is enrolled, even before the first weekly invoice arrives. The checker also reads the vault’s bill register, so a duplicate supplier bill is caught even after local inbox history is lost. An older vault missing a required lookup reports `cannot verify`.
 - `npm run agent:desk -- ask "Why was INV-001 blocked?"` → see the recorded reason and the invoice and block used to answer. For a control, try `npm run agent:desk -- ask "Are payments paused?"`.
 - `npm run test:ask` → verify the explanations, citations and invoice checks with fixture replies. `npm run test:ask:sandbox` → reproduce the paid, tampered, duplicate, over-budget and weekly bills on a disposable local chain.
 

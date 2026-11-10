@@ -68,6 +68,7 @@ impl Contract {
   let key=MerchantKey{version:U64(version),public_key};keys().insert(&merchant_id,&key);key
  }
  pub fn get_merchant_key(&self,merchant_id:String)->Option<MerchantKey>{keys().get(&merchant_id)}
+ pub fn get_merchant_bill_invoice(&self,merchant_id:String,bill_id:String)->Option<String>{bills().get(&(merchant_id,bill_id))}
  pub fn get_invoice_auth(&self,invoice_id:String)->Option<InvoiceAuth>{receipts().get(&invoice_id)}
  pub fn authorize_signed_invoice(&mut self,signed:SignedInvoice)->Payment{
   near_sdk::require!(env::predecessor_account_id()==self.executor,"executor only");

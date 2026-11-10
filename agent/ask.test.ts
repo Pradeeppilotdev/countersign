@@ -172,6 +172,7 @@ const cafeView=async(method:string,args:any):Promise<unknown>=>{
  if(method==='get_vault_controls')return {owner:'owner.test.near',executor:'executor.test.near',paused:false};
  if(method==='get_payment'){const row=cafeRows.find(r=>r[0]===args.invoice_id&&r[2]==='settled');return row?{invoice:{id:row[0],payee,asset:'near',amount:near(row[1])},commitment:commitmentOf(cafeBill(row[0],row[1],row[4]).invoice),state:'Settled',attempt_id:'a'}:null;}
  if(method==='get_invoice_auth'){const row=cafeRows.find(r=>r[0]===args.invoice_id&&r[2]==='settled');return row?{merchant_id:'local-merchant',key_version:'1',payload_hash:payloadHash(cafeBill(row[0],row[1],row[4]))}:null;}
+ if(method==='get_merchant_bill_invoice')return cafeRows.find(r=>args.merchant_id==='local-merchant'&&r[4]===args.bill_id&&r[2]==='settled')?.[0]??null;
  if(method==='current_service_period')return args.agreement_id==='weekly-beans'?{agreement_id:'weekly-beans',period_start_ms:'604800000'}:null;
  if(method==='get_merchant_key')return args.merchant_id==='local-merchant'?{version:'1',public_key:publicKeyBase64(pair.publicKey)}:null;
  if(method==='get_invoice_domain')return domain;
@@ -291,6 +292,11 @@ test('Is this invoice OK? good, tampered (bad), lookalike (caution), duplicate a
  // The paid bean bill under a new number; the paid invoice itself; an unusually large one; one over the budget.
  const again=await checkInvoice(sign('INV-BEANS-001-AGAIN','0.1','BEANS-NOV-A'),source);
  assert.equal(again.verdict,'bad');assert.equal(reason(again,'already_paid'),'Bill BEANS-NOV-A was already paid as invoice INV-BEANS-001.');
+ const empty=await buildFacts({vault:vaultId,block_height:9,view:cafeView,inbox:{present:true,scope:null,rows:[]}});
+ const fromEmpty=await checkInvoice(sign('INV-REPLAY','0.1','BEANS-NOV-A'),{...source,pack:empty});
+ assert.equal(fromEmpty.verdict,'bad');assert.match(reason(fromEmpty,'already_paid'),/registered.*INV-BEANS-001/);
+ const oldView=async(method:string,args:any)=>method==='get_merchant_bill_invoice'?undefined:cafeView(method,args);
+ assert.equal((await checkInvoice(genuine,{...source,view:oldView})).verdict,'cannot verify');
  const paid=await checkInvoice(sign('INV-BEANS-001','0.1','BEANS-NOV-A'),source);
  assert.equal(paid.verdict,'caution');assert.match(reason(paid,'already_paid'),/already paid/);
  assert.equal(grades(await checkInvoice(sign('INV-BEANS-001','0.2','BEANS-NOV-A'),source)).already_paid,'bad'); // same number, different terms
@@ -377,6 +383,11 @@ test('review 2: a payment is credited to a supplier only when the commitment and
  // Beans' own row, matching on every count, is credited.
  const beansPack=await facts([row(beansBill,'settled')]);
  assert.deepEqual([beansPack.invoices[0].attribution,beansPack.totals.per_merchant[0].paid_near,beansPack.totals.unattributed.paid_near],['verified','0.04','0']);
+ const unsigned=await buildFacts({vault:vaultId,block_height:9,view:(method,args)=>method==='get_invoice_auth'?Promise.resolve(null):view(method,args),
+  inbox:{present:true,scope:null,rows:[{...row(beansBill,'settled'),signed:null}]}});
+ assert.equal(unsigned.invoices[0].outcome,'paid');assert.equal(unsigned.totals.per_merchant[0].paid_near,'0');
+ assert.equal(unsigned.totals.unattributed.paid_near,'0.04');
+ assert.match(verifyAnswer(unsigned,select('invoice:INV-SHARED')).text,/supplier attribution is unverified/);
  // And the answer check will not let the model say Cups was paid.
  assert.equal(verifyAnswer(cupsPack,reply('[INV-SHARED] from cups was paid 0.04 NEAR.',[['INV-SHARED','paid','0.04']])).ok,false);
  assert.equal(verifyAnswer(cupsPack,reply('[INV-SHARED] from cups was paid 0.04 NEAR.',[['INV-SHARED','blocked','0.3']])).ok,false);

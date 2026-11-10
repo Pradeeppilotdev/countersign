@@ -12,6 +12,9 @@ import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 import {parseNear} from '../app/sandbox.ts';
 import {verifyAnswer} from '../agent/ask/answer.ts';
+import {checkInvoice} from '../agent/ask/check.ts';
+import {buildFacts} from '../agent/ask/facts.ts';
+import {openVaultReader} from '../agent/ask/views.ts';
 import {commitment} from '../executor/core.ts';
 import {publicKeyBase64,signInvoice,type ServicePeriod,type SignedInvoice} from '../merchant/invoice.ts';
 
@@ -45,6 +48,11 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
   const beans=sign('INV-BEANS-001','0.4','BEANS-NOV-A');
   await bring(beans);
   assert.equal((await cli('run','INV-BEANS-001')).state,'settled');
+  const reader=await openVaultReader(directory);
+  const emptyPack=await buildFacts({...reader,inbox:{present:true,scope:null,rows:[]}});
+  const replay=await checkInvoice(sign('INV-EMPTY-REPLAY','0.4','BEANS-NOV-A'),{...reader,pack:emptyPack});
+  assert.equal(replay.verdict,'bad');
+  assert.match(replay.checks.find(c=>c.check==='already_paid')!.reason,/registered.*INV-BEANS-001/);
 
   // 2a. A scammer edits the signed file before it arrives: refused at the door, nothing stored.
   const edited=join(directory,'edited.json');

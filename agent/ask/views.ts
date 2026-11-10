@@ -8,7 +8,7 @@ import {join} from 'node:path';
 export class AskError extends Error {}
 
 export const VIEW_METHODS=Object.freeze([
- 'get_payment','get_invoice_auth','invoice_expiry',
+ 'get_payment','get_invoice_auth','get_merchant_bill_invoice','invoice_expiry',
  'policy_snapshot','policy_capacity','available_balance','get_vault_controls',
  'get_weekly_service','current_service_period','get_service_claim','requires_service_period','get_merchant_key','get_invoice_domain',
 ] as const);

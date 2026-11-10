@@ -88,19 +88,23 @@ export async function checkInvoice(raw:unknown,source:{vault:string;view:View;pa
  // 3. Was this invoice, bill or service week paid already?
  const payment:any=await view('get_payment',{invoice_id:bill.invoice.id})??null;
  const sameBill=bill.bill_id===undefined?[]:pack.invoices.filter(i=>i.id!==bill.invoice.id&&i.merchant===bill.merchant_id&&i.signed?.bill_id===bill.bill_id);
- const paidTwin=sameBill.find(i=>i.outcome==='paid');
+ const registered=bill.bill_id===undefined?null:await view('get_merchant_bill_invoice',{merchant_id:bill.merchant_id,bill_id:bill.bill_id});
  const weekWinner:any=bill.service?await view('get_service_claim',{service:bill.service})??null:null;
- if(paidTwin)add('already_paid','bad',`Bill ${bill.bill_id} was already paid as invoice ${paidTwin.id}.`);
+ if(typeof registered==='string'&&registered!==bill.invoice.id){
+  const settled=sameBill.some(i=>i.id===registered&&i.attribution==='verified');
+  add('already_paid','bad',settled?`Bill ${bill.bill_id} was already paid as invoice ${registered}.`:`The vault registered bill ${bill.bill_id} under invoice ${registered}.`);
+ }
  else if(typeof weekWinner==='string'&&weekWinner!==bill.invoice.id)add('already_paid','bad',`This service week was already claimed by invoice ${weekWinner}.`);
  else if(payment){
   const receipt:any=bill.signature===undefined?null:await view('get_invoice_auth',{invoice_id:bill.invoice.id})??null;
-  const same=String(payment.invoice?.amount)===bill.invoice.amount&&String(payment.invoice?.payee)===bill.invoice.payee&&(!receipt||receipt.payload_hash===payloadHash(bill as SignedTerms));
+  const same=payment.invoice?.asset===bill.invoice.asset&&String(payment.invoice?.amount)===bill.invoice.amount&&String(payment.invoice?.payee)===bill.invoice.payee&&(!bill.signature||(receipt?.merchant_id===bill.merchant_id&&receipt.payload_hash===payloadHash(bill as SignedTerms)));
   if(!same)add('already_paid','bad',`The vault already holds a different invoice under the number ${bill.invoice.id} (${String(payment.state).toLowerCase()}).`);
   else if(payment.state==='Settled')add('already_paid','caution','This invoice was already paid. The vault will not pay it twice.');
   else add('already_paid','caution',`This invoice is already in the vault as ${String(payment.state).toLowerCase()}.`);
  }
+ else if(registered!==null)add('already_paid','cannot verify','The vault could not confirm the registration of this supplier bill.');
  else if(sameBill.length)add('already_paid','caution',`Bill ${bill.bill_id} is already in the inbox as invoice ${sameBill[0].id} (${sameBill[0].outcome}).`);
- else add('already_paid','good','Not paid or claimed before.');
+ else add('already_paid','good','The vault has no payment or competing claim for this bill.');
 
  // 4. Would your rules let the agent pay it right now?
  const blocks:string[]=[];
