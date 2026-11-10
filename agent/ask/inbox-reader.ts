@@ -2,11 +2,14 @@
 // readOnly:true, so this file cannot enqueue, propose, resume or cancel anything.
 import {existsSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
+import {commitmentOf,payloadHash} from './receipt.ts';
 
 export type InboxRow={
  id:string;merchant:string;state:string;error:string|null;generation:number;has_proposal:boolean;
  invoice:{id:string;payee:string;asset:string;amount:string};
- signed:null|{bill_id:string;key_version:string;expires_at:string;service:null|{agreement_id:string;period_start_ms:string}};
+ // Recomputed here from the stored invoice, never copied from the inbox's own commitment column.
+ commitment:string|null;
+ signed:null|{bill_id:string;key_version:string;expires_at:string;payload_hash:string|null;service:null|{agreement_id:string;period_start_ms:string}};
  attempt_state:string|null;
 };
 export type InboxCopy={present:boolean;scope:string|null;rows:InboxRow[]};
@@ -24,11 +27,11 @@ export function readInbox(path:string):InboxCopy{
    const invoice=JSON.parse(String(row.invoice));
    const s=row.signed_invoice?JSON.parse(String(row.signed_invoice)):null;
    // Signatures and signing domains are deliberately left out of the facts.
-   const signed=s?{bill_id:String(s.bill_id),key_version:String(s.key_version),expires_at:String(s.expires_at),
+   const signed=s?{bill_id:String(s.bill_id),key_version:String(s.key_version),expires_at:String(s.expires_at),payload_hash:payloadHash({...s,invoice}),
     service:s.service?{agreement_id:String(s.service.agreement_id),period_start_ms:String(s.service.period_start_ms)}:null}:null;
    return {id:String(row.id),merchant:String(row.merchant),state:String(row.state),error:row.error===null?null:String(row.error),
     generation:Number(row.generation),has_proposal:row.proposal!==null,
-    invoice:{id:String(invoice.id),payee:String(invoice.payee),asset:String(invoice.asset),amount:String(invoice.amount)},
+    invoice:{id:String(invoice.id),payee:String(invoice.payee),asset:String(invoice.asset),amount:String(invoice.amount)},commitment:commitmentOf(invoice),
     signed,attempt_state:attempts.get(String(row.id))??null};
   });
   return {present:true,scope:scope===null||scope===undefined?null:String(scope),rows};

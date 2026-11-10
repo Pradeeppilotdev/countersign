@@ -88,6 +88,7 @@ export const GLOSSARY:Readonly<Record<string,Explanation>>=Object.freeze({
  'payment_in_flight':e('The payment has started on chain and its result is not final yet.','Resume the invoice to let it finish. It cannot be paid twice.'),
  'awaiting_model':e('The agent asked the AI model for a payment request and never got an answer, usually because it was stopped midway.','Retry the proposal for this invoice. No money moved.'),
  'approved_not_sent':e('The vault approved this invoice, but the payment has not been sent yet.','Resume the invoice to send it, or cancel it as the owner.'),
+ 'invoice_id_taken':e('The vault already holds a different invoice under this invoice number, so this bill was not paid and cannot be paid under that number.','Do not treat it as paid. Ask the supplier to reissue it with a new invoice number.'),
  'not_confirmed_on_chain':e('The agent\'s own notes say this invoice is finished, but the vault does not confirm that.','Trust the vault. Resume the invoice so the agent can re-check it.'),
 });
 

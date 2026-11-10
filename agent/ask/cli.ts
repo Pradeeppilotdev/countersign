@@ -1,13 +1,11 @@
 // agent:desk ask --facts | ask --check <invoice.json> | ask "<question>"
 // All three only read. A question makes one model call with no tools.
 import {readFileSync,statSync} from 'node:fs';
-import {join} from 'node:path';
 import {askQuestion} from './answer.ts';
 import {checkInvoice} from './check.ts';
-import {buildFacts,collectFacts} from './facts.ts';
-import {readInbox} from './inbox-reader.ts';
+import {collectFacts,openSources} from './facts.ts';
 import {modelConfig,nearChat} from './model.ts';
-import {AskError,openVaultReader} from './views.ts';
+import {AskError} from './views.ts';
 
 const USAGE='Usage: agent:desk ask --facts | ask --check <signed-invoice.json> | ask "<question>"';
 export async function askCommand(args:string[],directory:string):Promise<string>{
@@ -17,8 +15,7 @@ export async function askCommand(args:string[],directory:string):Promise<string>
   let raw:unknown;
   try{if(statSync(second).size>16384)throw Error('too large');raw=JSON.parse(readFileSync(second,'utf8'));}
   catch{throw new AskError('Ask Dave: that invoice file could not be read.');}
-  const reader=await openVaultReader(directory);
-  const pack=await buildFacts({vault:reader.vault,block_height:reader.block_height,view:reader.view,inbox:readInbox(join(directory,'inbox.db'))});
+  const {reader,pack}=await openSources(directory); // same vault/inbox identity check as --facts
   return JSON.stringify(await checkInvoice(raw,{vault:reader.vault,view:reader.view,pack}),null,2);
  }
  if(args.length!==1||!first.trim()||first.startsWith('-'))throw new AskError(USAGE);

@@ -102,6 +102,9 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
   ]);
   const [paid,tampered]=pack.invoices;
   assert.equal(paid.explanation,null);
+  // Credited to the supplier on the vault's evidence: same commitment, and a signed receipt naming this supplier and bill.
+  assert.deepEqual(pack.invoices.map((i:any)=>i.attribution),['verified',null,null,null,'verified',null]);
+  assert.equal(paid.chain.payment.same_invoice,true);assert.deepEqual(pack.totals.unattributed,{paid_near:'0',payments:[]});
   assert.match(tampered.explanation.meaning,/does not match what the supplier signed/);
   assert.deepEqual(pack.invoices[2].explanation,{meaning:'This supplier bill was already paid under another invoice number, so paying it again would be a double payment.',what_to_do:'Nothing to do. The duplicate was stopped.'});
   assert.match(pack.invoices[3].explanation.meaning,/over your daily budget/);
@@ -165,6 +168,13 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
   ]);
   assert.equal(weekly.invoices[7].chain.service_claim,'INV-WEEK-A');
   assert.match(weekly.invoices[7].explanation.meaning,/one bill per weekly service per week/);
+  // Weekly bills through the checker: the losing bill is for the right supplier and week, but the week is taken;
+  // a bill for next week, and one with no week at all, are never rated good.
+  const weekCheck=async(name:string,signed?:SignedInvoice)=>{const file=join(directory,name+'.json');if(signed)writeFileSync(file,JSON.stringify(signed));const r=await cli('ask','--check',file);return [r.verdict,r.checks.find((c:any)=>c.check==='service_week')?.result];};
+  assert.deepEqual(await weekCheck('INV-WEEK-B'),['bad','good']);
+  assert.deepEqual(await weekCheck('INV-WEEK-NEXT',sign('INV-WEEK-NEXT','0.05','WEEKLY-990',{agreement_id:'weekly-beans',period_start_ms:String(Number(anchor)+7*24*3600000)})),['caution','caution']);
+  assert.deepEqual(await weekCheck('INV-WEEK-GHOST',sign('INV-WEEK-GHOST','0.05','WEEKLY-991',{agreement_id:'weekly-ghost',period_start_ms:anchor})),['cannot verify','cannot verify']);
+  assert.deepEqual(await weekCheck('INV-NO-WEEK',sign('INV-NO-WEEK','0.05','WEEKLY-992')),['caution','caution']);
   assert.deepEqual(weekly.totals.counts,{queued:1,proposed:0,pending:0,paid:3,blocked:4,failed:0,cancelled:0});
   assert.equal(weekly.totals.per_day.used_near,'0.55');assert.equal(weekly.vault.available_near,'4.45');
   if(process.env.COUNTERSIGN_ASK_FACTS_OUT)writeFileSync(process.env.COUNTERSIGN_ASK_FACTS_OUT.replace(/\.json$/,'')+'-weekly.json',JSON.stringify(weekly,null,2));

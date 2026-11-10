@@ -33,7 +33,8 @@ export async function openVaultReader(directory:string):Promise<VaultReader>{
  async function rpc(method:'block'|'query',params:Record<string,unknown>){
   let reply:any;
   try{
-   const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'ask-dave',method,params}),signal:AbortSignal.timeout(10000)});
+   // Never follow a redirect: invoice IDs and vault names must not reach another server.
+   const response=await fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'ask-dave',method,params}),signal:AbortSignal.timeout(10000)});
    reply=await response.json();
   }catch{throw new AskError('Ask Dave: the local chain is not answering. Run agent:desk status once to start it, then ask again.');}
   return reply;

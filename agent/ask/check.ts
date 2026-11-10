@@ -1,11 +1,13 @@
 // "Is this invoice OK?" A local look at one invoice file before anyone pays it.
 // No model and no outside network: it uses the facts pack and the same
 // read-only vault views. It verifies the supplier's signature; it cannot make one.
-import {createHash,createPublicKey,verify} from 'node:crypto';
+import {createPublicKey,verify} from 'node:crypto';
 import {formatNear,type FactsPack} from './facts.ts';
+import {payloadHash,signedBytes,type SignedTerms} from './receipt.ts';
 import type {View} from './views.ts';
 
-export type Grade='good'|'caution'|'bad';
+// 'cannot verify' means the evidence needed to call a check good is missing. It is never rounded up to good.
+export type Grade='good'|'caution'|'cannot verify'|'bad';
 export type Check={check:string;result:Grade;reason:string};
 type Bill={invoice:{id:string;payee:string;asset:string;amount:string};merchant_id:string;bill_id?:string;vault?:string;domain?:string;key_version?:string;expires_at?:string;service?:{agreement_id:string;period_start_ms:string};signature?:string};
 
@@ -24,18 +26,11 @@ function parse(raw:any):Bill|null{
  }
  return bill;
 }
-// The exact bytes a supplier signs. Must stay identical to merchant/invoice.ts
-// and the contract; agent/ask.test.ts checks this against the merchant signer.
-function signedBytes(s:Bill){
- const values=[s.domain!,s.vault!,s.merchant_id,s.bill_id!,s.key_version!,s.expires_at!,s.invoice.id,s.invoice.payee,s.invoice.asset,s.invoice.amount];
- if(s.service)values.push(s.service.agreement_id,s.service.period_start_ms);
- return Buffer.from((s.service?'COUNTERSIGN-SIGNED-INVOICE-V2\n':'COUNTERSIGN-SIGNED-INVOICE-V1\n')+values.map(v=>`${Buffer.byteLength(v)}:${v}`).join(''));
-}
 function signatureMatches(bill:Bill,publicKey:string){
  try{
   const key=Buffer.from(publicKey,'base64'),signature=Buffer.from(bill.signature!,'base64');
   if(key.length!==32||signature.length!==64)return false;
-  return verify(null,signedBytes(bill),createPublicKey({key:{kty:'OKP',crv:'Ed25519',x:key.toString('base64url')},format:'jwk'}),signature);
+  return verify(null,signedBytes(bill as SignedTerms),createPublicKey({key:{kty:'OKP',crv:'Ed25519',x:key.toString('base64url')},format:'jwk'}),signature);
  }catch{return false;}
 }
 
@@ -58,7 +53,7 @@ export async function checkInvoice(raw:unknown,source:{vault:string;view:View;pa
  const add=(check:string,result:Grade,reason:string)=>checks.push({check,result,reason});
  const finish=(bill:Bill|null)=>({
   kind:'countersign.ask-dave.invoice-check',read_only:true,
-  verdict:(checks.some(c=>c.result==='bad')?'bad':checks.some(c=>c.result==='caution')?'caution':'good') as Grade,
+  verdict:(checks.some(c=>c.result==='bad')?'bad':checks.some(c=>c.result==='cannot verify')?'cannot verify':checks.some(c=>c.result==='caution')?'caution':'good') as Grade,
   invoice:bill?{id:bill.invoice.id,merchant:bill.merchant_id,payee:bill.invoice.payee,amount_near:formatNear(bill.invoice.amount),bill_id:bill.bill_id??null}:null,
   checks,
  });
@@ -96,7 +91,7 @@ export async function checkInvoice(raw:unknown,source:{vault:string;view:View;pa
  else if(typeof weekWinner==='string'&&weekWinner!==bill.invoice.id)add('already_paid','bad',`This service week was already claimed by invoice ${weekWinner}.`);
  else if(payment){
   const receipt:any=bill.signature===undefined?null:await view('get_invoice_auth',{invoice_id:bill.invoice.id})??null;
-  const same=String(payment.invoice?.amount)===bill.invoice.amount&&String(payment.invoice?.payee)===bill.invoice.payee&&(!receipt||receipt.payload_hash===createHash('sha256').update(signedBytes(bill)).digest('hex'));
+  const same=String(payment.invoice?.amount)===bill.invoice.amount&&String(payment.invoice?.payee)===bill.invoice.payee&&(!receipt||receipt.payload_hash===payloadHash(bill as SignedTerms));
   if(!same)add('already_paid','bad',`The vault already holds a different invoice under the number ${bill.invoice.id} (${String(payment.state).toLowerCase()}).`);
   else if(payment.state==='Settled')add('already_paid','caution','This invoice was already paid. The vault will not pay it twice.');
   else add('already_paid','caution',`This invoice is already in the vault as ${String(payment.state).toLowerCase()}.`);
@@ -118,17 +113,31 @@ export async function checkInvoice(raw:unknown,source:{vault:string;view:View;pa
   if(limit!==null&&usage!==null&&usage+amount>limit)blocks.push(`${near} is more than the ${formatNear(limit>usage?limit-usage:0n)} NEAR left in the rolling 24-hour budget`);
  }
  if(available!==null&&amount>available)blocks.push(`the vault holds only ${formatNear(available)} NEAR`);
- if(bill.service){
-  const service:any=await view('get_weekly_service',{agreement_id:bill.service.agreement_id})??null;
-  const cap=big(service?.cap);
-  if(!service)blocks.push(`weekly service ${bill.service.agreement_id} is not enrolled`);
-  else if(service.revoked)blocks.push(`weekly service ${bill.service.agreement_id} was revoked`);
-  else if(cap!==null&&amount>cap)blocks.push(`${near} is over the ${formatNear(cap)} NEAR weekly service limit`);
- }
+ const service:any=bill.service?await view('get_weekly_service',{agreement_id:bill.service.agreement_id})??null:null;
+ const cap=big(service?.cap);
+ if(service?.revoked)blocks.push(`weekly service ${bill.service!.agreement_id} was revoked`);
+ else if(service&&cap!==null&&amount>cap)blocks.push(`${near} is over the ${formatNear(cap)} NEAR weekly service limit`);
  if(blocks.length)add('fits_policy','caution',`Your rules would block it: ${blocks.join('; ')}.`);
  else add('fits_policy','good',`${near} fits your rules: within the ${formatNear(per)} NEAR per-payment limit and the rolling 24-hour budget.`);
 
- // 5. Is the name a near-copy of a supplier you trust?
+ // 5. Weekly bills: is this the right agreement, for this supplier, for the current week?
+ // Good needs positive evidence for every part; anything unread is "cannot verify".
+ const enrolled=pack.vault.weekly_services.filter(w=>w.service&&!w.service.revoked&&w.service.merchant_id===bill.merchant_id).map(w=>w.agreement_id);
+ if(bill.service){
+  const name=bill.service.agreement_id;
+  const current:any=service&&!service.revoked?await view('current_service_period',{agreement_id:name})??null:null;
+  if(!service)add('service_week','cannot verify',`Weekly service "${name}" could not be found in this vault, so the week on this bill cannot be checked.`);
+  else if(typeof service.merchant_id!=='string'||typeof service.payee!=='string')add('service_week','cannot verify',`The vault's record of weekly service "${name}" is incomplete.`);
+  else if(service.merchant_id!==bill.merchant_id||service.payee!==bill.invoice.payee)add('service_week','bad',`Weekly service "${name}" belongs to supplier ${service.merchant_id}, not ${bill.merchant_id}.`);
+  else if(service.revoked)add('service_week','caution',`You cancelled weekly service "${name}".`);
+  else if(typeof current?.period_start_ms!=='string'||!number.test(current.period_start_ms))add('service_week','cannot verify',`The vault did not say which week of "${name}" is current, so the week on this bill cannot be checked.`);
+  else if(BigInt(bill.service.period_start_ms)>BigInt(current.period_start_ms))add('service_week','caution','This bill is for a week that has not started yet.');
+  else if(BigInt(bill.service.period_start_ms)<BigInt(current.period_start_ms))add('service_week','caution','This bill is for a past week, not the current one.');
+  else add('service_week','good',`It is for the current week of "${name}", your weekly service with ${bill.merchant_id}.`);
+ }
+ else if(enrolled.length)add('service_week','caution',`${bill.merchant_id} bills you weekly ("${enrolled.join('", "')}"), and this bill does not say which week it covers. The vault will refuse it.`);
+
+ // 6. Is the name a near-copy of a supplier you trust?
  const copies:string[]=[];
  for(const s of suppliers){
   if(!pinned&&lookalike(bill.merchant_id,s.id))copies.push(`supplier name "${bill.merchant_id}" looks like your pinned supplier "${s.id}" but is not the same`);
@@ -137,7 +146,7 @@ export async function checkInvoice(raw:unknown,source:{vault:string;view:View;pa
  if(copies.length)add('lookalike','caution',`Lookalike: ${[...new Set(copies)].join('; ')}.`);
  else add('lookalike','good','No lookalike of a pinned supplier name or account.');
 
- // 6. Is the amount unusual for this supplier?
+ // 7. Is the amount unusual for this supplier?
  const history=pack.totals.per_merchant.find(m=>m.merchant===bill.merchant_id);
  const median=toYocto(history?.median_paid_near??null);
  if(median===null||median===0n)add('amount_vs_median','good','No paid invoices from this supplier yet to compare with.');
