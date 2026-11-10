@@ -20,6 +20,19 @@ export class Executor {
     this.db = new DatabaseSync(path); this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS attempts (invoice_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL UNIQUE, commitment TEXT NOT NULL, state TEXT NOT NULL)');
   }
   close() { this.db.close(); }
+  private readAttempt(id: string) {
+    const row = this.db.prepare('SELECT attempt_id, commitment, state FROM attempts WHERE invoice_id = ?').get(id);
+    if (!row) throw new Error('unknown attempt');
+    return row;
+  }
+  private recordOutcome(id: string, state: 'unknown' | 'settled' | 'failed' | 'cancelled'): string {
+    // An older response can arrive after another worker has recorded a final outcome.
+    this.db.prepare(`
+      UPDATE attempts SET state = ? WHERE invoice_id = ?
+      AND state IN ('claimed', 'unknown')
+    `).run(state, id);
+    return String(this.readAttempt(id).state);
+  }
   async execute(invoice: Invoice, attempt: string): Promise<string> {
     if (!/^[a-zA-Z0-9_.:-]{1,128}$/.test(attempt)) throw new Error('invalid attempt');
     const hash = commitment(invoice);
@@ -35,27 +48,25 @@ export class Executor {
     // Any error or crash after the claim leaves a manual/reconciliation-only record.
     const p = await this.auth.reserve(invoice, attempt);
     if (p.commitment !== hash || p.state !== 'Reserved' || p.attempt_id !== attempt) throw new Error('reservation not usable');
-    this.db.prepare('UPDATE attempts SET state = ? WHERE invoice_id = ?').run('unknown', invoice.id);
+    const dispatch = this.db.prepare("UPDATE attempts SET state = 'unknown' WHERE invoice_id = ? AND state = 'claimed'").run(invoice.id);
+    if (!dispatch.changes) return String(this.readAttempt(invoice.id).state);
     try { await this.rail.submit(invoice, attempt); } catch { /* submission may have succeeded */ }
     return this.reconcile(invoice.id);
   }
   async reconcile(id: string): Promise<string> {
-    const row = this.db.prepare('SELECT * FROM attempts WHERE invoice_id = ?').get(id);
-    if (!row) throw new Error('unknown attempt');
-    if (row.state === 'settled' || row.state === 'failed') return String(row.state);
+    const row = this.readAttempt(id);
+    if (row.state === 'settled' || row.state === 'failed' || row.state === 'cancelled') return String(row.state);
     if(this.rail.recoverNative){
       const p=await this.rail.recoverNative(String(row.commitment),String(row.attempt_id));
       if(p.commitment!==row.commitment || (p.attempt_id!==row.attempt_id && p.state!=='Cancelled'))throw Error('recovery binding mismatch');
       const state=p.state==='Settled'?'settled':p.state==='Failed'?'failed':p.state==='Cancelled'?'cancelled':'unknown';
-      this.db.prepare('UPDATE attempts SET state=? WHERE invoice_id=?').run(state,id);
-      return state;
+      return this.recordOutcome(id, state);
     }
     // claimed can mean a crash before or after reservation; never assume funds were not sent.
     const status = await this.rail.status(String(row.attempt_id));
-    if (status === 'unknown') return String(row.state);
+    if (status === 'unknown') return String(this.readAttempt(id).state);
     const p = await this.auth.resolve(id, String(row.attempt_id), status === 'settled');
     if (p.state !== (status === 'settled' ? 'Settled' : 'Failed')) throw new Error('resolution mismatch');
-    this.db.prepare('UPDATE attempts SET state = ? WHERE invoice_id = ?').run(status, id);
-    return status;
+    return this.recordOutcome(id, status);
   }
 }
