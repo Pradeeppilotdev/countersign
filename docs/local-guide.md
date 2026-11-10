@@ -336,3 +336,13 @@ After building and explicitly upgrading an existing local vault, `npm run agent:
 Expired never-reserved approvals disappear from `policy_usage` immediately at the chain's expiry boundary. Their ledger entries are compacted on a successful new policy authorization or owner cleanup; their invoice records are retained and cannot be reused. No vault balance is credited by automatic expiry pruning because those invoices never reserved native funds.
 
 `npm run test:policy:recovery` → verify expiry pruning, retained expired reservations, dust rejection, pending-cap exhaustion, bulk recovery, cleanup/reservation races and clean CLI failure reasons on disposable local chains. The signed-invoice integration test also rewrites both the SQLite invoice and commitment, then strips its signature: both attacks are rejected before authorization. The exact 24-hour settlement-aging boundary remains covered by the Rust clock-boundary test; no successful real-chain 24-hour fast-forward is claimed.
+
+## Ask Dave: read-only facts pack
+
+`npm run agent:desk -- ask --facts` → print one JSON object describing the agent vault: each inbox invoice (merchant, amount in NEAR, state, error text), its contract views (`get_payment`, `get_invoice_auth`, `invoice_expiry`), the owner's rules and balances (`policy_snapshot`, `policy_capacity`, `available_balance`, `get_vault_controls`), weekly services named by inbox bills, totals per merchant, and flags for blocked or failed attempts, rejected signatures, duplicate or period-claimed bills, pending items and any invoice above 3x that merchant's median paid amount. Totals and flags are computed by code; no model is involved.
+
+The command cannot pay, approve, cancel or change anything. `agent/ask/` opens the inbox read-only, sends only allowlisted view calls to the loopback RPC, pins them to one block, and imports no signing or transaction code; it never starts `SandboxDesk`, takes the command lock or opens an owner/executor account. The local chain must already be running (any other `agent:desk` command starts it).
+
+Limits: the inbox stores no payment timestamps, so daily spend is the contract's rolling 24-hour policy usage and weekly spend is grouped by signed service week; an invoice refused at `import` is never stored and does not appear; the contract has no view that lists weekly agreements, so only those named by an inbox bill are shown.
+
+`npm run test:ask` → check the totals, flags and the import guard. `npm run test:ask:sandbox` → run a fresh local café story (paid, tampered, duplicate, over-budget, queued and weekly bills) through the real CLI and compare the facts pack with it.

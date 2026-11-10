@@ -18,10 +18,17 @@ const sdkRequire=createRequire(createRequire(import.meta.url).resolve('near-work
 sdkRequire('near-api-js').utils.Logger.overrideLogger();
 process.env.NEAR_WORKSPACES_NO_LOGS='1';
 const [command,...args]=process.argv.slice(2);
-const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],'weekly-service':[4],'service-status':[1,2],'revoke-service':[1],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1]};
-if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | weekly-service <agreement> <merchant> <cap NEAR> <anchor UTC ms> | service-status <agreement> [period start ms] | revoke-service <agreement> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label>');
+const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],'weekly-service':[4],'service-status':[1,2],'revoke-service':[1],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1],ask:[1]};
+if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | weekly-service <agreement> <merchant> <cap NEAR> <anchor UTC ms> | service-status <agreement> [period start ms] | revoke-service <agreement> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label> | ask --facts');
 const directory=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
 if(command!=='init'&&!existsSync(join(directory,'desk.json')))throw Error('Initialize the separate local agent vault with agent:desk init first');
+if(command==='ask'){
+ // Read-only: no SandboxDesk, no command lock, no owner/executor account or key.
+ const {askCommand,AskError}=await import('./ask/cli.ts');
+ try{console.log(await askCommand(args,directory));}
+ catch(error){if(!(error instanceof AskError))throw error;console.error(error.message);process.exitCode=1;}
+ return;
+}
 if(command==='run'){
  console.log(args[1]?'LIVE MODEL → SAVED POLICY → LOCAL TEST FUNDS ONLY':'FIXTURE MODEL → SAVED POLICY → LOCAL TEST FUNDS ONLY');
  const result=await runPersistentInvoice(directory,args[0],invoice=>demoProposer(args.slice(1)).propose(invoice));
