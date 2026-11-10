@@ -8,15 +8,17 @@
     <tr><th scope="col">Checkpoint on the local chain</th><th scope="col">Vault available (NEAR)</th><th scope="col">Merchant gain since start of race (NEAR)</th></tr>
   </thead>
   <tbody>
-    <tr><th scope="row">Before either bill · block 67</th><td>4.97</td><td>+0.00</td></tr>
-    <tr><th scope="row">Transfer settled · block 81</th><td>4.93</td><td>+0.04</td></tr>
-    <tr><th scope="row">Both bills retried · block 86</th><td>4.93</td><td>+0.04</td></tr>
+    <tr><th scope="row">Before either bill · block 68</th><td>4.97</td><td>+0.00</td></tr>
+    <tr><th scope="row">Transfer settled · block 82</th><td>4.93</td><td>+0.04</td></tr>
+    <tr><th scope="row">Both bills retried · block 87</th><td>4.93</td><td>+0.04</td></tr>
   </tbody>
 </table>
 
-<p><code>WEEK-B</code> (bill <code>WEEKLY-947</code>) claimed the week. The vault blocked <code>WEEK-A</code> (bill <code>WEEKLY-801</code>). At block 81 the vault showed <code>Settled</code>, but the worker was still waiting for its acknowledgement. Its last saved state was <code>claimed</code>.</p>
+<p><code>WEEK-B</code> (bill <code>WEEKLY-947</code>) claimed the week. The vault blocked <code>WEEK-A</code> (bill <code>WEEKLY-801</code>). At block 82 the vault showed <code>Settled</code>, but the worker was still waiting for its acknowledgement. Its last saved state was <code>claimed</code>.</p>
 
 <p>We killed that worker with <code>SIGKILL</code>. On restart, the winning bill recovered its original payment attempt and the second bill stayed blocked. Retrying added <strong>0.00 NEAR</strong>. The run record includes both bill IDs, the finalized balances and the single settled attempt. <a href="result.json">Inspect the recorded run (JSON)</a>.</p>
+
+<p><a href="https://github.com/Pradeeppilotdev/countersign/raw/refs/heads/main/docs/demo/weekly-payment.mp4">Watch the 90-second recording of this run (MP4)</a>. <a href="https://github.com/Pradeeppilotdev/countersign/blob/4793fd6/docs/attack-results/result.json">Compare an earlier independent run</a>.</p>
 
 <h2>Reproduce the crash and retry</h2>
 

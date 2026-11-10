@@ -16,11 +16,13 @@ concurrency:
 jobs:
   local-payments:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          # The filmed upgrade test builds both historical contract revisions.
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
@@ -42,6 +44,21 @@ jobs:
           echo 'a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691  work/near-sandbox.tar.gz' | sha256sum --check
           tar -xzf work/near-sandbox.tar.gz --strip-components=1 -C work/sandbox-bin
           chmod +x work/sandbox-bin/near-sandbox
+      - name: Race two signed bills, crash the worker and retry
+        # The archived revisions build outside the checkout's rustup override directory.
+        env:
+          RUSTUP_TOOLCHAIN: '1.99.1'
+        run: |
+          mkdir -p "$RUNNER_TEMP/weekly-demo"
+          TMPDIR="$RUNNER_TEMP/weekly-demo" npm run test:upgrade:weekly
+      - name: Save the weekly payment result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: weekly-payment-result
+          # Only the public balance report. The sibling vault directory contains local keys.
+          path: ${{ runner.temp }}/weekly-demo/countersign-upgrade-retest-*/result.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Test contract authorization rules
         run: cargo test --locked --manifest-path contract/Cargo.toml
       - name: Verify local payments and crash recovery
