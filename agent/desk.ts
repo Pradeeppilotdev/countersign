@@ -1,4 +1,4 @@
-import {renewSavedPolicy} from './policy-renewal.ts';
+import {renewLocalPolicy} from './policy-renewal.ts';
 import {createRequire} from 'node:module';
 import {publicError} from '../app/errors.ts';
 import {runPersistentInvoice} from './run-invoice.ts';
@@ -34,7 +34,7 @@ try{
  inbox=new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,transport);
  const capacity=async()=>{try{return await desk.vault.view('policy_capacity',{});}catch(error){if(error instanceof Error&&error.message.includes('MethodNotFound'))throw Error('Upgrade the local vault before using policy capacity controls.');throw error;}};
  let result:any;
- if(command==='renew-policy'){result=await renewSavedPolicy({directory,identity:`${desk.session}:${desk.vault.accountId}`,view:(m,a)=>desk.vault.view(m,a),call:(m,a)=>desk.owner.call(desk.vault,m,a,{gas:'100000000000000'})},args[1],Number(args[0]));}
+ if(command==='renew-policy'){result=await renewLocalPolicy(desk,args[1],Number(args[0]));}
  else if(command==='capacity'){result=await capacity();}
  else if(command==='clear-approvals'){
   await capacity();

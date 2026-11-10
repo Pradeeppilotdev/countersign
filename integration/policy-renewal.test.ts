@@ -7,17 +7,19 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFile,fork} from 'node:child_process';
 import {promisify} from 'node:util';
+import {setTimeout as delay} from 'node:timers/promises';
 import {SandboxDesk} from '../app/sandbox.ts';
 import {signInvoice,publicKeyBase64} from '../merchant/invoice.ts';
 const exec=promisify(execFile),cwd=fileURLToPath(new URL('../',import.meta.url));
+async function runDesk(directory:string,...args:string[]){
+ const {stdout}=await exec(process.execPath,['--disable-warning=ExperimentalWarning','agent/desk.ts',...args],{cwd,env:{...process.env,COUNTERSIGN_AGENT_DIR:directory,NEAR_AI_API_KEY:'',NEAR_AI_MODEL:''},timeout:45000});
+ return JSON.parse(stdout.slice(stdout.search(/^[\[{]/m)));
+}
 
 test('owner renewal survives a CLI crash, preserves rules and held quota, and cannot revive old invoices or bills',{timeout:240000},async()=>{
  const directory=mkdtempSync(join(tmpdir(),'countersign-policy-renewal-')),d=new SandboxDesk(directory,{recoverOnStart:false});
  let closed=false,child:ReturnType<typeof fork>|undefined;
- const cli=async(...args:string[])=>{
-  const {stdout}=await exec(process.execPath,['--disable-warning=ExperimentalWarning','agent/desk.ts',...args],{cwd,env:{...process.env,COUNTERSIGN_AGENT_DIR:directory,NEAR_AI_API_KEY:'',NEAR_AI_MODEL:''},timeout:45000});
-  return JSON.parse(stdout.slice(stdout.search(/^[\[{]/m)));
- };
+ const cli=(...args:string[])=>runDesk(directory,...args);
  const reject=async(actor:any,method:string,args:any,reason:string)=>{
   const r=await actor.callRaw(d.vault,method,args,{gas:'100000000000000'});
   assert.equal(r.failed,true);assert.ok(r.receiptFailureMessagesContain(reason),JSON.stringify(r.receiptFailures));
@@ -101,5 +103,42 @@ test('owner renewal survives a CLI crash, preserves rules and held quota, and ca
   if(child&&child.exitCode===null)await new Promise(r=>{child!.once('exit',r);child!.kill('SIGKILL');});
   if(!closed)await d.close();
   try{process.kill(JSON.parse(readFileSync(join(directory,'chain.json'),'utf8')).pid,'SIGTERM');}catch{}
+ }
+});
+
+test('first owner renewal after downtime longer than its duration confirms with one ID',{timeout:180000},async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'countersign-cold-renewal-'));
+ const desk=new SandboxDesk(directory,{recoverOnStart:false});
+ const config=()=>JSON.parse(readFileSync(join(directory,'chain.json'),'utf8'));
+ try{
+  const before=await desk.start();
+  const clock=await desk.vault.view('policy_snapshot',{});
+  const old=await desk.owner.call(desk.vault,'set_policy',{merchants:[{id:'merchant',payee:desk.merchant.accountId}],
+   per_payment:'100',daily_limit:'150',min_payment:'7',expires_at:String(BigInt(clock.now)+30_000n)});
+  const last=await desk.vault.view('policy_snapshot',{});
+  await desk.close();
+  const oldPid=config().pid;
+  process.kill(oldPid,'SIGTERM');
+  let stopped=false;
+  for(let i=0;i<100&&!stopped;i++){
+   try{process.kill(oldPid,0);}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;stopped=true;}
+   if(!stopped)await delay(100);
+  }
+  assert.ok(stopped,'old local node must stop before the offline interval');
+  await delay(63_000); // Any one-minute deadline based on the old head has now elapsed.
+
+  const renewed=await runDesk(directory,'renew-policy','1','cold-start');
+  assert.notEqual(config().pid,oldPid);
+  assert.equal(renewed.state,'confirmed');assert.equal(renewed.policy_active,true);
+  assert.ok(BigInt(renewed.receipt.expires_at)-60_000n>BigInt(last.now)+60_000n,'renewal must use a post-restart clock');
+  assert.deepEqual(renewed.policy,{...old,version:'2',expires_at:renewed.receipt.expires_at});
+  assert.equal(renewed.min_payment,'7');assert.equal(renewed.usage,'0');
+  const replay=await runDesk(directory,'renew-policy','1','cold-start');
+  assert.deepEqual(replay.receipt,renewed.receipt);assert.deepEqual(replay.policy,renewed.policy);
+  const after=await runDesk(directory,'status');
+  assert.equal(after.vault,before.vault);assert.equal(after.available,before.available);assert.equal(after.merchantReceived,'0');
+ }finally{
+  await desk.close();
+  try{process.kill(config().pid,'SIGTERM');}catch{}
  }
 });

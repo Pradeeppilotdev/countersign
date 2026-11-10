@@ -91,7 +91,8 @@ impl Contract {
   }
   near_sdk::require!(p.version==expected_version,"policy changed; renewal must be reviewed");
   let now=env::block_timestamp_ms();
-  near_sdk::require!(expires_at.0>now&&expires_at.0<=now.saturating_add(30*WINDOW),"renewal expiry must be within 30 days");
+  near_sdk::require!(expires_at.0>now,"renewal deadline already passed");
+  near_sdk::require!(expires_at.0<=now.saturating_add(30*WINDOW),"renewal expiry must be within 30 days");
   near_sdk::require!(expires_at.0>p.expires_at.0,"renewal must extend policy expiry");
   let version=versions().get(&0).unwrap_or(0).checked_add(1).unwrap_or_else(||env::panic_str("policy version overflow"));
   p.version=U64(version);p.expires_at=expires_at;
@@ -267,6 +268,7 @@ mod tests {
  #[test] #[should_panic(expected="renewal superseded")] fn old_renewal_cannot_restore_a_replaced_policy(){let mut c=setup();c.renew_policy("first".into(),U64(1),U64(4*WINDOW));c.renew_policy("later".into(),U64(2),U64(5*WINDOW));c.renew_policy("first".into(),U64(1),U64(4*WINDOW));}
  #[test] #[should_panic(expected="invoice expired")] fn renewal_cannot_revive_an_expired_invoice(){let mut c=setup();context("executor.near",1000);c.authorize_by_policy(invoice("expired"),"merchant".into(),Some(U64(2000)));context("owner.near",3*WINDOW+1);c.renew_policy("r".into(),U64(1),U64(4*WINDOW));context("executor.near",3*WINDOW+2);c.reserve(invoice("expired"),"a".into());}
  #[test] #[should_panic(expected="renewal expiry must be within 30 days")] fn renewal_cannot_create_unbounded_authority(){let mut c=setup();c.renew_policy("r".into(),U64(1),U64(40*WINDOW));}
+ #[test] #[should_panic(expected="renewal deadline already passed")] fn renewal_rejects_elapsed_deadline(){let mut c=setup();context("owner.near",2*WINDOW);c.renew_policy("r".into(),U64(1),U64(2*WINDOW));}
  #[test] fn renewal_keeps_legacy_minimum_and_custom_minimum(){
   let mut c=setup();minimums().remove(&0);c.renew_policy("legacy".into(),U64(1),U64(4*WINDOW));assert!(minimums().get(&0).is_none());assert_eq!(c.policy_snapshot().min_payment.0,1);
   c.set_policy(vec![Merchant{id:"merchant".into(),payee:"merchant.near".parse().unwrap()}],U128(100),U128(200),U64(5*WINDOW),Some(U128(7)));

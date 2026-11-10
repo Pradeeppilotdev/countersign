@@ -9,7 +9,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {SandboxDesk} from '../app/sandbox.ts';
 import {AgentInbox} from '../agent/inbox.ts';
-import {renewSavedPolicy} from '../agent/policy-renewal.ts';
+import {renewLocalPolicy} from '../agent/policy-renewal.ts';
 import {signInvoice,publicKeyBase64,type SignedInvoice} from '../merchant/invoice.ts';
 import {upgradeLocalVault} from '../app/vault-upgrade.ts';
 import {digest,localRecords,storageDigest} from '../app/upgrade-state.ts';
@@ -26,7 +26,7 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   await desk.start();const domain=randomBytes(32).toString('hex'),keys=generateKeyPairSync('ed25519');
   await desk.owner.call(desk.vault,'set_policy',{merchants:[{id:'plain',payee:desk.merchant.accountId},{id:'signed',payee:desk.merchant.accountId}],per_payment:'1000',daily_limit:'10000',expires_at:String(Date.now()+3600000)});
   await desk.owner.call(desk.vault,'configure_invoice_auth',{domain});await desk.owner.call(desk.vault,'set_merchant_key',{merchant_id:'signed',public_key:publicKeyBase64(keys.publicKey)});
-  const renewal=await renewSavedPolicy({directory,identity:`${desk.session}:${desk.vault.accountId}`,view:(m,a)=>desk.vault.view(m,a),call:(m,a)=>desk.owner.call(desk.vault,m,a,{gas:'100000000000000'})},'before-upgrade',60);
+  const renewal=await renewLocalPolicy(desk,'before-upgrade',60);
   assert.equal(renewal.state,'confirmed');
   const signed=signInvoice({invoice:{...unsigned('signed-paid'),amount:'500'},merchant_id:'signed',bill_id:'immutable-bill',vault:desk.vault.accountId,domain,key_version:'1',expires_at:String(Date.now()+600000)},keys.privateKey);
   const openInbox=()=>new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,{call:(m,a)=>desk.executor.call(desk.vault,m,a,{gas:'100000000000000'}),view:(m,a)=>desk.vault.view(m,a)});
