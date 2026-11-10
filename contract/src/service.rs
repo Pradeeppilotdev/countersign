@@ -48,9 +48,12 @@ fn current_start(anchor: u64, now: u64) -> Option<u64> {
     Some(now - elapsed % WEEK_MS)
 }
 
+fn period_required(merchant_id: &String, payee: &AccountId) -> bool {
+    protected_merchants().contains_key(merchant_id) || protected_payees().contains_key(payee)
+}
+
 pub(super) fn require_unprotected(invoice: &Invoice, merchant_id: &String) {
-    near_sdk::require!(!protected_merchants().contains_key(merchant_id), "signed service period required");
-    require_manual_payee(&invoice.payee);
+    near_sdk::require!(!period_required(merchant_id, &invoice.payee), "signed service period required");
 }
 
 pub(super) fn require_manual_payee(payee: &AccountId) {
@@ -129,6 +132,10 @@ impl Contract {
 
     pub fn get_weekly_service(&self, agreement_id: String) -> Option<WeeklyService> {
         agreements().get(&agreement_id)
+    }
+
+    pub fn requires_service_period(&self, merchant_id: String, payee: AccountId) -> bool {
+        period_required(&merchant_id, &payee)
     }
 
     pub fn current_service_period(&self, agreement_id: String) -> Option<ServicePeriod> {
@@ -218,6 +225,21 @@ mod tests {
         testing_env!(context("executor.near", 1000));
         vault.authorize_signed_invoice(signed.clone());
         (vault, signed)
+    }
+
+    #[test]
+    fn weekly_requirement_follows_either_identity_and_survives_revocation() {
+        let (mut vault, signed) = authorized_period();
+        let check = |vault: &Contract| {
+            let other = "other.near".parse::<AccountId>().unwrap();
+            assert!(vault.requires_service_period(signed.merchant_id.clone(), other.clone()));
+            assert!(vault.requires_service_period("alias".into(), signed.invoice.payee.clone()));
+            assert!(!vault.requires_service_period("alias".into(), other));
+        };
+        check(&vault);
+        testing_env!(context("owner.near", 2000));
+        vault.revoke_weekly_service("compute".into());
+        check(&vault);
     }
 
     #[test]

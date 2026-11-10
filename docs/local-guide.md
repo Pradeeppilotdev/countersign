@@ -348,3 +348,16 @@ After building and explicitly upgrading an existing local vault, `npm run agent:
 Expired never-reserved approvals disappear from `policy_usage` immediately at the chain's expiry boundary. Their ledger entries are compacted on a successful new policy authorization or owner cleanup; their invoice records are retained and cannot be reused. No vault balance is credited by automatic expiry pruning because those invoices never reserved native funds.
 
 `npm run test:policy:recovery` → verify expiry pruning, retained expired reservations, dust rejection, pending-cap exhaustion, bulk recovery, cleanup/reservation races and clean CLI failure reasons on disposable local chains. The signed-invoice integration test also rewrites both the SQLite invoice and commitment, then strips its signature: both attacks are rejected before authorization. The exact 24-hour settlement-aging boundary remains covered by the Rust clock-boundary test; no successful real-chain 24-hour fast-forward is claimed.
+
+## Ask Dave
+
+Start the saved local chain with `npm run agent:desk -- status`. Ask Dave reads the inbox and consults the vault at a single block. It has no signing key or payment tools.
+
+- `npm run agent:desk -- ask --facts` → see the invoice outcomes, supplier totals, available balance, spending rules and unusual activity. This command runs locally.
+- `npm run agent:desk -- ask --check /absolute/path/signed-invoice.json` → see whether the signature, payout account, amount and service week fit the vault’s rules at that block. A bill without a service week gets a red flag if either the supplier or payout account is enrolled, even before the first weekly invoice arrives. An older vault without the lookup reports `cannot verify`.
+- `npm run agent:desk -- ask "Why was INV-001 blocked?"` → see the recorded reason and the invoice and block used to answer. For a control, try `npm run agent:desk -- ask "Are payments paused?"`.
+- `npm run test:ask` → verify the explanations, citations and invoice checks with fixture replies. `npm run test:ask:sandbox` → reproduce the paid, tampered, duplicate, over-budget and weekly bills on a disposable local chain.
+
+Natural-language questions send the question and available evidence to NEAR AI using the configured `NEAR_AI_API_KEY` and `NEAR_AI_MODEL`. The model selects records. Countersign supplies the amounts, outcomes, pause setting and citations from those records. An unsupported model reply produces “I couldn't verify that answer.” Set `COUNTERSIGN_ASK_DEBUG=1` to see the reason.
+
+Supplier totals count payments with a matching invoice commitment and signed supplier receipt. Transfers lacking that evidence appear in `totals.unattributed`. The inbox has no payment timestamps, so the weekly answer uses signed service periods and the daily budget uses the vault’s rolling 24-hour usage. The facts list weekly services named by inbox bills. Files rejected at import have no inbox record.
