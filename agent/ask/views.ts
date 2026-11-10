@@ -10,7 +10,7 @@ export class AskError extends Error {}
 export const VIEW_METHODS=Object.freeze([
  'get_payment','get_invoice_auth','invoice_expiry',
  'policy_snapshot','policy_capacity','available_balance','get_vault_controls',
- 'get_weekly_service','current_service_period','get_service_claim','get_merchant_key',
+ 'get_weekly_service','current_service_period','get_service_claim','get_merchant_key','get_invoice_domain',
 ] as const);
 export type ViewMethod=typeof VIEW_METHODS[number];
 export type View=(method:ViewMethod,args:Record<string,unknown>)=>Promise<unknown>;

@@ -125,9 +125,22 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
    ['blocked_attempt','INV-BEANS-003','0.5','Rolling daily budget exceeded.'],
   ]);
 
-  // Only `ask --facts` exists; nothing else is accepted.
+  // Unknown flags are refused, and a question without a model key stops before any model request.
   await refused(/Usage: agent:desk ask --facts/,'ask','--pay');
   await refused(/Usage: agent:desk/,'ask');
+  await refused(/Set NEAR_AI_API_KEY and NEAR_AI_MODEL/,'ask','What did I pay this week?');
+
+  // "Is this invoice OK?" on real files, through the CLI. Still nothing changes.
+  const check=async(file:string)=>{const result=await cli('ask','--check',file);return [result.verdict,Object.fromEntries(result.checks.map((c:any)=>[c.check,c.result]))];};
+  const allGood={pinned_payee:'good',signature:'good',already_paid:'good',fits_policy:'good',lookalike:'good',amount_vs_median:'good'};
+  assert.deepEqual(await check(join(directory,'INV-NAPKINS-005.json')),['good',allGood]);
+  assert.deepEqual(await check(edited),['bad',{...allGood,signature:'bad',already_paid:'bad',fits_policy:'caution'}]); // edited copy of the paid bean bill: forged, a repeat, and over what is left today
+  assert.deepEqual(await check(join(directory,'INV-BEANS-001.json')),['caution',{...allGood,already_paid:'caution',fits_policy:'caution'}]);
+  assert.deepEqual(await check(join(directory,'INV-BEANS-001-AGAIN.json')),['bad',{...allGood,already_paid:'bad',fits_policy:'caution'}]);
+  const copycat=join(directory,'copycat.json');
+  writeFileSync(copycat,JSON.stringify(signInvoice({invoice:{id:'INV-BEANS-900',payee:state.merchant,asset:'near',amount:parseNear('0.1')},merchant_id:'local-merchent',bill_id:'BEANS-NOV-Z',vault:state.vault,domain:key.domain,key_version:'1',expires_at:String(Date.now()+600000)},generateKeyPairSync('ed25519').privateKey)));
+  assert.deepEqual(await check(copycat),['caution',{...allGood,pinned_payee:'caution',signature:'caution',fits_policy:'caution',lookalike:'caution'}]);
+  assert.deepEqual(await cli('status'),statusBefore);assert.equal(rows(),rowsBefore);
 
   // A weekly service: the first bill for the week is paid, the second is turned away.
   const anchor=String(Date.now()-3600000),service={agreement_id:'weekly-beans',period_start_ms:anchor};
