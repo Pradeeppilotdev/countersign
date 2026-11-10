@@ -150,6 +150,9 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
   const check=async(file:string)=>{const result=await cli('ask','--check',file);return [result.verdict,Object.fromEntries(result.checks.map((c:any)=>[c.check,c.result]))];};
   const allGood={pinned_payee:'good',signature:'good',already_paid:'good',fits_policy:'good',lookalike:'good',amount_vs_median:'good'};
   assert.deepEqual(await check(join(directory,'INV-NAPKINS-005.json')),['good',allGood]);
+  // Would you pay this account? The payee verdict comes from the real local RPC: pinned, already paid by this vault.
+  const payeeCheck=(await cli('ask','--check',join(directory,'INV-NAPKINS-005.json'))).payee_account;
+  assert.deepEqual([payeeCheck.verdict,payeeCheck.network,payeeCheck.account,payeeCheck.facts[0]],['PAY','local',state.merchant,'Exists: yes.']);
   assert.deepEqual(await check(edited),['bad',{...allGood,signature:'bad',already_paid:'bad',fits_policy:'caution'}]); // edited copy of the paid bean bill: forged, a repeat, and over what is left today
   assert.deepEqual(await check(join(directory,'INV-BEANS-001.json')),['caution',{...allGood,already_paid:'caution',fits_policy:'caution'}]);
   assert.deepEqual(await check(join(directory,'INV-BEANS-001-AGAIN.json')),['bad',{...allGood,already_paid:'bad',fits_policy:'caution'}]);
