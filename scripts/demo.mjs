@@ -35,6 +35,7 @@ try{
  output('COUNTERSIGN — LOCAL VERIFICATION\nRevision: '+revision+'\nModel proposals: fixture-driven. 1Click: offline signed fixtures. Payments: local test NEAR only.\n');
  if(!existsSync(join(work,'sandbox-bin/near-sandbox')))throw Error('Install NEAR Sandbox 2.14.0 at work/sandbox-bin/near-sandbox first (see README).');
  await step('Build the contract','cargo',['build','--locked','--manifest-path','contract/Cargo.toml','--target','wasm32-unknown-unknown','--release']);
+ await step('Testnet deployment guards (offline)',process.execPath,['--test','scripts/testnet.test.mjs']);
  await step('Agent restrictions, invoice tampering, duplicates and quote validation',process.execPath,['--disable-warning=ExperimentalWarning','--test',...['agent','executor','app','oneclick','merchant'].flatMap(files)]);
  await step('Local vault payments, uncertain settlement, owner controls and dry routes',process.execPath,['--disable-warning=ExperimentalWarning','--test','--test-concurrency=1',...files('integration')]);
  await step('Full app crash and chain restart recovery',process.execPath,['--disable-warning=ExperimentalWarning','integration/restart.mjs']);

@@ -31,3 +31,10 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 **Hackathon tracks** · AI Security & Defense (primary), Agent Economy (secondary). Built during NEAR HACKATHON with Rust NEAR SDK, TypeScript, Node SQLite, near-workspaces and AI-assisted development. [Official tracks](https://nearhackathon.com/#tracks)
 
 [Local payment desk, contract and operator guide](docs/local-guide.md)
+
+## Public testnet vault
+
+The opt-in [testnet deployment guide](docs/testnet.md) creates faucet-funded accounts,
+deploys and initializes the vault in one transaction, and verifies its controls and
+reinitialization protection. This is deployment only; the app, agent desk and local
+tests continue to use the local sandbox.
