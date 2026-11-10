@@ -19,7 +19,8 @@ const SYSTEM=[
  "5. Quote NEAR amounts exactly as they appear in fields ending _near, followed by the word NEAR. Do not add, subtract, convert, round or estimate amounts, and do not use percentages. When a sentence names an invoice and gives any amount, give that invoice's own amount_near first, right after its ID, like: [INV-001] for 0.4 NEAR. Put budget, limit and total figures in a separate sentence.",
  "6. When an invoice has an explanation, explain it with that meaning and what_to_do, in plain words. Do not invent a different cause or a different remedy, and do not just repeat the raw error text.",
  "7. Say what happened to an invoice using its outcome field: queued, proposed, pending, paid, blocked, failed or cancelled. Credit a payment to a supplier only when its attribution is verified.",
- "8. Use plain words a shop owner would use. Keep it short.",
+ "8. Name the invoice, by its bracketed ID, in every sentence that says what happened to it. Do not write \"It was paid\" or \"This one was blocked\" without the ID.",
+ "9. Use plain words a shop owner would use. Keep it short.",
  'Reply with one JSON object and nothing else: {"answer":"<your answer>","claims":[{"invoice_id":"<id>","outcome":"<its outcome field>","amount":"<its amount_near field>"}]}',
  "List exactly one claim for every invoice your answer mentions, copied from that invoice in the data. Use an empty list when the answer mentions no invoice.",
 ].join('\n');
@@ -54,6 +55,27 @@ function knownNames(pack:FactsPack){
 // Wording that states an outcome as fact. "already paid", "not paid", "would be paid" do not match.
 const SAYS_PAID=/\b(?:was|were|is|are|been|got|has been|have been|successfully)\s+(?:paid|settled)\b|\bpaid\s+(?:\d|in full)|\bpayment\s+(?:went through|succeeded|completed)\b/i;
 const SAYS_STOPPED=/\b(?:was|were|is|are|been|got)\s+(?:blocked|rejected|refused|stopped|declined|cancelled|canceled)\b|\b(?:has|have|payment|transfer)\s+failed\b/i;
+
+// Words that state what happened to an invoice, and the outcome each one asserts.
+const OUTCOME_WORDS:Record<string,string>={paid:'paid',settled:'paid',blocked:'blocked',stopped:'blocked',rejected:'blocked',refused:'blocked',declined:'blocked',failed:'failed',queued:'queued',cancelled:'cancelled',canceled:'cancelled'};
+const OUTCOME_WORD=new RegExp(`\\b(${Object.keys(OUTCOME_WORDS).join('|')})\\b`,'gi');
+const NEGATED=/(?:\b(?:not|never|cannot|no longer|without being)|n't)\s+(?:[\w']+\s+){0,6}$/i;        // "was not paid", "do not treat it as paid"
+const HYPOTHETICAL=/\b(?:would|will|can|could|should|may|might|must|to)\s+(?:[\w']+\s+)?(?:be|get)\s+$|\b(?:before|until|once|unless|if|when|whether)\s+(?:[\w']+\s+){0,3}$/i; // "would be paid", "waiting to be paid", "before it was paid"
+const OWNER_ACTION=/\byou\s+(?:have\s+|already\s+)?$/i; // "You cancelled this weekly service": something the owner did, not an invoice outcome
+const SINGULAR=/\b(?:it|its|it's|this|that|these|those|they|them|both|same|the\s+(?:invoice|bill|payment|one))\b/i;
+const AGGREGATE=/\b(?:total|totall?ing|altogether|so far|overall|in all|none|nothing|no\s+(?:invoices?|payments?|bills?)|\d+\s+(?:of\s+)?(?:\w+\s+)?(?:invoices?|bills?|payments?))\b/i;
+// What a sentence states: outcomes asserted, and outcomes denied ("was not paid").
+function statedOutcomes(sentence:string){
+ const stated=new Set<string>(),denied=new Set<string>();let already=false;
+ for(const m of sentence.matchAll(OUTCOME_WORD)){
+  const before=sentence.slice(0,m.index),outcome=OUTCOME_WORDS[m[1].toLowerCase()];
+  if(HYPOTHETICAL.test(before)||(outcome!=='paid'&&OWNER_ACTION.test(before)))continue;
+  if(NEGATED.test(before)){denied.add(outcome);continue;}
+  if(outcome==='paid'&&/\balready\s+(?:been\s+)?$/i.test(before)){already=true;continue;}
+  stated.add(outcome);
+ }
+ return {stated,denied,already};
+}
 
 export type Verdict={ok:true;text:string;sources:string[]}|{ok:false;text:string;why:string};
 export function verifyAnswer(pack:FactsPack,raw:string):Verdict{
@@ -100,6 +122,7 @@ export function verifyAnswer(pack:FactsPack,raw:string):Verdict{
   for(const id of mentions(text))if(!claimed.has(id))return fail(`${id} is mentioned without a claim.`);
   // 3. Sentence by sentence: an amount next to an invoice must be that invoice's
   //    amount (or a vault-wide figure), and the wording must agree with its outcome.
+  let context:typeof pack.invoices=[]; // the invoices named most recently
   for(const sentence of text.split(/(?<=[.!?])\s+|\n+/)){
    const here=[...mentions(sentence)].map(id=>claimed.get(id)!);
    const allowed=here.length?new Set(here.map(i=>i.amount_near!)):cited;
@@ -117,6 +140,27 @@ export function verifyAnswer(pack:FactsPack,raw:string):Verdict{
     // The first amount after an invoice ID is read as that invoice's amount, so it must be exactly that.
     if(owner){const mine=claimed.get(owner)!.amount_near;const id=owner;owner=undefined;if(spot.value!==mine)throw Error(`Amount ${spot.shown} does not belong to ${id}.`);continue;}
     if(spot.value===null||spot.value===undefined||!(allowed.has(spot.value)||general.has(spot.value)))throw Error(here.length?`Amount ${spot.shown} does not belong to ${here.map(i=>i.id).join(', ')}.`:`Amount ${spot.shown} is not in the facts.`);
+   }
+   // 4. A sentence that names no invoice may state an outcome only by repeating the
+   //    outcome of the invoice named just before it ("It was blocked."), or as a
+   //    vault-wide count or total that the facts confirm ("Nothing failed.").
+   if(here.length)context=here;
+   else{
+    const {stated,denied,already}=statedOutcomes(sentence);
+    const known=new Set(context.map(i=>i.outcome));
+    // "already paid" explains a duplicate: it is about the earlier payment, not this invoice.
+    if(already&&!context.some(i=>i.reason==='duplicate_bill'||i.reason==='period_claimed'))stated.add('paid');
+    for(const outcome of denied)if(context.length&&context.every(i=>i.outcome===outcome))throw Error(`The text says ${context.map(i=>i.id).join(', ')} was not ${outcome}; the facts say ${outcome}.`);
+    const loose=[...stated].filter(outcome=>!known.has(outcome));
+    if(loose.length){
+     if(SINGULAR.test(sentence)||!AGGREGATE.test(sentence))throw Error(context.length?`The text says "${loose.join(', ')}" after ${context.map(i=>i.id).join(', ')}; the facts say ${[...known].join(', ')}.`:`The text states "${loose.join(', ')}" without naming an invoice.`);
+     // A vault-wide statement: any count it gives must be the real count.
+     const counts=pack.totals.counts as Record<string,number>;
+     for(const m of sentence.matchAll(/\b(nothing|none|no\s+(?:invoices?|payments?|bills?)|\d+)\s+(?:(?:of\s+)?(?:\w+\s+)?(?:invoices?|bills?|payments?)\s+)?(?:(?:were|was|are|is|have been|has been|got)\s+)?(paid|settled|blocked|stopped|rejected|refused|declined|failed|queued|cancelled|canceled)\b/gi)){
+      const said=/^\d+$/.test(m[1])?Number(m[1]):0,outcome=OUTCOME_WORDS[m[2].toLowerCase()];
+      if(counts[outcome]!==said)throw Error(`The text says ${said} ${outcome}; the facts say ${counts[outcome]}.`);
+     }
+    }
    }
    if(here.length&&here.every(i=>i.outcome!=='paid')&&SAYS_PAID.test(sentence))throw Error(`The text says ${here.map(i=>i.id).join(', ')} was paid; the facts say ${here.map(i=>i.outcome).join(', ')}.`);
    if(here.length&&here.every(i=>i.outcome==='paid')&&SAYS_STOPPED.test(sentence))throw Error(`The text says ${here.map(i=>i.id).join(', ')} was stopped; the facts say paid.`);

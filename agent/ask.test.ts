@@ -222,8 +222,6 @@ test('answer check: every claim must match that exact invoice, and the text must
  assert.deepEqual(good,{ok:true,sources:['INV-BEANS-003'],text:'[INV-BEANS-003] for 0.5 NEAR was blocked because the rolling 24-hour budget is 0.6 NEAR and only 0.4 NEAR was left. You have paid local-merchant 0.20 NEAR so far.\nSources: INV-BEANS-003 (blocked, 0.5 NEAR)'});
  assert.equal(verifyAnswer(pack,'```json\n'+reply('Two were paid: [INV-CUPS-004] and INV-BEANS-001 (bill BEANS-NOV-A), 0.1 NEAR each. [INV-BEANS-003] was blocked.',[CUPS4,BEANS1,BEANS3])+'\n```').text.split('\n')[1],'Sources: INV-BEANS-001 (paid, 0.1 NEAR), INV-CUPS-004 (paid, 0.1 NEAR), INV-BEANS-003 (blocked, 0.5 NEAR)');
  assert.equal(verifyAnswer(pack,reply('Your per-payment limit is 0.5 NEAR until 1970-01-01T02:30:00.000Z.')).text,'Your per-payment limit is 0.5 NEAR until 1970-01-01T02:30:00.000Z.\nSources: none (vault rules and totals only)');
- // A blocked duplicate may be explained with "already paid under another invoice number".
- assert.equal(verifyAnswer(pack,reply('[INV-BEANS-003] was blocked. It was not paid; a bill that was already paid cannot be paid twice.',[BEANS3])).ok,true);
  const rejected:[string,RegExp][]=[
   // Review issue 1: INV-BEANS-003 is blocked for 0.5 NEAR. "Paid 0.4" must never get through, however it is phrased.
   [reply('[INV-BEANS-003] was paid 0.4 NEAR.',[['INV-BEANS-003','paid','0.4']]),/Claim says INV-BEANS-003 is paid; the facts say blocked/],
@@ -243,7 +241,7 @@ test('answer check: every claim must match that exact invoice, and the text must
   [reply('Invoice inv-7 looks fine.',[]),/Unknown invoice ID inv-7/],
   [reply('You have paid 7 NEAR in total.',[]),/Amount 7 NEAR is not in the facts/],
   [reply('[INV-BEANS-003] would have taken the day to 0.7.',[BEANS3]),/Amount 0.7 does not belong to INV-BEANS-003/], // model arithmetic
-  [reply('You paid 300000000000000000000000 yoctoNEAR.',[]),/yoctoNEAR is not in the facts/],
+  [reply('In total you paid 300000000000000000000000 yoctoNEAR.',[]),/yoctoNEAR is not in the facts/],
   ['Sure! INV-BEANS-003 was blocked.',/not the requested JSON/],
   [JSON.stringify({answer:'',claims:[]}),/not the requested JSON/],
   [JSON.stringify({answer:'ok',invoice_ids:['INV-BEANS-003']}),/not the requested JSON/],                            // the old reply shape
@@ -251,7 +249,7 @@ test('answer check: every claim must match that exact invoice, and the text must
   ['',/not the requested JSON/],
  ];
  for(const [raw,why] of rejected){const verdict=verifyAnswer(pack,raw);assert.equal(verdict.ok,false,raw);assert.equal(verdict.text,UNVERIFIED);assert.match((verdict as any).why,why);}
- assert.equal(verifyAnswer(pack,reply('You paid 200000000000000000000000 yoctoNEAR.')).ok,true);
+ assert.equal(verifyAnswer(pack,reply('In total you paid 200000000000000000000000 yoctoNEAR.')).ok,true);
 });
 
 test('an off-topic question gets the fixed refusal and no sources',async()=>{
@@ -498,4 +496,45 @@ test('review 5: the vault reader never follows a redirect and only ever talks to
  const views=readFileSync(join(askDir,'views.ts'),'utf8');
  assert.ok(views.includes("redirect:'error'"));
  assert.deepEqual(views.match(/https?:\/\/[^'"`\s]+/g),['http://127.0.0.1:${chain.port}']);
+});
+
+test('gap 2: a sentence may not state an outcome without an invoice ID, unless it repeats the outcome of the invoice just named',async()=>{
+ const dupe={...cafeInbox()[2],id:'INV-BEANS-001-AGAIN',invoice:{id:'INV-BEANS-001-AGAIN',payee,asset:'near',amount:near('0.1')},error:'Merchant bill already used.',commitment:commitmentOf({id:'INV-BEANS-001-AGAIN',payee,asset:'near',amount:near('0.1')})};
+ const pack=await cafePack(undefined,cafeView,[dupe]);
+ const AGAIN=['INV-BEANS-001-AGAIN','blocked','0.1'] as [string,string,string];
+ assert.deepEqual(pack.totals.counts,{queued:0,proposed:0,pending:0,paid:2,blocked:2,failed:0,cancelled:0});
+ const check=(answer:string,...claims:[string,string,string][])=>{const v=verifyAnswer(pack,reply(answer,claims));return v.ok?'ok':(v as any).why;};
+ // The regression from the review follow-up.
+ assert.equal(check('[INV-BEANS-003] for 0.5 NEAR. It was paid.',BEANS3),'The text says "paid" after INV-BEANS-003; the facts say blocked.');
+ for(const follow of ['It was settled.','This one has been paid.','The payment went through and it was paid.','That was paid in full.','It was paid in total.','Paid.','It failed.','It is queued.'])
+  assert.match(check(`[INV-BEANS-003] for 0.5 NEAR. ${follow}`,BEANS3),/after INV-BEANS-003; the facts say blocked/,follow);
+ assert.match(check('[INV-BEANS-001] for 0.1 NEAR. It was blocked.',BEANS1),/The text says "blocked" after INV-BEANS-001; the facts say paid/);
+ assert.equal(check('[INV-BEANS-001] for 0.1 NEAR. It was not paid.',BEANS1),'The text says INV-BEANS-001 was not paid; the facts say paid.');
+ // No invoice named anywhere before the claim.
+ assert.equal(check('The invoice was paid.'),'The text states "paid" without naming an invoice.');
+ assert.equal(check('It was blocked. [INV-BEANS-003] for 0.5 NEAR.',BEANS3),'The text states "blocked" without naming an invoice.');
+ // Repeating the outcome of the invoice just named is fine, including across several sentences.
+ for(const fine of [
+  '[INV-BEANS-003] for 0.5 NEAR. It was blocked.',
+  '[INV-BEANS-003] for 0.5 NEAR. It was not paid.',
+  '[INV-BEANS-003] for 0.5 NEAR. It was stopped by your daily budget. It was blocked, and it can be paid once you raise the budget.',
+  '[INV-BEANS-003] for 0.5 NEAR was blocked. You can wait and resume it, and it would be paid if the budget allows.',
+ ])assert.equal(check(fine,BEANS3),'ok',fine);
+ assert.equal(check('[INV-BEANS-001] for 0.1 NEAR and [INV-CUPS-004] for 0.1 NEAR. Both were paid, and the total paid to local-merchant is 0.2 NEAR.',BEANS1,CUPS4),'ok');
+ assert.match(check('[INV-BEANS-001] for 0.1 NEAR. [INV-BEANS-003] for 0.5 NEAR. It was paid.',BEANS1,BEANS3),/after INV-BEANS-003; the facts say blocked/); // "it" is the last one named
+ // The glossary's duplicate explanation says "already paid": allowed only after a duplicate.
+ const duplicate=pack.invoices[3].explanation!;
+ assert.equal(check(`[INV-BEANS-001-AGAIN] for 0.1 NEAR was blocked. ${duplicate.meaning} ${duplicate.what_to_do}`,AGAIN),'ok');
+ assert.match(check('[INV-BEANS-003] for 0.5 NEAR was blocked. It was already paid.',BEANS3),/The text says "paid" after INV-BEANS-003/);
+ // Vault-wide counts and totals need no invoice ID, but any count must be the real one.
+ for(const fine of ['Nothing failed.','No invoices were cancelled.','2 invoices were paid and 2 were blocked.','In total, 0.2 NEAR has been paid.','You have paid local-merchant 0.2 NEAR so far.'])
+  assert.equal(check(`[INV-BEANS-003] for 0.5 NEAR was blocked. ${fine}`,BEANS3),'ok',fine);
+ assert.equal(check('[INV-BEANS-003] for 0.5 NEAR was blocked. Nothing was blocked.',BEANS3),'ok'); // repeats "blocked" for the invoice just named
+ assert.equal(check('[INV-BEANS-001] for 0.1 NEAR was paid. Nothing was blocked.',BEANS1),'The text says 0 blocked; the facts say 2.');
+ assert.equal(check('[INV-BEANS-003] for 0.5 NEAR was blocked. 3 invoices were paid.',BEANS3),'The text says 3 paid; the facts say 2.');
+ assert.equal(check('[INV-BEANS-003] for 0.5 NEAR was blocked. None failed, and 5 payments were settled.',BEANS3),'The text says 5 paid; the facts say 2.');
+ // Glossary text can follow an invoice sentence. Only entries that describe a different outcome than "blocked"
+ // (a failed or part-paid invoice, or a duplicate's earlier payment) are refused after a blocked invoice.
+ const blocked=Object.entries(GLOSSARY).filter(([,e])=>check(`[INV-BEANS-003] for 0.5 NEAR was blocked. ${e.meaning} ${e.what_to_do}`,BEANS3)!=='ok').map(([key])=>key);
+ assert.deepEqual(blocked.sort(),['merchant bill already used','only authorized or expired reserved invoices can be cancelled','only confirmed failed transfers can be released','transfer_failed']);
 });
