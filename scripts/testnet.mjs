@@ -13,7 +13,7 @@ const roles = ['owner', 'executor', 'merchant', 'vault'];
 const emptyCode = '11111111111111111111111111111111';
 export function testnetConfig(network) {
   if (network !== 'testnet') throw Error('Set COUNTERSIGN_NETWORK=testnet explicitly. This command supports testnet only.');
-  return {networkId: 'testnet', nodeUrl: 'https://rpc.testnet.near.org', helperUrl: 'https://helper.testnet.near.org'};
+  return {networkId: 'testnet', nodeUrl: 'https://test.rpc.fastnear.com', helperUrl: 'https://helper.testnet.near.org'};
 }
 export function deploymentActions(wasm, owner, executor) {
   return [transactions.deployContract(wasm), transactions.functionCall('new', {owner, executor}, 100_000_000_000_000n, 0n)];

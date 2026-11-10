@@ -34,7 +34,8 @@
     "test:upgrade": "node --disable-warning=ExperimentalWarning --test integration/upgrade.test.ts",
     "test:upgrade:weekly": "node --disable-warning=ExperimentalWarning scripts/verify-upgrade-weekly.mjs",
     "testnet": "node scripts/testnet.mjs",
-    "test:testnet": "node --test scripts/testnet.test.mjs"
+    "test:testnet": "node --test scripts/testnet.test.mjs",
+    "testnet:cafe": "node --disable-warning=ExperimentalWarning scripts/testnet-cafe.mjs"
   },
   "engines": {
     "node": ">=24.0"
