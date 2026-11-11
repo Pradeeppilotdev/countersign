@@ -41,6 +41,11 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 The opt-in [testnet guide](docs/testnet.md) covers atomic deployment and the café
 verification below. The app, agent desk and local tests continue to use the local sandbox.
 
+Install the isolated tooling with `npm ci --prefix testnet --ignore-scripts`; run its
+offline checks with `npm --prefix testnet test`. Live commands use
+`COUNTERSIGN_NETWORK=testnet npm --prefix testnet run vault -- <command>` or
+`COUNTERSIGN_NETWORK=testnet npm --prefix testnet run cafe`, as detailed in the guide.
+
 ## Live on testnet
 
 Dave’s café ran on **10 November 2026** using fixture proposals and **zero live model calls**. The owner [funded 2 test NEAR](https://testnet.nearblocks.io/txns/EH15gCKNAbSx4TsGcvuDwCMUjXxMgyeYg8KV9hnphw6d) and [set the policy](https://testnet.nearblocks.io/txns/DZvaAfBUJGMoHtUNQmT3pDRxAaThYsQ9QEzPXiZ7n3VX): 0.5 per payment, 0.8 rolling daily budget, 0.01 minimum, four-hour expiry. The executor paid signed bills without per-invoice owner approval. All rejections below came from submitted contract transactions.

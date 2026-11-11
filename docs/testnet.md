@@ -22,8 +22,8 @@ crash/chain restart check. `npm run demo:verify` ended with `ALL CHECKS PASSED`.
 Rerunning testnet deploy/verify recovered the same recorded transaction hashes
 without submitting additional transactions.
 
-The `testnet` command supports **deployment and verification only**. The separate
-opt-in café command below funds the vault and exercises policy payments. Neither
+The `testnet` package’s `vault` command supports **deployment and verification only**.
+The separate opt-in café command below funds the vault and exercises policy payments. Neither
 command calls a model API. The local app, `agent:desk`, demos and tests keep their existing sandbox
 behavior, including when `COUNTERSIGN_NETWORK` is set. Use `COUNTERSIGN_PORT=4417`
 if running the app from this checkout.
@@ -34,10 +34,11 @@ Use the Node/Rust prerequisites in [the local guide](local-guide.md#quick-start)
 
 ```sh
 npm ci --ignore-scripts
+npm ci --prefix testnet --ignore-scripts
 cargo build --locked --manifest-path contract/Cargo.toml --target wasm32-unknown-unknown --release
-COUNTERSIGN_NETWORK=testnet npm run testnet -- accounts
-COUNTERSIGN_NETWORK=testnet npm run testnet -- deploy
-COUNTERSIGN_NETWORK=testnet npm run testnet -- verify
+COUNTERSIGN_NETWORK=testnet npm --prefix testnet run vault -- accounts
+COUNTERSIGN_NETWORK=testnet npm --prefix testnet run vault -- deploy
+COUNTERSIGN_NETWORK=testnet npm --prefix testnet run vault -- verify
 ```
 
 The network selector is mandatory for this command. Only `testnet` is accepted;
@@ -72,7 +73,7 @@ storage/gas but is not a deposit through the owner-only `fund` method.
 Read current controls/budget without loading keys or sending transactions:
 
 ```sh
-COUNTERSIGN_NETWORK=testnet npm run testnet -- status
+COUNTERSIGN_NETWORK=testnet npm --prefix testnet run vault -- status
 ```
 
 ## Local files and interrupted runs
@@ -101,13 +102,15 @@ no production custody/key-removal claim.
 ## Checks and explorer links
 
 ```sh
-npm run test:testnet  # offline selector, atomic actions and rejection-proof checks
+npm --prefix testnet test  # offline deployment, journal recovery and rejection checks
 cargo test --locked --manifest-path contract/Cargo.toml
 COUNTERSIGN_PORT=4417 npm run demo:verify
 ```
 
-The full local verification runner includes the offline deployment checks.
-It never submits a testnet transaction. Public account pages use
+CI runs the isolated testnet checks separately from the local verification runner.
+Neither check submits a testnet transaction. The separate package pins `near-api-js`
+to `5.1.1` without changing the root lockfile required by the pinned upgrade test.
+Public account pages use
 `https://testnet.nearblocks.io/address/ACCOUNT`; transactions use
 `https://testnet.nearblocks.io/txns/HASH`. Deployment output prints the account
 page; the verified hashes are recorded in `verification.json`.
@@ -117,7 +120,7 @@ page; the verified hashes are recorded in `verification.json`.
 From the same checkout, with the Step 1 accounts and keys still in `work/testnet/`:
 
 ```sh
-COUNTERSIGN_NETWORK=testnet npm run testnet:cafe
+COUNTERSIGN_NETWORK=testnet npm --prefix testnet run cafe
 ```
 
 This is an explicit live testnet action. It deposits **2 faucet NEAR** from the
@@ -149,11 +152,18 @@ records, process-kill observations, full RPC outcomes and the final report stay 
 whole directory or credential files. The README links to a reviewed public report.
 
 Reruns reuse the saved plan, transaction hashes and completed cases; they do not
-fund again or reset policy usage. A completed run prints its saved report. If a
-network send is uncertain, the recorded hash is queried without signing a
-replacement. Requests are paced; RPC 429 responses get at most three bounded
-backoff retries of the same request against the same public endpoint. Unknown
-transactions or changed arguments stop the runner. Do not
+fund again or reset policy usage. A completed run prints its saved report. New
+café journals contain the full encoded signed transaction in base64, saved before
+sending alongside its hash. These bytes
+contain a signature, not a private key. A retry broadcasts exactly those bytes
+with the same nonce and hash, then waits for FINAL; it never signs a replacement.
+If the node already knows or has processed the transaction, the runner queries
+the saved hash. If broadcast reports expiry and status reports unknown, the
+record is marked `never_sent` with a reason and stops for manual inspection.
+An RPC outage alone cannot establish that state. Legacy hash-only journals query
+status once and stop clearly if unresolved; they cannot safely re-broadcast.
+Changed arguments are rejected before any send. Requests are paced; RPC 429
+responses keep their three bounded backoff retries against the same endpoint. Do not
 delete journals to force a retry, and do not reuse this harness to alter a vault
 that has unrelated policy activity. An expired unfinished plan needs inspection;
 the runner does not silently renew its permissions or invoices.
@@ -162,7 +172,7 @@ For the specific case where (a)–(d) finished but the unstarted restart invoice
 rejected for expiry, the inspected recovery command is:
 
 ```sh
-COUNTERSIGN_NETWORK=testnet npm run testnet:cafe -- --renew-unstarted-restart
+COUNTERSIGN_NETWORK=testnet npm --prefix testnet run cafe -- --renew-unstarted-restart
 ```
 
 It requires no payment/auth record or reservation for that invoice, verifies the

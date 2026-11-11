@@ -35,10 +35,7 @@
     "test:weekly": "node --disable-warning=ExperimentalWarning --test integration/weekly-service.test.ts",
     "test:weekly:correction": "node --disable-warning=ExperimentalWarning --test integration/weekly-correction.test.ts",
     "test:upgrade": "node --disable-warning=ExperimentalWarning --test integration/upgrade.test.ts",
-    "test:upgrade:weekly": "node --disable-warning=ExperimentalWarning scripts/verify-upgrade-weekly.mjs",
-    "testnet": "node scripts/testnet.mjs",
-    "test:testnet": "node --test scripts/testnet.test.mjs",
-    "testnet:cafe": "node --disable-warning=ExperimentalWarning scripts/testnet-cafe.mjs"
+    "test:upgrade:weekly": "node --disable-warning=ExperimentalWarning scripts/verify-upgrade-weekly.mjs"
   },
   "engines": {
     "node": ">=24.0"
@@ -48,7 +45,6 @@
   },
   "dependencies": {
     "@defuse-protocol/one-click-sdk-typescript": "0.1.26",
-    "near-api-js": "5.1.1",
     "proper-lockfile": "4.1.2"
   },
   "overrides": {

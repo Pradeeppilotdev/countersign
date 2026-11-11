@@ -35,7 +35,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
   const config = testnetConfig(process.env.COUNTERSIGN_NETWORK);
   const command = process.argv[2];
-  if (!['accounts', 'deploy', 'verify', 'status'].includes(command)) throw Error('Usage: npm run testnet -- accounts|deploy|verify|status');
+  if (!['accounts', 'deploy', 'verify', 'status'].includes(command)) throw Error('Usage: npm --prefix testnet run vault -- accounts|deploy|verify|status');
   process.umask(0o077);
   mkdirSync(directory, {recursive: true, mode: 0o700});
   chmodSync(directory, 0o700);

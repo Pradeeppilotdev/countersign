@@ -21,7 +21,7 @@ export async function retryRateLimited(call, wait = delay) {
 export const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 export function saveJson(path, value) {
   mkdirSync(join(path, '..'), {recursive: true, mode: 0o700});
-  writeFileSync(path + '.tmp', JSON.stringify(value, null, 2) + '\n', {mode: 0o600});
+  writeFileSync(path + '.tmp', JSON.stringify(value, null, 2) + '\n', {mode: 0o600, flush: true});
   renameSync(path + '.tmp', path);
 }
 export function success(outcome) {
@@ -40,7 +40,24 @@ export function evidence(outcome) {
     actions: outcome.transaction.actions, status: outcome.status, block_hash: outcome.transaction_outcome.block_hash,
     receipts: outcome.receipts_outcome.map(r => ({id: r.id, executor: r.outcome.executor_id, status: r.outcome.status, logs: r.outcome.logs}))};
 }
-// Record the exact call before sending; unknown outcomes must never create a replacement.
+function expiredTransaction(error) {
+  return error?.type === 'Expired' || /\btransaction (?:has )?expired\b/i.test(error?.message ?? '');
+}
+function unknownTransaction(error) {
+  return [error?.type, error?.name, error?.cause?.name].some(type => ['UNKNOWN_TRANSACTION', 'UnknownTransaction'].includes(type)) ||
+    /\bUNKNOWN_TRANSACTION\b|\bunknown transaction\b|\btransaction\b.*\b(?:not found|does not exist|doesn't exist)\b/i.test(error?.message ?? '');
+}
+function validateSignedBytes(record, request) {
+  const bytes = Buffer.from(record.signed_transaction_base64, 'base64');
+  assert.equal(bytes.toString('base64'), record.signed_transaction_base64, 'Invalid saved transaction encoding');
+  const signed = transactions.SignedTransaction.decode(bytes);
+  const hash = createHash('sha256').update(transactions.encodeTransaction(signed.transaction)).digest();
+  assert.equal(utils.serialize.base_encode(hash), record.hash, 'Saved transaction bytes do not match the recorded hash');
+  assert.equal(signed.transaction.signerId, request.signer, 'Saved transaction signer changed');
+  assert.equal(signed.transaction.receiverId, request.receiver, 'Saved transaction receiver changed');
+}
+// Save the complete signed envelope before sending. Replays use identical bytes,
+// hash and nonce; neither a crash nor an unknown outcome authorizes another signature.
 export async function recordedCall({path, provider, sign, request}) {
   const binding = createHash('sha256').update(JSON.stringify(request)).digest('hex');
   let record;
@@ -49,18 +66,49 @@ export async function recordedCall({path, provider, sign, request}) {
     assert.equal(record.binding, binding, 'Recorded transaction arguments changed');
   } else {
     const [hash, signed] = await sign();
-    record = {binding, request, hash: utils.serialize.base_encode(hash)};
+    record = {binding, request, hash: utils.serialize.base_encode(hash),
+      signed_transaction_base64: Buffer.from(transactions.encodeTransaction(signed)).toString('base64')};
+    validateSignedBytes(record, request);
     saveJson(path, record);
-    const outcome = await provider.sendTransactionUntil(signed, 'FINAL');
-    if (outcome.final_execution_status === 'FINAL') { record.outcome = outcome; saveJson(path, record); }
   }
-  if (!record.outcome) {
-    record.outcome = await provider.txStatus(record.hash, request.signer, 'FINAL');
+  if (record.state === 'never_sent') throw Error(`Transaction marked never_sent: ${record.reason} No replacement will be signed automatically; manual review required.`);
+  if (record.outcome) {
     assert.equal(record.outcome.final_execution_status, 'FINAL');
-    saveJson(path, record);
+    assert.equal(record.outcome.transaction.hash, record.hash);
+    return record.outcome;
   }
-  assert.equal(record.outcome.transaction.hash, record.hash);
-  return record.outcome;
+  let outcome;
+  if (record.signed_transaction_base64) {
+    validateSignedBytes(record, request);
+    try {
+      outcome = await provider.sendJsonRpc('send_tx', {signed_tx_base64: record.signed_transaction_base64, wait_until: 'FINAL'});
+    } catch (sendError) {
+      // Already-known/processed transactions (and lost send responses) reconcile
+      // to this same hash. An RPC outage is not evidence that a transaction expired.
+      try { outcome = await provider.txStatus(record.hash, request.signer, 'FINAL'); }
+      catch (statusError) {
+        if (expiredTransaction(sendError) && unknownTransaction(statusError)) {
+          record.state = 'never_sent';
+          record.reason = 'The saved signed transaction expired and the RPC reports it unknown.';
+          saveJson(path, record);
+          throw Error(`Transaction marked never_sent: ${record.reason} No replacement will be signed automatically; manual review required.`);
+        }
+        throw Error('Saved transaction is still unconfirmed. Retry will re-broadcast the identical saved bytes, never sign a replacement.', {cause: statusError});
+      }
+    }
+  } else {
+    // Existing hash-only journals cannot reconstruct the original signature/nonce.
+    try { outcome = await provider.txStatus(record.hash, request.signer, 'FINAL'); }
+    catch (error) {
+      throw Error('Legacy transaction record has no saved signed bytes and its hash could not be confirmed. Manual reconciliation required; no replacement was signed.', {cause: error});
+    }
+  }
+  if (outcome.final_execution_status !== 'FINAL') outcome = await provider.txStatus(record.hash, request.signer, 'FINAL');
+  assert.equal(outcome.final_execution_status, 'FINAL', 'Transaction has not reached FINAL; saved transaction retained');
+  assert.equal(outcome.transaction.hash, record.hash, 'RPC outcome does not match the saved transaction');
+  record.outcome = outcome;
+  saveJson(path, record);
+  return outcome;
 }
 function credential(role, accounts) {
   assert.ok(['owner', 'executor', 'merchant'].includes(role));
