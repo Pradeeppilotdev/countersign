@@ -2,7 +2,7 @@ import {$,el,icon,badge,button,notice,emptyState,api} from './components.js';
 
 const root=$('#agent-payments'),list=$('#agent-bills'),feedback=$('#agent-feedback');
 let state=null,busy=false,reading=false,revision=0;
-const liveChoices=new Map();
+const liveChoices=new Map(),requestErrors=new Map();
 const labels={paid:['Paid','success'],blocked:['Blocked','danger'],failed:['Blocked','danger'],pending:['Pending','warning'],queued:['Queued','neutral'],proposed:['Queued','neutral'],cancelled:['Cancelled','neutral']};
 function lock(){
  root.setAttribute('aria-busy',String(busy||reading));
@@ -40,6 +40,9 @@ function renderBills(){
   if(bill.error||bill.explanation){
    const reason=el('div');notice(reason,bill.error??label,tone,bill.explanation?.meaning??'');card.append(reason);
   }
+  if(requestErrors.has(bill.id)){
+   const failure=el('div');notice(failure,'Last request failed','danger',requestErrors.get(bill.id));card.append(failure);
+  }
   const actions=el('div','','invoice-actions');
   if(['queued','proposed'].includes(bill.outcome)){
    const live=el('input');live.type='checkbox';live.checked=liveChoices.get(bill.id)??false;
@@ -74,7 +77,7 @@ export async function refreshAgentPayments(){
  finally{reading=false;lock();}
 }
 async function mutate(path,body,message){
- if(busy)return;revision++;busy=true;lock();notice(feedback,message,'busy');
+ if(busy)return;revision++;busy=true;requestErrors.delete(body.id);lock();notice(feedback,message,'busy');
  try{
   const reply=await api(path,body);if(!reply.ok)throw Error(reply.error);
   render(reply.state);
@@ -82,7 +85,17 @@ async function mutate(path,body,message){
   const [label,tone]=labels[reply.record.outcome]??['Pending','warning'];
   notice(feedback,reply.already_imported?'Already imported':path.endsWith('/import')?'Signed bill imported':label,
    reply.already_imported?'info':tone,reply.already_imported?'The existing bill and its payment record are unchanged.':reply.record.error??reply.record.id);
- }catch(error){notice(feedback,'Request could not be completed','danger',error.message);}
+ }catch(error){
+  if(body.id)requestErrors.set(body.id,error.message);
+  // A failed response can still have changed the durable bill. Read it back
+  // without submitting anything, and retain the request error on that bill.
+  try{
+   const reply=await api('/api/agent/state');
+   if(!reply.ok)throw Error(reply.error);
+   render(reply.state);
+  }catch{renderBills();} // Keep the original error even when this read also fails.
+  notice(feedback,'Request could not be completed','danger',error.message);
+ }
  finally{busy=false;lock();}
 }
 $('#agent-refresh').addEventListener('click',refreshAgentPayments);
