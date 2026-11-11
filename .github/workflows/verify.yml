@@ -35,6 +35,10 @@ jobs:
         run: |
           npm ci --prefix mcp --ignore-scripts
           npm audit --prefix mcp --audit-level=high
+      - name: Verify the isolated testnet tooling offline
+        run: |
+          npm ci --prefix testnet --ignore-scripts
+          npm --prefix testnet test
       - name: Install the contract toolchain
         run: |
           rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
