@@ -13,11 +13,17 @@ async function stop(signal){const p=child;if(p.exitCode!==null){child=null;retur
 async function checkAttackResults() {
  const desk = await fetch(base);
  assert.match(await desk.text(), /href="\/attack-results\/"/);
+ for(const [asset,type] of [['/app.js','text/javascript'],['/sandbox.js','text/javascript'],['/components.js','text/javascript'],['/state.js','text/javascript'],['/style.css','text/css'],['/logo.svg','image/svg+xml'],['/fonts/manrope.ttf','font/ttf']]){
+  const response=await fetch(base+asset);assert.equal(response.status,200,asset);assert.equal(response.headers.get('content-type'),type,asset);
+  assert.ok((await response.arrayBuffer()).byteLength>0,asset);
+ }
  const redirect = await fetch(base + '/attack-results', {redirect:'manual'});
  assert.equal(redirect.status, 308);
  assert.equal(redirect.headers.get('location'), '/attack-results/');
  const page = await fetch(base + '/attack-results/');
  assert.equal(page.status, 200);
+ assert.match(page.headers.get('content-security-policy'),/img-src 'self'/);
+ assert.match(page.headers.get('content-security-policy'),/font-src 'self'/);
  const article = await page.text();
  assert.ok(article.includes('npm run test:upgrade:weekly'));
  assert.ok(article.includes('href="result.json"'));

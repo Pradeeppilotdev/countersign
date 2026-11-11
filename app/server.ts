@@ -12,6 +12,8 @@ const port=Number(process.env.COUNTERSIGN_PORT ?? process.env.AEGIS_PORT ?? 4317
 const assets: Record<string,[string,string]>={
  '/':['public/index.html','text/html'], '/app.js':['public/app.js','text/javascript'],
  '/sandbox.js':['public/sandbox.js','text/javascript'], '/style.css':['public/style.css','text/css'],
+ '/components.js':['public/components.js','text/javascript'], '/state.js':['public/state.js','text/javascript'],
+ '/logo.svg':['public/logo.svg','image/svg+xml'], '/fonts/manrope.ttf':['public/fonts/manrope.ttf','font/ttf'],
  '/attack-results/style.css':['public/attack-results.css','text/css'],
  '/attack-results/result.json':['../docs/attack-results/result.json','application/json'],
 };
@@ -31,7 +33,7 @@ const server=createServer(async(req,res)=>{
    // GitHub renders this same repository-owned HTML fragment in its README viewer.
    const report=readFileSync(new URL('../docs/attack-results/README.md',import.meta.url),'utf8');
    const template=readFileSync(new URL('public/attack-results.html',import.meta.url),'utf8');
-   res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+   res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
    return res.end(template.replace('<!-- attack-results -->',()=>report));
   }
