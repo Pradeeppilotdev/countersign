@@ -19,6 +19,8 @@ const assets: Record<string,[string,string]>={
  '/components.js':['public/components.js','text/javascript'], '/state.js':['public/state.js','text/javascript'],
  '/agent-payments.js':['public/agent-payments.js','text/javascript'], '/agent-payments.css':['public/agent-payments.css','text/css'],
  '/ask-source.js':['public/ask-source.js','text/javascript'],
+ '/ask-shared.js':['public/ask-shared.js','text/javascript'], '/ask-widget.js':['public/ask-widget.js','text/javascript'], '/ask-suggest.js':['public/ask-suggest.js','text/javascript'],
+ '/ask-widget.css':['public/ask-widget.css','text/css'],
  '/logo.svg':['public/logo.svg','image/svg+xml'], '/fonts/manrope.ttf':['public/fonts/manrope.ttf','font/ttf'],
  '/attack-results/style.css':['public/attack-results.css','text/css'],
  '/attack-results/result.json':['../docs/attack-results/result.json','application/json'],

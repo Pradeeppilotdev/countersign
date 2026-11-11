@@ -16,9 +16,12 @@ import {
   simulationState,
   createQuoteSelection,
 } from "./state.js";
-import { refreshAgentPayments } from "./agent-payments.js";
+import { refreshAgentPayments, askFromBill } from "./agent-payments.js";
 import { askSourceLabels } from "./ask-source.js";
+import { askCard, setBusy, setAnswer, setCardError, askDave, checkAccount, appendFollowUps } from "./ask-shared.js";
+import { createAskWidget } from "./ask-widget.js";
 mountIcons();
+let askWidgetView = null;
 function navigate() {
   const view =
     location.hash === "#agent-payments"
@@ -46,6 +49,7 @@ function navigate() {
   document.title = "Countersign · " + $("#page-label").textContent;
   if (view === "ask-dave") refreshAskSource();
   if (view === "agent-payments") refreshAgentPayments();
+  if (askWidgetView) askWidgetView(view);
 }
 window.addEventListener("hashchange", navigate);
 navigate();
@@ -372,61 +376,35 @@ const askForm = $("#ask-question-form"),
   checkBtn = $("#ask-check-button"),
   checkBtnLabel = $("#ask-check-label");
 
-function askCard(label, isAccount) {
-  const card = el("article", "", "ask-card"),
-    head = el("header", "", "ask-card-head"),
-    body = el("div", "", "ask-card-body");
-  head.append(el("h3", label, "ask-card-title"));
-  card.append(head, body);
-  return { card, head, body };
-}
-function setBusy(body, isAccount) {
-  body.replaceChildren(el("p", isAccount ? "Checking the account…" : "Asking Dave…", "ask-loading"));
-}
-function setAnswer(head, body, text, isAccount) {
-  body.replaceChildren();
-  body.classList.remove("has-error");
-  for (const line of String(text).split("\n"))
-    body.append(el("div", line, line.startsWith("Sources:") ? "ask-sources" : "ask-line"));
-  if (isAccount) {
-    const t = String(text),
-      verdict = t.startsWith("STOP")
-        ? ["STOP", "danger"]
-        : t.startsWith("WARN")
-          ? ["WARN", "warning"]
-          : t.startsWith("PAY")
-            ? ["PAY", "success"]
-            : null;
-    if (verdict) head.append(badge(verdict[0], verdict[1]));
-  }
-}
-function setCardError(body, message) {
-  setAnswer(null, body, message, false);
-  body.classList.add("has-error");
-}
-function prependCard(card) {
+function prependAskCard(card) {
   if (askEmpty) {
     askEmpty.remove();
     askEmpty = null;
   }
   askList.prepend(card);
 }
-async function runAsk(kind, label, payload, button, labelNode, busyText) {
+async function runAskCard(kind, label, payload, button, labelNode, busyText) {
   const isAccount = kind === "account",
-    { card, head, body } = askCard(label, isAccount);
-  prependCard(card);
-  setBusy(body, isAccount);
+    { card, head, body } = askCard(label);
+  prependAskCard(card);
+  setBusy(body, isAccount ? "Checking the account…" : "Asking Dave…");
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
   const original = labelNode.textContent;
   labelNode.textContent = busyText;
   try {
-    const data = await api("/api/ask", payload);
+    const data = isAccount ? await checkAccount(payload.account) : await askDave(payload.text);
     if (data.source) {
       const labels = showAskSource(data.source);
       card.insertBefore(el("p", "Source: " + (isAccount ? labels.account : labels.question), "ask-sources"), body);
     }
-    if (data.ok && data.text != null) setAnswer(head, body, data.text, isAccount);
+    if (data.ok && data.text != null) {
+      setAnswer(head, body, data.text, isAccount);
+      if (!isAccount) appendFollowUps(card, label, data, (suggestion) => {
+        askTextInput.value = suggestion;
+        askForm.requestSubmit();
+      });
+    }
     else setCardError(body, data.error ?? "No answer.");
   } catch (error) {
     setCardError(body, error.message);
@@ -441,14 +419,14 @@ askForm.addEventListener("submit", (event) => {
   if (askBtn.disabled) return;
   const text = askTextInput.value.trim();
   if (!text) return;
-  runAsk("question", text, { kind: "question", text }, askBtn, askBtnLabel, "Asking…");
+  runAskCard("question", text, { text }, askBtn, askBtnLabel, "Asking…");
 });
 accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (checkBtn.disabled) return;
   const account = accountInput.value.trim();
   if (!account) return;
-  runAsk("account", "Account: " + account, { kind: "account", account }, checkBtn, checkBtnLabel, "Checking…");
+  runAskCard("account", "Account: " + account, { account }, checkBtn, checkBtnLabel, "Checking…");
 });
 document
   .querySelectorAll("#ask-dave .chip")
@@ -460,3 +438,9 @@ document
       askForm.requestSubmit();
     }),
   );
+
+// --- Ask Dave everywhere (floating button + panel) -------------------------
+const askWidget = createAskWidget();
+askFromBill((bill) => askWidget.askForBill(bill));
+askWidgetView = (view) => askWidget.setOnAskDaveView(view === "ask-dave");
+askWidgetView(location.hash === "#ask-dave" ? "ask-dave" : null);

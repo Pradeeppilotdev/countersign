@@ -1,7 +1,9 @@
 import {$,el,icon,badge,button,notice,emptyState,api} from './components.js';
 
 const root=$('#agent-payments'),list=$('#agent-bills'),feedback=$('#agent-feedback');
-let state=null,busy=false,reading=false,revision=0;
+let state=null,busy=false,reading=false,revision=0,billAskHandler=null;
+// app.js registers the handler that opens the shared Ask Dave panel.
+export function askFromBill(handler){billAskHandler=handler;}
 const liveChoices=new Map(),requestErrors=new Map();
 const labels={paid:['Paid','success'],blocked:['Blocked','danger'],failed:['Blocked','danger'],pending:['Pending','warning'],queued:['Queued','neutral'],proposed:['Queued','neutral'],cancelled:['Cancelled','neutral']};
 function lock(){
@@ -52,7 +54,8 @@ function renderBills(){
   }else if(bill.outcome==='pending'||(bill.outcome==='blocked'&&bill.has_proposal)){
    actions.append(button('Resume',()=>mutate('/api/agent/resume',{id:bill.id},'Resuming the saved payment…'),{tone:'secondary'}));
   }
-  if(actions.childElementCount)card.append(actions);
+   actions.append(button('Ask Dave',()=>{if(billAskHandler)billAskHandler(bill);},{tone:'ghost'}));
+   card.append(actions);
   if(bill.outcome==='paid'){
    const receipt=el('details','','invoice-meta');receipt.dataset.invoice=bill.id;receipt.open=expanded.has(bill.id);
    receipt.append(el('summary','Receipt'),el('code','Attempt ID: '+(bill.attempt_id??'Unavailable')),
