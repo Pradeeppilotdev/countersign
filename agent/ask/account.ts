@@ -5,6 +5,7 @@
 // recent transactions), cached on disk for an hour. No keys, no signer, no transactions.
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {lookalike} from './check.ts';
 import {formatNear,type FactsPack} from './facts.ts';
 import {AskError,validAccount} from './views.ts';
@@ -84,7 +85,7 @@ export type AccountOptions={network:Network;directory:string;pack?:FactsPack|nul
 export async function checkAccount(account:string,options:AccountOptions):Promise<AccountCheck>{
  if(!validAccount(account))throw new AskError('Ask Dave: that is not a valid NEAR account ID.');
  const {network,directory}=options,send=options.send??fetch,now=options.now??Date.now();
- const cacheDir=options.cacheDir??new URL('../../work/ask-cache/',import.meta.url).pathname;
+ const cacheDir=options.cacheDir??fileURLToPath(new URL('../../work/ask-cache/',import.meta.url));
  const url=network==='local'?localRpc(directory):RPC[network];
  const rpcName=network==='local'?'local sandbox RPC':`FastNEAR ${network} RPC`;
  const facts:string[]=[],sources:string[]=[],reasons:string[]=[];

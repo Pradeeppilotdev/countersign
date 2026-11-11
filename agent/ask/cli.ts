@@ -2,8 +2,8 @@
 // All four only read. A question makes one model call with no tools; --account makes none.
 import {readFileSync,statSync} from 'node:fs';
 import {askQuestion} from './answer.ts';
-import {checkAccount,networkFrom,renderAccount} from './account.ts';
-import {checkInvoice} from './check.ts';
+import {checkAccount,networkFrom,renderAccount,type AccountCheck} from './account.ts';
+import {checkInvoice,invoiceVerdict} from './check.ts';
 import {collectFacts,openSources} from './facts.ts';
 import {modelConfig,nearChat} from './model.ts';
 import {AskError} from './views.ts';
@@ -17,14 +17,24 @@ export async function askCommand(args:string[],directory:string):Promise<string>
   try{if(statSync(second).size>16384)throw Error('too large');raw=JSON.parse(readFileSync(second,'utf8'));}
   catch{throw new AskError('Ask Dave: that invoice file could not be read.');}
   const {reader,pack}=await openSources(directory); // same vault/inbox identity check as --facts
-  const result:Record<string,unknown>=await checkInvoice(raw,{vault:reader.vault,view:reader.view,pack});
+  const result=await checkInvoice(raw,{vault:reader.vault,view:reader.view,pack});
   // Would you pay this account? The same code verdict as ask --account, for the invoice's payee.
-  const payee=(result.invoice as {payee?:string}|null)?.payee;
+  const payee=result.invoice?.payee;
+  let payee_account:AccountCheck|{verdict:null;unavailable:string}|undefined;
   if(payee){
-   try{result.payee_account=await checkAccount(payee,{network:networkFrom(process.env.COUNTERSIGN_NETWORK),directory,pack});}
-   catch(error){if(!(error instanceof AskError))throw error;result.payee_account={verdict:null,unavailable:error.message};}
+   try{
+    // openSources reads a local vault. The network preference is only for standalone --account.
+    payee_account=await checkAccount(payee,{network:'local',directory,pack});
+    result.checks.push({check:'payee_account',result:payee_account.verdict==='STOP'?'bad':payee_account.verdict==='WARN'?'caution':'good',
+     reason:payee_account.verdict==='PAY'?'A pinned supplier payout account with paid history.':payee_account.reasons.join(' ')});
+   }catch(error){
+    if(!(error instanceof AskError))throw error;
+    payee_account={verdict:null,unavailable:error.message};
+    result.checks.push({check:'payee_account',result:'cannot verify',reason:error.message});
+   }
+   result.verdict=invoiceVerdict(result.checks);
   }
-  return JSON.stringify(result,null,2);
+  return JSON.stringify({...result,payee_account},null,2);
  }
  if(first==='--account'&&args.length===2){
   const network=networkFrom(process.env.COUNTERSIGN_NETWORK);

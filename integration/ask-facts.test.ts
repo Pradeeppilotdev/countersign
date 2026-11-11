@@ -24,7 +24,8 @@ const exec=promisify(execFile);
 test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budget, queued and weekly bills',{timeout:420000},async()=>{
  const directory=mkdtempSync(join(tmpdir(),'countersign-ask-'));
  const run=(...args:string[])=>exec(process.execPath,['--disable-warning=ExperimentalWarning','agent/desk.ts',...args],{
-  cwd:root,env:{...process.env,COUNTERSIGN_AGENT_DIR:directory,NEAR_AI_API_KEY:'',NEAR_AI_MODEL:''},timeout:90000,maxBuffer:8<<20,
+  // A public-network preference must never move a local invoice's account check off this chain.
+  cwd:root,env:{...process.env,COUNTERSIGN_AGENT_DIR:directory,COUNTERSIGN_NETWORK:'testnet',NEAR_AI_API_KEY:'',NEAR_AI_MODEL:''},timeout:90000,maxBuffer:8<<20,
  });
  const cli=async(...args:string[])=>{const {stdout}=await run(...args);return JSON.parse(stdout.slice(stdout.search(/^[\[{]/m)));};
  const refused=async(reason:RegExp,...args:string[])=>assert.rejects(()=>run(...args),(error:any)=>{assert.equal(error.code,1);assert.match(error.stderr,reason);return true;});
@@ -148,7 +149,7 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
 
   // "Is this invoice OK?" on real files, through the CLI. Still nothing changes.
   const check=async(file:string)=>{const result=await cli('ask','--check',file);return [result.verdict,Object.fromEntries(result.checks.map((c:any)=>[c.check,c.result]))];};
-  const allGood={pinned_payee:'good',signature:'good',already_paid:'good',fits_policy:'good',lookalike:'good',amount_vs_median:'good'};
+  const allGood={pinned_payee:'good',signature:'good',already_paid:'good',fits_policy:'good',lookalike:'good',amount_vs_median:'good',payee_account:'good'};
   assert.deepEqual(await check(join(directory,'INV-NAPKINS-005.json')),['good',allGood]);
   // Would you pay this account? The payee verdict comes from the real local RPC: pinned, already paid by this vault.
   const payeeCheck=(await cli('ask','--check',join(directory,'INV-NAPKINS-005.json'))).payee_account;

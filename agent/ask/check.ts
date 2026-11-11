@@ -9,6 +9,7 @@ import {validAccount,type View} from './views.ts';
 // 'cannot verify' means the evidence needed to call a check good is missing. It is never rounded up to good.
 export type Grade='good'|'caution'|'cannot verify'|'bad';
 export type Check={check:string;result:Grade;reason:string};
+export const invoiceVerdict=(checks:Check[]):Grade=>checks.some(c=>c.result==='bad')?'bad':checks.some(c=>c.result==='cannot verify')?'cannot verify':checks.some(c=>c.result==='caution')?'caution':'good';
 type Bill={invoice:{id:string;payee:string;asset:string;amount:string};merchant_id:string;bill_id?:string;vault?:string;domain?:string;key_version?:string;expires_at?:string;service?:{agreement_id:string;period_start_ms:string};signature?:string};
 
 const id=/^[A-Za-z0-9_.:-]{1,128}$/,number=/^[0-9]{1,39}$/;
@@ -54,7 +55,7 @@ export async function checkInvoice(raw:unknown,source:{vault:string;view:View;pa
  const add=(check:string,result:Grade,reason:string)=>checks.push({check,result,reason});
  const finish=(bill:Bill|null)=>({
   kind:'countersign.ask-dave.invoice-check',read_only:true,
-  verdict:(checks.some(c=>c.result==='bad')?'bad':checks.some(c=>c.result==='cannot verify')?'cannot verify':checks.some(c=>c.result==='caution')?'caution':'good') as Grade,
+  verdict:invoiceVerdict(checks),
   invoice:bill?{id:bill.invoice.id,merchant:bill.merchant_id,payee:bill.invoice.payee,amount_near:formatNear(bill.invoice.amount),bill_id:bill.bill_id??null}:null,
   checks,
  });

@@ -1,9 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {buildFacts,formatNear,reasonCode} from './ask/facts.ts';
 import {readInbox} from './ask/inbox-reader.ts';
@@ -30,7 +30,7 @@ const near=(n:string)=>{const [w,f='']=n.split('.');return (BigInt(w)*10n**24n+B
 test('Ask Dave module imports no signing or transaction code',()=>{
  // Only these may be loaded by anything under agent/ask: file reads, SQLite, .env parsing,
  // signature verification and its own files.
- const allowed=new Set(['node:fs','node:path','node:sqlite','node:util','node:crypto']);
+ const allowed=new Set(['node:fs','node:path','node:url','node:sqlite','node:util','node:crypto']);
  const files=readdirSync(askDir,{recursive:true}).map(String).filter(f=>f.endsWith('.ts'));
  assert.deepEqual(files.sort(),['account.ts','answer.ts','check.ts','cli.ts','facts.ts','glossary.ts','inbox-reader.ts','model.ts','receipt.ts','views.ts']);
  for(const file of files){
@@ -712,3 +712,113 @@ test('account check: NearBlocks 429 gives "age unknown", backs off, and never cr
  }finally{rmSync(cache,{recursive:true,force:true});}
 });
 const HOUR_MS=3_600_000;
+
+test('ask --check includes account findings in the overall invoice verdict without weakening other checks',async t=>{
+ const cases=[
+  {name:'missing payee',account:'missing',history:true,verdict:'bad',accountVerdict:'STOP',grade:'bad',reason:/Account does not exist/},
+  {name:'pinned but never paid',account:'exists',history:false,verdict:'caution',accountVerdict:'WARN',grade:'caution',reason:/never paid/},
+  {name:'account RPC unavailable',account:'unavailable',history:true,verdict:'cannot verify',accountVerdict:null,grade:'cannot verify',reason:/RPC is not answering/},
+  {name:'known paid payee',account:'exists',history:true,verdict:'good',accountVerdict:'PAY',grade:'good',reason:/pinned supplier payout/},
+  {name:'tampered invoice with known payee',account:'exists',history:true,tampered:true,verdict:'bad',accountVerdict:'PAY',grade:'good',reason:/pinned supplier payout/},
+  {name:'tampered invoice with unavailable account',account:'unavailable',history:true,tampered:true,verdict:'bad',accountVerdict:null,grade:'cannot verify',reason:/RPC is not answering/},
+  {name:'missing vault evidence with a warning',account:'exists',history:false,missingView:true,verdict:'cannot verify',accountVerdict:'WARN',grade:'caution',reason:/never paid/},
+  {name:'over-budget invoice with known payee',account:'exists',history:true,overBudget:true,verdict:'caution',accountVerdict:'PAY',grade:'good',reason:/pinned supplier payout/},
+ ] as const;
+ for(const c of cases)await t.test(c.name,async t=>{
+  const {dir,file}=vaultDir(3030,`session-1:${vaultId}`);
+  const net=accountNet({exists:c.account!=='missing'}),requests:any[]=[];
+  if(c.history){
+   const row=cafeInbox()[0],db=new DatabaseSync(join(dir,'inbox.db'));
+   try{db.prepare('INSERT INTO inbox(id,invoice,merchant,commitment,state,signed_invoice) VALUES(?,?,?,?,?,?)')
+    .run(row.id,JSON.stringify(row.invoice),row.merchant,row.commitment,row.state,JSON.stringify(signInvoice(cafeBill(row.id,'0.1',row.signed.bill_id),pair.privateKey)));}
+   finally{db.close();}
+  }
+  const bill=signInvoice(cafeBill('INV-Z','overBudget' in c?'0.5':'0.1','BILL-Z'),pair.privateKey);
+  if('tampered' in c)bill.invoice.amount=near('0.2');
+  writeFileSync(file,JSON.stringify(bill));
+  const before=readFileSync(join(dir,'inbox.db'));
+  t.mock.method(globalThis,'fetch',async(url:any,init:any)=>{
+   assert.equal(new URL(String(url)).origin,'http://127.0.0.1:3030');
+   const body=JSON.parse(String(init.body));requests.push(body);
+   if(body.method==='block')return Response.json({result:{header:{height:9}}});
+   if(body.params.request_type==='call_function'){
+    if('missingView' in c&&body.params.method_name==='requires_service_period')return Response.json({error:{name:'MethodNotFound'}});
+    const value=await cafeView(body.params.method_name,JSON.parse(Buffer.from(body.params.args_base64,'base64').toString()));
+    return Response.json({result:{result:[...Buffer.from(JSON.stringify(value))]}});
+   }
+   if(c.account==='unavailable')throw Error('fixture RPC outage');
+   return net.send(url,init);
+  });
+  try{
+   const result=JSON.parse(await askCommand(['--check',file],dir));
+   assert.equal(result.verdict,c.verdict);
+   assert.equal(result.payee_account.verdict,c.accountVerdict);
+   const check=result.checks.find((v:any)=>v.check==='payee_account');
+   assert.equal(check?.result,c.grade);assert.match(check.reason,c.reason);
+   if(c.account==='unavailable')assert.match(result.payee_account.unavailable,c.reason);
+   assert.deepEqual(readFileSync(join(dir,'inbox.db')),before);
+   assert.ok(requests.every(r=>r.method==='block'||r.method==='query'));
+  }finally{rmSync(dir,{recursive:true,force:true});}
+ });
+});
+
+test('ask --check follows the local invoice source even when a public network preference is set',async t=>{
+ const old=process.env.COUNTERSIGN_NETWORK,{dir,file}=vaultDir(3030,`session-1:${vaultId}`);
+ const urls:string[]=[],net=accountNet();
+ t.mock.method(globalThis,'fetch',async(url:any,init:any)=>{
+  urls.push(String(url));
+  const body=JSON.parse(String(init.body));
+  if(body.method==='block')return Response.json({result:{header:{height:9}}});
+  if(body.params.request_type==='call_function'){
+   const value=await cafeView(body.params.method_name,JSON.parse(Buffer.from(body.params.args_base64,'base64').toString()));
+   return Response.json({result:{result:[...Buffer.from(JSON.stringify(value))]}});
+  }
+  // A fixture for standalone public account checks; no real public request is made.
+  if(new URL(String(url)).hostname!=='127.0.0.1')return accountNet({exists:false}).send(url,init);
+  return net.send(url,init);
+ });
+ try{
+  for(const network of ['testnet','mainnet']){
+   process.env.COUNTERSIGN_NETWORK=network;
+   const result=JSON.parse(await askCommand(['--check',file],dir));
+   assert.equal(result.payee_account.network,'local',network);
+   assert.equal(result.payee_account.account,payee);
+  }
+  assert.ok(urls.every(url=>new URL(url).origin==='http://127.0.0.1:3030'));
+  // The standalone feature still honors an explicit public-network preference.
+  for(const [network,endpoint] of [['testnet','https://test.rpc.fastnear.com'],['mainnet','https://free.rpc.fastnear.com']]){
+   urls.length=0;process.env.COUNTERSIGN_NETWORK=network;
+   assert.match(await askCommand(['--account','unknown-payee.testnet'],dir),/^STOP: Account does not exist\./);
+   assert.deepEqual(urls,[endpoint]);
+  }
+ }finally{
+  if(old===undefined)delete process.env.COUNTERSIGN_NETWORK;else process.env.COUNTERSIGN_NETWORK=old;
+  rmSync(dir,{recursive:true,force:true});
+ }
+});
+
+test('default account cache and rate-limit backoff work in a checkout path with spaces and URL characters',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'ask-cache-path-')),repo=join(root,'Near hack #% café');
+ try{
+  mkdirSync(join(repo,'agent'),{recursive:true});
+  cpSync(askDir,join(repo,'agent/ask'),{recursive:true});
+  writeFileSync(join(repo,'package.json'),JSON.stringify({type:'module'}));
+  const {checkAccount:check}=await import(pathToFileURL(join(repo,'agent/ask/account.ts')).href);
+  const net=accountNet({created_days:400,txns:3});
+  const options={network:'testnet',directory:repo,send:net.send,now:NOW};
+  await check('supplier.testnet',options);
+  const cache=join(repo,'work/ask-cache');
+  assert.ok(existsSync(join(cache,'nearblocks-testnet-account-supplier.testnet.json')));
+  assert.ok(existsSync(join(cache,'nearblocks-testnet-txns-supplier.testnet.json')));
+  await check('supplier.testnet',options);
+  assert.equal(net.calls.filter(c=>c.url.includes('nearblocks')).length,2,'repeat lookup uses the default cache');
+  const limited=accountNet({limited:true});
+  await check('busy.testnet',{...options,send:limited.send});
+  assert.ok(existsSync(join(cache,'nearblocks-testnet-backoff.json')));
+  assert.equal(limited.calls.filter(c=>c.url.includes('nearblocks')).length,1);
+  const retry=accountNet();
+  await check('other.testnet',{...options,send:retry.send,now:NOW+30_000});
+  assert.equal(retry.calls.filter(c=>c.url.includes('nearblocks')).length,0,'backoff survives the next lookup');
+  assert.deepEqual(readdirSync(root),['Near hack #% café'],'no percent-encoded sibling directory is created');
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
