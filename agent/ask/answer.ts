@@ -1,8 +1,9 @@
-// The model selects evidence. Only code renders amounts, invoice outcomes and vault controls.
-// The model may add a short reply on top; code checks it against the selected evidence and
-// drops it on any doubt, leaving exactly the code-rendered answer.
+// The model selects evidence and writes an optional conversational reply.
+// Code checks complete factual clauses against their selected records and drops
+// unsupported phrasing. The exact evidence and sources are always rendered below.
 import type {FactsPack} from './facts.ts';
 import type {ChatMessage,Complete} from './model.ts';
+import {voiceOptions,groundedReply,conversationalReply} from './voice.ts';
 
 export const REFUSAL="I can only answer questions about this vault's payments and rules.";
 export const UNVERIFIED="I couldn't verify that answer.";
@@ -13,8 +14,9 @@ const SYSTEM=[
  'Reply with exactly one JSON object: {"facts":["key",...],"reply":"..."}. Copy only listed keys. Use ["no_record"] if the evidence cannot answer.',
  'Use invoice:<id> for a particular bill, weekly for signed service weeks, suppliers for all-time supplier totals, and flags for unusual activity. Use pause for the current payment pause and activity for agent outcomes.',
  '"reply" is optional: 1 to 3 short, friendly sentences in plain English that answer the owner directly, using ONLY the evidence you selected. Never mention an invoice ID, amount, number or outcome that is not in the selected evidence. The selected evidence is shown under your reply, so do not copy it out.',
+ 'Keep every amount attached to its exact field or invoice. A total limit is not a remaining budget. Include the invoice ID with every reason or suggestion. Use reply_examples as phrasing guides; you may join supported clauses with and, but or with, and add a greeting. Do not infer that a payment can succeed from an active policy or an unpaused vault. Unsupported wording falls back to the evidence.',
  'Never claim to take an action. You cannot pay, pause, approve, send or cancel anything.',
- 'For small talk such as "how are you" or "thanks", select ["chat"] with a brief friendly reply that offers help with the vault and has no numbers, invoice IDs or payment details.',
+ 'For small talk such as "how are you" or "thanks", select ["chat"] with a brief friendly reply that offers help with the vault and has no numbers, invoice IDs or payment details. For example: Hey! I am doing well, thanks for asking. Want a summary of your agent\'s payments?',
 ].join('\n');
 const MAX_REPLY=600,MAX_CHAT=300;
 
@@ -81,19 +83,18 @@ function evidenceFor(pack:FactsPack){
  return facts;
 }
 
-function messagesFor(facts:Map<string,Evidence>,question:string):ChatMessage[]{
- const data=JSON.stringify(Object.fromEntries([...facts].map(([key,{text,ids}])=>[key,{text,ids}]))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
+function messagesFor(pack:FactsPack,facts:Map<string,Evidence>,question:string):ChatMessage[]{
+ const data=JSON.stringify(Object.fromEntries([...facts].map(([key,{text,ids}])=>[key,{text,ids,reply_examples:voiceOptions(pack,key,text).examples}]))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
  return [{role:'system',content:SYSTEM},{role:'user',content:`<<<VAULT_DATA\n${data}\nVAULT_DATA>>>\n\nQuestion from the vault owner:\n${question}`}];
 }
 export function buildMessages(pack:FactsPack,question:string){
- return messagesFor(evidenceFor(pack),question);
+ return messagesFor(pack,evidenceFor(pack),question);
 }
 
 
 // ---- Reply verification. Deterministic, and strict: anything it cannot confirm drops the reply. ----
 const OUTCOME_WORDS:Record<string,string>={paid:'paid',settled:'paid',blocked:'blocked',rejected:'blocked',failed:'failed',queued:'queued',pending:'pending',cancelled:'cancelled',canceled:'cancelled',refunded:'refunded'};
 const OUTCOME_WORD=new RegExp(`\\b(${Object.keys(OUTCOME_WORDS).join('|')})\\b`,'gi');
-const NEGATED=/(?:\b(?:not|never)|n't)\s+(?:[\w']+\s+){0,2}$/i; // "was not paid", "hasn't been paid"
 const NUMBER_WORDS:Record<string,string>={two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12'};
 const NUMBER=/\d+(?:\.\d+)?/g;
 const PAUSE_WORD=/\b(?:un)?paus(?:e|ed|es|ing)\b/i;
@@ -103,7 +104,6 @@ const ACTION=[
  /\bI(?:\s*'(?:ve|ll|m|d)|\s+(?:have|will|am|would|can|could|just|already|went ahead and))*\s+(?:(?:going|able)\s+to\s+)?(?:paid|pay|paying|paused|pause|pausing|unpaused|unpause|approved|approve|sent|send|cancel+ed|cancel|released|release|renewed|renew|revoked|revoke|blocked|block|transferred|transfer|retried|retry|resumed|resume|moved|move|changed|change|set|raised|raise|updated|update|fixed|fix|done|handled|processed|process|unblocked|unblock)\b/i,
  /\b(?:approved|sent)\b/i,/\blet me\b(?!\s+know\b)/i,/\bI(?:'m|\s+am)\s+on\s+it\b|\b(?:done that|taken care of)\b/i, // "let me know" and "an eye on it" are not actions
 ];
-const sentencesOf=(text:string)=>text.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean);
 const escape=(s:string)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
 // Invoice-ID-like tokens with their positions: any inbox invoice ID, or the INV-STYLE pattern.
@@ -115,7 +115,6 @@ function idsIn(text:string,pack:FactsPack){
  for(const m of text.matchAll(/\b[A-Z]{2,}-[A-Z0-9-]*[A-Z0-9]\b/g))if(!found.some(f=>m.index>=f.at&&m.index<f.at+f.id.length))found.push({id:m[0],at:m.index});
  return found.sort((a,b)=>a.at-b.at);
 }
-const withoutIds=(text:string,pack:FactsPack)=>{let out=text;for(const {id} of idsIn(text,pack).sort((a,b)=>b.id.length-a.id.length))out=out.split(id).join(' ');return out;};
 function numbersIn(text:string){
  const out=[...text.matchAll(NUMBER)].map(m=>m[0]);
  for(const m of text.matchAll(/\b[a-z]+\b/gi))if(NUMBER_WORDS[m[0].toLowerCase()])out.push(NUMBER_WORDS[m[0].toLowerCase()]);
@@ -136,61 +135,13 @@ export function checkChat(reply:string,pack:FactsPack):string|null{
  if(idsIn(reply,pack).length)return 'A chat reply may not name an invoice.';
  if(new RegExp(OUTCOME_WORD.source,'i').test(reply))return 'A chat reply may not state an outcome.';
  if(PAUSE_WORD.test(reply)||POLICY_WORD.test(reply))return 'A chat reply may not describe the vault.';
- return null;
+ return conversationalReply(reply)?null:'The chat reply is not supported small talk.';
 }
 
 export function checkReply(reply:string,pack:FactsPack,keys:string[],selected:Evidence[]):string|null{
  const shape=basicShape(reply,MAX_REPLY);if(shape)return shape;
- const ids=new Set(selected.flatMap(e=>e.ids));
- const evidence=selected.map(e=>e.text).join('\n');
- // 1. Every invoice ID must be one the selected evidence cites.
- for(const {id} of idsIn(reply,pack))if(!ids.has(id))return `The reply names ${id}, which the selected evidence does not cite.`;
- // 2. Every number must appear in the selected evidence.
- const known=new Set(numbersIn(evidence));
- for(const n of numbersIn(withoutIds(reply,pack)))if(!known.has(n))return `The reply says ${n}, which the selected evidence does not.`;
- // 3. Outcomes. A word in a sentence that names an invoice belongs to the nearest invoice named before it
- //    (or the first one after it) and must match that invoice's outcome; a negated word must not.
- const outcomeOf=new Map(pack.invoices.map(i=>[i.id,i.outcome as string]));
- const selectedOutcomes=new Set(pack.invoices.filter(i=>keys.includes('invoice:'+i.id)).map(i=>i.outcome as string));
- for(const sentence of sentencesOf(reply)){
-  const named=idsIn(sentence,pack).filter(f=>outcomeOf.has(f.id));
-  for(const m of sentence.matchAll(OUTCOME_WORD)){
-   const word=m[1].toLowerCase(),outcome=OUTCOME_WORDS[word],negated=NEGATED.test(sentence.slice(0,m.index));
-   if(named.length){
-    const owner=[...named].reverse().find(f=>f.at<m.index)??named[0];
-    const actual=outcomeOf.get(owner.id);
-    if(negated?actual===outcome:actual!==outcome)return `The reply says ${owner.id} ${negated?'was not ':'was '}${word}; the facts say ${actual}.`;
-   }else if(!keys.includes('activity')&&!selectedOutcomes.has(outcome)&&!negated)
-    return `The reply says "${word}" without the activity record or a matching invoice selected.`;
-  }
-  // A count of outcomes must be the real count.
-  if(!named.length){
-   const counts=pack.totals.counts as Record<string,number>;
-   const said=new RegExp(`\\b(\\d+|${Object.keys(NUMBER_WORDS).join('|')}|no|none|nothing|one)\\s+(?:(?:of\\s+)?(?:your\\s+|the\\s+)?(?:\\w+\\s+)?(?:invoices?|bills?|payments?)\\s+)?(?:(?:were|was|are|is|have been|has been|got)\\s+)?(${Object.keys(OUTCOME_WORDS).join('|')})\\b`,'gi');
-   for(const m of sentence.matchAll(said)){
-    const n=m[1].toLowerCase(),count=/^\d+$/.test(n)?Number(n):NUMBER_WORDS[n]?Number(NUMBER_WORDS[n]):n==='one'?1:0;
-    const outcome=OUTCOME_WORDS[m[2].toLowerCase()];
-    if(counts[outcome]!==count)return `The reply says ${count} ${outcome}; the facts say ${counts[outcome]??0}.`;
-   }
-  }
- }
- // 4. Vault-wide state: only with its fact selected, and only as that fact states it.
- if(PAUSE_WORD.test(reply)){
-  const paused=pack.vault.controls?.paused;
-  if(!keys.includes('pause')||typeof paused!=='boolean')return 'The reply describes the pause without the pause fact selected.';
-  const off=/\bunpaused\b|(?:\b(?:not|never)|n't)\s+(?:\w+\s+)?paused\b|\bpause\s+(?:is\s+)?off\b/gi;
-  const saysOff=off.test(reply),saysOn=/\bpaused\b|\bpause\s+(?:is\s+)?on\b/i.test(reply.replace(off,' '));
-  if(paused?saysOff:saysOn)return `The reply says the vault is ${paused?'not ':''}paused; the pause is ${paused?'on':'off'}.`;
- }
- if(POLICY_WORD.test(reply)){
-  const expired=pack.vault.rules?.expired;
-  if(!keys.includes('budget')||typeof expired!=='boolean')return 'The reply describes the policy state without the budget fact selected.';
-  const negate=(word:string)=>new RegExp(`(?:\\b(?:not|never|no longer)|n't)\\s+(?:\\w+\\s+)?${word}`,'i');
-  const saysExpired=/\bexpired\b|\binactive\b/i.test(reply)&&!negate('expired').test(reply)||negate('active').test(reply);
-  const saysActive=/\bactive\b/i.test(reply)&&!negate('active').test(reply)||negate('expired').test(reply);
-  if(expired?saysActive:saysExpired)return `The reply says the policy is ${expired?'active':'expired'}; it is ${expired?'expired':'active'}.`;
- }
- return null;
+ return groundedReply(pack,selected.map((e,i)=>({key:keys[i],text:e.text})),reply)?null:
+  'The reply contains a claim or phrasing that does not match its selected record.';
 }
 
 const voiceOn=()=>process.env.COUNTERSIGN_ASK_VOICE!=='off';
@@ -242,5 +193,5 @@ export function verifyAnswer(pack:FactsPack,raw:string,question=''):Verdict{
 }
 export async function askQuestion(pack:FactsPack,question:string,complete:Complete):Promise<Verdict>{
  const facts=evidenceFor(pack);
- return render(pack,facts,await complete(messagesFor(facts,question)),question);
+ return render(pack,facts,await complete(messagesFor(pack,facts,question)),question);
 }
