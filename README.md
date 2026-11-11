@@ -37,3 +37,27 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 [Local payment desk, contract and operator guide](docs/local-guide.md)
 
 Ask Dave also runs in the desk: open http://127.0.0.1:4317/#ask-dave (needs a local agent vault: npm run agent:desk -- init). Its questions read `work/agent-vault` (or `COUNTERSIGN_AGENT_DIR`), while Payments uses `work/local-vault` (or `COUNTERSIGN_SANDBOX_DIR`). The page and each answer identify the source account. Standalone account checks show their selected network separately; questions always read the local agent vault.
+
+## Public testnet vault
+
+The opt-in [testnet guide](docs/testnet.md) covers atomic deployment and the café
+verification below. The app, agent desk and local tests continue to use the local sandbox.
+
+Install the isolated tooling with `npm ci --prefix testnet --ignore-scripts`; run its
+offline checks with `npm --prefix testnet test`. Live commands use
+`COUNTERSIGN_NETWORK=testnet npm --prefix testnet run vault -- <command>` or
+`COUNTERSIGN_NETWORK=testnet npm --prefix testnet run cafe`, as detailed in the guide.
+
+## Live on testnet
+
+Dave’s café ran on **10 November 2026** using fixture proposals and **zero live model calls**. The owner [funded 2 test NEAR](https://testnet.nearblocks.io/txns/EH15gCKNAbSx4TsGcvuDwCMUjXxMgyeYg8KV9hnphw6d) and [set the policy](https://testnet.nearblocks.io/txns/DZvaAfBUJGMoHtUNQmT3pDRxAaThYsQ9QEzPXiZ7n3VX): 0.5 per payment, 0.8 rolling daily budget, 0.01 minimum, four-hour expiry. The executor paid signed bills without per-invoice owner approval. All rejections below came from submitted contract transactions.
+
+| Outcome | Transaction / NearBlocks | Exact result |
+|---|---|---|
+| Signed bill under policy | [`C5ok2A2DsLrkoJ7D89dQddmg9Y95qn9w7m78VcE1k5Ag`](https://testnet.nearblocks.io/txns/C5ok2A2DsLrkoJ7D89dQddmg9Y95qn9w7m78VcE1k5Ag) | `Settled`; merchant +0.4 NEAR once; replay +0. |
+| Tampered payee | [`UMJQ9TZzhuAZbvtYyRjKbSi5HzKhN6gzhMyAuzAHUSD`](https://testnet.nearblocks.io/txns/UMJQ9TZzhuAZbvtYyRjKbSi5HzKhN6gzhMyAuzAHUSD) | `Smart contract panicked: invalid merchant signature` |
+| Same bill, new invoice ID | [`JMJyVdSeSyi6kyq48zBcHesF1diquLk7GDrVaQXtVrU`](https://testnet.nearblocks.io/txns/JMJyVdSeSyi6kyq48zBcHesF1diquLk7GDrVaQXtVrU) | `Smart contract panicked: merchant bill already used` |
+| Daily budget exceeded | [`BD2wAqJz62Yb9ZfGA23KHdQ7pzyoj9749J5hDKWWmWy`](https://testnet.nearblocks.io/txns/BD2wAqJz62Yb9ZfGA23KHdQ7pzyoj9749J5hDKWWmWy) | `Smart contract panicked: rolling daily budget exceeded` |
+| Kill after reserve; restart and resume | [`C1AY2bgfKehYPsKyN6rRSkpwKDjpyE6BkDyd9YFKMswG`](https://testnet.nearblocks.io/txns/C1AY2bgfKehYPsKyN6rRSkpwKDjpyE6BkDyd9YFKMswG) | `Settled`; merchant +0.3 NEAR once; replay +0. |
+
+For the crash case, we confirmed [reserve](https://testnet.nearblocks.io/txns/79ZGUuH58FXGrb4ofRghDWZ8dNfdux8a3vjsoDLDbq8d), killed the worker with SIGKILL, and resumed the same durable attempt in a fresh process. Merchant credit totaled **0.7 NEAR**, with **zero extra on replay** and **1.3 NEAR** remaining in the vault budget. After the original RPC’s interruption, we switched to FastNEAR and [renewed only the expired policy deadline](https://testnet.nearblocks.io/txns/9xvdKg1npdD7NRaGRxyb7zXMKxV1fjuTTsbMP3hvEQUN), preserving its limits and 0.4 NEAR usage. [Full public receipts, balance snapshots and crash evidence](docs/testnet-cafe.json) · [Reproduce the café run](docs/testnet.md#daves-café-on-testnet).
