@@ -2,8 +2,9 @@ import {publicError,validateDeskPolicy} from './errors.ts';
 import { SandboxDesk } from './sandbox.ts';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { join, resolve } from 'node:path';
 import { DryRunWorkflow } from '../oneclick/workflow.ts';
 import { preview } from '../oneclick/quotes.ts';
 mkdirSync(new URL('../work/',import.meta.url),{recursive:true});
@@ -47,6 +48,14 @@ const server=createServer(async(req,res)=>{
   let body='';for await(const part of req){body+=part;if(Buffer.byteLength(body)>16384)return json(413,{error:'Request too large.'});}
   const input=JSON.parse(body);
   if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid invoice reference or request.');
+  if(url.pathname==='/api/ask') {
+    // Read-only: the real Ask Dave CLI, same directory rule as agent/desk.ts.
+    const agentDir=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
+    const {handleAsk}=await import('./ask-route.ts');
+    const {askCommand}=await import('../agent/ask/cli.ts');
+    const result=await handleAsk(input,{ask:askCommand,agentDir,vaultExists:()=>existsSync(join(agentDir,'desk.json')),now:Date.now});
+    return json(result.status,result.body);
+  }
   if(url.pathname==='/api/sandbox/start')return json(200,await sandbox.start());
   if(url.pathname.startsWith('/api/sandbox/'))return json(200,await sandbox.action(url.pathname.split('/').pop()!,input));
   if(url.pathname==='/api/replay') {

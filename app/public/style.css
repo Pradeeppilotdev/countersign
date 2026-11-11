@@ -1150,6 +1150,105 @@ input[aria-invalid="true"] {
   font-size: 11px;
   color: var(--muted);
 }
+.ask-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(0, 1.2fr);
+  gap: 22px;
+  align-items: start;
+}
+.ask-forms .panel-header {
+  padding-bottom: 22px;
+}
+.ask-check {
+  border-top: 1px solid var(--line);
+  margin-top: 23px;
+  padding: 17px 23px 23px;
+}
+.ask-check h3 {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.ask-check form {
+  padding: 0;
+}
+.ask-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+.chip {
+  border: 1px solid var(--line);
+  background: #f8faf6;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:hover:not(:disabled) {
+  background: var(--teal-soft);
+  border-color: #cfe0d8;
+  color: var(--teal-dark);
+}
+.ask-answers {
+  min-height: 280px;
+}
+.ask-answer-list {
+  max-height: 560px;
+  overflow-y: auto;
+}
+.ask-empty {
+  padding: 26px 23px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ask-card {
+  padding: 18px 23px 16px;
+  border-top: 1px solid var(--line);
+}
+.ask-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ask-card-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.ask-card-head .badge {
+  margin-left: auto;
+}
+.ask-card-body {
+  margin-top: 9px;
+}
+.ask-line {
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ask-card-body .ask-line + .ask-line {
+  margin-top: 5px;
+}
+.ask-sources {
+  font-size: 10px;
+  color: var(--muted);
+}
+.ask-card-body.has-error .ask-line {
+  color: var(--red);
+}
+.ask-loading {
+  font-size: 11px;
+  color: var(--muted);
+}
+.ask-footer {
+  margin-top: 18px;
+  font-size: 10px;
+  color: var(--muted);
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1269,6 +1368,9 @@ input[aria-invalid="true"] {
     font-size: 29px;
   }
   .quote-layout {
+    gap: 16px;
+  }
+  .ask-layout {
     gap: 16px;
   }
   .environment-note {
@@ -1405,6 +1507,9 @@ input[aria-invalid="true"] {
     grid-column: 1/-1;
   }
   .quote-layout {
+    grid-template-columns: 1fr;
+  }
+  .ask-layout {
     grid-template-columns: 1fr;
   }
   .quote-review .empty-state {

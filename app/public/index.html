@@ -33,6 +33,9 @@
             >Dry run</span
           ></a
         >
+        <a class="nav-item" href="#ask-dave" data-view="ask-dave"
+          ><span data-icon="info"></span>Ask Dave</a
+        >
         <a class="nav-item" href="/attack-results/"
           ><span data-icon="shield"></span>Attack results<span
             data-icon="arrow-up-right"
@@ -399,6 +402,103 @@
             </div>
             <div id="history"></div>
           </section>
+        </section>
+        <section
+          id="ask-dave"
+          class="workspace-view"
+          hidden
+          aria-labelledby="ask-dave-title"
+        >
+          <div class="page-heading">
+            <div>
+              <h1 id="ask-dave-title">Ask Dave</h1>
+              <p>Ask about your agent's payments, blocks and rules. Read-only.</p>
+            </div>
+          </div>
+          <div class="ask-layout">
+            <section class="panel ask-forms" aria-labelledby="ask-forms-title">
+              <div class="panel-header">
+                <div>
+                  <h2 id="ask-forms-title">Questions</h2>
+                  <p>One answer at a time. Nothing is sent on-chain.</p>
+                </div>
+                <span class="badge neutral">Read-only</span>
+              </div>
+              <form id="ask-question-form" class="ask-form">
+                <label for="ask-text">Your question</label
+                ><input
+                  id="ask-text"
+                  name="text"
+                  required
+                  maxlength="500"
+                  placeholder="How is my agent doing?"
+                  autocomplete="off"
+                />
+                <div class="ask-chips">
+                  <button
+                    type="button"
+                    class="chip"
+                    data-example="How is my agent doing?"
+                  >
+                    How is my agent doing?
+                  </button>
+                  <button
+                    type="button"
+                    class="chip"
+                    data-example="Why was INV-BEANS-003 blocked?"
+                  >
+                    Why was INV-BEANS-003 blocked?
+                  </button>
+                  <button
+                    type="button"
+                    class="chip"
+                    data-example="What are my current rules?"
+                  >
+                    What are my current rules?
+                  </button>
+                </div>
+                <button class="button primary full" type="submit" id="ask-submit">
+                  <span data-icon="info"></span
+                  ><span id="ask-label">Ask</span>
+                </button>
+              </form>
+              <div class="ask-check">
+                <h3>Would you pay this account?</h3>
+                <form id="ask-account-form" class="ask-form">
+                  <label for="ask-account">Account to check</label
+                  ><input
+                    id="ask-account"
+                    name="account"
+                    required
+                    minlength="2"
+                    maxlength="64"
+                    pattern="[a-z0-9]+([._\-][a-z0-9]+)*"
+                    placeholder="supplier.near"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button class="button secondary full" type="submit" id="ask-check-button">
+                    <span data-icon="store"></span
+                    ><span id="ask-check-label">Check</span>
+                  </button>
+                </form>
+              </div>
+            </section>
+            <section class="panel ask-answers" aria-labelledby="ask-answers-title">
+              <div class="panel-header">
+                <div>
+                  <h2 id="ask-answers-title">Answers</h2>
+                  <p>Newest first. Every answer is a read of the local vault.</p>
+                </div>
+                <span class="badge neutral">Local vault</span>
+              </div>
+              <div id="ask-answers" class="ask-answer-list"></div>
+            </section>
+          </div>
+          <p class="ask-footer">
+            Read-only. Ask Dave can't move funds. Account data powered by
+            Nearblocks.io APIs.
+          </p>
         </section>
         <footer class="footer">
           <span

@@ -35,3 +35,5 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 **Hackathon tracks** · AI Security & Defense (primary), Agent Economy (secondary). Built during NEAR HACKATHON with Rust NEAR SDK, TypeScript, Node SQLite, near-workspaces and AI-assisted development. [Official tracks](https://nearhackathon.com/#tracks)
 
 [Local payment desk, contract and operator guide](docs/local-guide.md)
+
+Ask Dave also runs in the desk: open http://127.0.0.1:4317/#ask-dave (needs a local agent vault: npm run agent:desk -- init).
