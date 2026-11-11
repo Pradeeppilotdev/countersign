@@ -426,6 +426,8 @@ document
   .querySelectorAll("#ask-dave .chip")
   .forEach((chip) =>
     chip.addEventListener("click", () => {
+      // A question is already running: leave what the owner typed alone.
+      if (askBtn.disabled) return;
       askTextInput.value = chip.dataset.example;
       askForm.requestSubmit();
     }),

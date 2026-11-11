@@ -27,7 +27,8 @@ export async function handleAsk(
     const text=(input as {text?:unknown}).text;
     if(typeof text!=='string')return {status:400,body:{ok:false,error:'Invalid question.'}};
     const trimmed=text.trim();
-    if(trimmed.length<1||trimmed.length>500||trimmed.startsWith('-'))
+    // 1–500 characters as sent; padding with spaces does not buy a longer question.
+    if(text.length>500||trimmed.length<1||trimmed.startsWith('-'))
       return {status:400,body:{ok:false,error:'Invalid question.'}};
     args=[trimmed];question=true;
   }else if(kind==='account'){

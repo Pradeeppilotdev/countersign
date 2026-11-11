@@ -51,6 +51,11 @@ test("a 501-character question or one starting with - is rejected with 400", asy
   assert.equal(r3.status, 400);
   const r4 = await handleAsk({ kind: "question", text: 42 }, d);
   assert.equal(r4.status, 400);
+  // 500 characters is the limit on what was sent, not on what is left after trimming.
+  const padded = await handleAsk({ kind: "question", text: "x".repeat(400) + " ".repeat(101) }, d);
+  assert.equal(padded.status, 400);
+  const dashed = await handleAsk({ kind: "question", text: "   --facts" }, d);
+  assert.equal(dashed.status, 400);
   assert.equal(d.calls.length, 0);
   // The boundary: 500 chars is allowed.
   const ok = await handleAsk({ kind: "question", text: "x".repeat(500) }, d);
@@ -147,4 +152,9 @@ test("the route handler source imports only views and node built-ins", () => {
   for (const forbidden of ["executor", "near-api", "transaction", "sign"])
     assert.ok(!source.includes(forbidden), `source must not contain "${forbidden}"`);
   assert.match(source, /from '\.\.\/agent\/ask\/views\.ts'/);
+  // Exactly one module is loaded, and nothing can be loaded at run time.
+  const code = source.replace(/\/\/.*$/gm, "");
+  const specifiers = [...code.matchAll(/\b(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]/g), ...code.matchAll(/\bimport\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  assert.deepEqual(specifiers, ["../agent/ask/views.ts"]);
+  assert.equal(/\bimport\s*\(|\brequire\s*\(|createRequire/.test(code), false);
 });
