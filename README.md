@@ -36,6 +36,8 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 
 [Local payment desk, contract and operator guide](docs/local-guide.md)
 
+Ask Dave also runs in the desk: open http://127.0.0.1:4317/#ask-dave (needs a local agent vault: npm run agent:desk -- init). Its questions read `work/agent-vault` (or `COUNTERSIGN_AGENT_DIR`), while Payments uses `work/local-vault` (or `COUNTERSIGN_SANDBOX_DIR`). The page and each answer identify the source account. Standalone account checks show their selected network separately; questions always read the local agent vault.
+
 ## Public testnet vault
 
 The opt-in [testnet guide](docs/testnet.md) covers atomic deployment and the café
