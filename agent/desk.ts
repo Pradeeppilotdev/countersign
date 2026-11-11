@@ -1,15 +1,14 @@
 import {renewLocalPolicy} from './policy-renewal.ts';
 import {createRequire} from 'node:module';
 import {publicError} from '../app/errors.ts';
-import {runPersistentInvoice} from './run-invoice.ts';
+import {createDeskInbox,importDeskInvoice,runDeskInvoice,resumeDeskInvoices,readDeskStatus,readDeskCapacity} from './desk-core.ts';
 import {randomBytes} from 'node:crypto';
 import {existsSync,readFileSync,statSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {readVaultControls,replaceLocalExecutor} from '../app/vault-controls.ts';
+import {replaceLocalExecutor} from '../app/vault-controls.ts';
 import {SandboxDesk,parseNear} from '../app/sandbox.ts';
 import {AgentInbox,CancellationMismatch} from './inbox.ts';
-import {demoProposer} from './demo-proposer.ts';
 import {validMillis} from '../merchant/invoice.ts';
 async function main(){
 // Configure the same CommonJS SDK instance used by near-workspaces. Raw receipt
@@ -33,15 +32,14 @@ if(command==='ask'){
 }
 if(command==='run'){
  console.log(args[1]?'LIVE MODEL → SAVED POLICY → LOCAL TEST FUNDS ONLY':'FIXTURE MODEL → SAVED POLICY → LOCAL TEST FUNDS ONLY');
- const result=await runPersistentInvoice(directory,args[0],invoice=>demoProposer(args.slice(1)).propose(invoice));
+ const result=await runDeskInvoice(directory,args[0],args[1]!==undefined);
  console.log(JSON.stringify(result,null,2));
 }else{
 const desk=new SandboxDesk(directory,{recoverOnStart:false});let inbox:AgentInbox|undefined;
 try{
  await desk.start();
- const transport={call:(method:string,body:any)=>desk.executor.call(desk.vault,method,body,{gas:'100000000000000'}),view:(method:string,body:any)=>desk.vault.view(method,body)};
- inbox=new AgentInbox(join(directory,'inbox.db'),`${desk.session}:${desk.vault.accountId}`,transport);
- const capacity=async()=>{try{return await desk.vault.view('policy_capacity',{});}catch(error){if(error instanceof Error&&error.message.includes('MethodNotFound'))throw Error('Upgrade the local vault before using policy capacity controls.');throw error;}};
+ inbox=createDeskInbox(desk,directory);
+ const capacity=()=>readDeskCapacity(desk.vault);
  let result:any;
  if(command==='renew-policy'){result=await renewLocalPolicy(desk,args[1],Number(args[0]));}
  else if(command==='capacity'){result=await capacity();}
@@ -92,7 +90,7 @@ try{
   result={agreement,service,claimed_by:service?await desk.vault.view('get_service_claim',{service}):null};
  }else if(command==='import'){
   if(statSync(args[0]).size>16384)throw Error('Signed invoice file too large');
-  result=await inbox.enqueueSigned(JSON.parse(readFileSync(args[0],'utf8')),desk.vault.accountId);
+  result=await importDeskInvoice(desk,inbox,JSON.parse(readFileSync(args[0],'utf8')));
  }else if(command==='policy'){
   const per=parseNear(args[0]),daily=parseNear(args[1]),minutes=Number(args[2]);
   if(!Number.isInteger(minutes)||minutes<1||minutes>1440||BigInt(daily)<BigInt(per))throw Error('Policy needs a positive cap, rolling allowance >= cap, and expiry from 1 to 1440 minutes');
@@ -101,16 +99,10 @@ try{
  }else if(command==='revoke'){await desk.owner.call(desk.vault,'revoke_policy',{});result={revoked:true};}
  else if(command==='enqueue')result=inbox.enqueue({id:args[0],payee:desk.merchant.accountId,asset:'near',amount:parseNear(args[1])},'local-merchant');
  else if(command==='resume'){
-  result=[];
-  const candidates=args.length?[inbox.get(args[0])]:inbox.list().filter(r=>r.state==='proposal_ready'||r.state==='period_claimed');
-  for(const row of candidates){
-   const id=String(row.id);
-   const updated=await inbox.resume(id).catch(()=>inbox!.get(id));
-   if(args.length || row.state!=='period_claimed' || updated.state!=='period_claimed')result.push(updated);
-  }
+  result=await resumeDeskInvoices(inbox,args[0]);
  }else if(command==='cancel')result=await inbox.cancel(args[0],id=>desk.owner.call(desk.vault,'cancel',{invoice_id:id}));
  else if(command==='retry-proposal')result=inbox.retryProposal(args[0]);
- else result={controls:await readVaultControls(desk.vault),network:'LOCAL_SANDBOX',vault:desk.vault.accountId,merchant:desk.merchant.accountId,policy:await desk.vault.view('get_policy',{}),usage:await desk.vault.view('policy_usage',{}),available:await desk.vault.view('available_balance',{}),merchantReceived:(BigInt((await desk.merchant.balance()).total.toString())-desk.baseline).toString(),invoices:inbox.list()};
+ else result=await readDeskStatus(desk,inbox);
  console.log(JSON.stringify(result,null,2));
 }finally{inbox?.close();await desk.close();}
 }
