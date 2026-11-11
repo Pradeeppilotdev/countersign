@@ -16,11 +16,14 @@ import {
   simulationState,
   createQuoteSelection,
 } from "./state.js";
+import { refreshAgentPayments } from "./agent-payments.js";
 import { askSourceLabels } from "./ask-source.js";
 mountIcons();
 function navigate() {
   const view =
-    location.hash === "#quote-lab"
+    location.hash === "#agent-payments"
+      ? "agent-payments"
+      : location.hash === "#quote-lab"
       ? "quote-lab"
       : location.hash === "#ask-dave"
         ? "ask-dave"
@@ -33,19 +36,22 @@ function navigate() {
     else node.removeAttribute("aria-current");
   });
   $("#page-label").textContent =
-    view === "payments"
+    view === "agent-payments"
+      ? "Agent payments"
+      : view === "payments"
       ? "Payment desk"
       : view === "ask-dave"
         ? "Ask Dave"
         : "1Click lab";
   document.title = "Countersign · " + $("#page-label").textContent;
   if (view === "ask-dave") refreshAskSource();
+  if (view === "agent-payments") refreshAgentPayments();
 }
 window.addEventListener("hashchange", navigate);
 navigate();
 document
   .querySelectorAll(
-    'a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"]',
+    'a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
   )
   .forEach((link) =>
     link.addEventListener("click", (event) => {
