@@ -21,7 +21,7 @@ const friendly=[
  "let me know if you want a summary of your agent's payments",
  "I'm keeping an eye on it with you", 'ask me anything about your vault',
  "I'm here whenever you want to check on your vault",
- 'just ask about (?:your )?(?:bills|payments|rules)(?:, (?:payments|rules))?(?:,? or (?:rules|your vault))?',
+ 'just ask about (?:your )?(?:bills|payments|rules)(?:, (?:payments|rules))?(?:,? or (?:rules|your vault|anything else))?',
 ];
 
 type Options={patterns:string[];examples:string[]};

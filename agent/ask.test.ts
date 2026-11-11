@@ -988,6 +988,9 @@ test('voice: chat is a reply alone; a chat reply that is not pure small talk fal
  assert.deepEqual(await askQuestion(pack,'hey dave, how are you?',async()=>voiced(['chat'],hello)),{ok:true,text:hello,sources:[]});
  for(const friendly of ['Doing well, thanks for asking! Let me know if you want a summary of your agent\'s payments.','All good here. I\'m keeping an eye on it with you — ask me anything about your vault.'])
   assert.deepEqual(verifyAnswer(pack,voiced(['chat'],friendly)),{ok:true,text:friendly,sources:[]});
+ // Preserve the successful conversational greeting recorded in the original PR.
+ const recorded="Hey! I'm doing great, thanks for asking. I'm here whenever you want to check on your vault — just ask about bills, payments, or anything else.";
+ assert.deepEqual(verifyAnswer(pack,voiced(['chat'],recorded)),{ok:true,text:recorded,sources:[]});
  // Fallback for chat is REFUSAL: the fixed line already says what Dave can talk about.
  for(const reply of ['Doing well! 2 bills went through today.','Great, everything was paid.','All good, INV-BEANS-001 is fine.','Fine, and your vault is not paused.',
   'Fine — your policy is active.','Doing well, and I paid your bills.','Doing well. Let me pay that for you.',"I'm on it.",'x'.repeat(301),'Visit https://example.com for help.','Two of them are fine.']){
