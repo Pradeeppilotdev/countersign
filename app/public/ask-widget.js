@@ -9,7 +9,7 @@ import { questionForBill } from "./ask-suggest.js";
 const HISTORY = 3,
   NOTE = "Dave answers about this vault's payments, blocks, rules and account checks. Not dates or anything outside the vault.";
 
-export function createAskWidget() {
+export function createAskWidget({ onNavigate } = {}) {
   let button, panel, form, input, submitBtn;
   let submitting = false;
 
@@ -34,9 +34,13 @@ export function createAskWidget() {
   list.setAttribute("aria-label", "Recent Ask Dave answers");
   list.setAttribute("aria-live", "polite");
   openLink.href = "#ask-dave";
-  // The page's delegated link handler performs the navigation; we only
-  // close first so focus returns to the button.
-  openLink.addEventListener("click", () => close());
+  // Navigate exactly like the page's nav links (no scroll jump); close
+  // first so focus returns to the button when the panel hides.
+  openLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    close(false);
+    if (onNavigate) onNavigate();
+  });
   panelFoot.append(openLink);
   header.append(title, closeBtn);
   panel = el("div", "", "ask-widget-panel");
@@ -103,11 +107,11 @@ export function createAskWidget() {
     if (prefilled) ask(prefilled);
   }
 
-  function close() {
+  function close(refocus = true) {
     if (panel.hidden) return;
     panel.hidden = true;
     button.setAttribute("aria-expanded", "false");
-    button.focus();
+    if (refocus) button.focus();
   }
 
   return {

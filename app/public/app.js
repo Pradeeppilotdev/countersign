@@ -440,7 +440,13 @@ document
   );
 
 // --- Ask Dave everywhere (floating button + panel) -------------------------
-const askWidget = createAskWidget();
+const askWidget = createAskWidget({
+  onNavigate: () => {
+    history.pushState(null, "", "#ask-dave");
+    navigate();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  },
+});
 askFromBill((bill) => askWidget.askForBill(bill));
 askWidgetView = (view) => askWidget.setOnAskDaveView(view === "ask-dave");
 askWidgetView(location.hash === "#ask-dave" ? "ask-dave" : null);
