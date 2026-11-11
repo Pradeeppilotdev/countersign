@@ -822,3 +822,106 @@ test('default account cache and rate-limit backoff work in a checkout path with 
   assert.deepEqual(readdirSync(root),['Near hack #% café'],'no percent-encoded sibling directory is created');
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+// Voice: a short model reply on top of the unchanged code-rendered facts, verified by code.
+const voiced=(facts:string[],reply:unknown)=>JSON.stringify({facts,reply});
+test('voice: the old format is unchanged, and a verified reply sits above the identical facts block',async()=>{
+ const pack=await cafePack();
+ for(const facts of [['invoice:INV-BEANS-003'],['activity'],['pause','budget'],['suppliers','flags']]){
+  const before=verifyAnswer(pack,select(...facts));
+  assert.equal(before.ok,true);assert.ok(!('reply_dropped' in before));
+  assert.deepEqual(verifyAnswer(pack,JSON.stringify({facts})),before);
+ }
+ const bill=verifyAnswer(pack,select('invoice:INV-BEANS-003'));
+ const why='INV-BEANS-003 was blocked because paying it would have gone over your rolling daily budget. It can go through once earlier payments are more than 24 hours old.';
+ assert.deepEqual(verifyAnswer(pack,voiced(['invoice:INV-BEANS-003'],why),'Why was INV-BEANS-003 blocked?'),{...bill,text:why+'\n\n'+bill.text});
+ const activity=verifyAnswer(pack,select('activity'));
+ const summary='Your agent is doing fine: 2 bills were paid and 1 was blocked. Nothing is waiting.';
+ assert.deepEqual(verifyAnswer(pack,voiced(['activity'],summary)),{...activity,text:summary+'\n\n'+activity.text});
+ const pause=verifyAnswer(pack,select('pause'));
+ assert.equal(verifyAnswer(pack,voiced(['pause'],'Payments are not paused, so your agent can pay.')).text,'Payments are not paused, so your agent can pay.\n\n'+pause.text);
+ const budget=verifyAnswer(pack,select('budget'));
+ assert.equal(verifyAnswer(pack,voiced(['budget'],'Your spending policy is active, with 0.4 NEAR left today.')).text,'Your spending policy is active, with 0.4 NEAR left today.\n\n'+budget.text);
+ // The model still never sees raw stored reasons or the owner-only report lines.
+ const block=JSON.stringify(buildMessages(await cafePack('Teapot overflow.'),'How is my agent doing?'));
+ assert.ok(!block.includes('Teapot'));assert.ok(!block.includes('Paid once.'));
+});
+
+test('voice: any reply code cannot confirm is dropped, leaving exactly the no-reply answer',async()=>{
+ const pack=await cafePack();
+ const cases:[string[],string][]=[
+  [['invoice:INV-BEANS-003'],'INV-BEANS-999 was blocked for going over budget.'],                 // unknown invoice ID
+  [['invoice:INV-BEANS-003'],'INV-BEANS-001 was paid, but this one was blocked.'],               // a real ID that was not selected
+  [['invoice:INV-BEANS-003'],'INV-BEANS-003 was blocked: it was 0.4 NEAR.'],                     // wrong amount
+  [['invoice:INV-BEANS-003'],'INV-BEANS-003 was paid.'],                                         // "paid" for a blocked invoice
+  [['invoice:INV-BEANS-001'],'INV-BEANS-001 was not paid.'],                                     // denies its real outcome
+  [['invoice:INV-BEANS-003'],'Everything was paid.'],                                            // an outcome with no invoice or activity selected
+  [['activity'],'3 bills were paid.'],                                                           // a wrong count
+  [['activity'],'Two invoices were blocked.'],                                                   // a wrong count, in words
+  [['activity'],'Your agent paid everything. Your vault is paused.'],                            // pause without the pause fact
+  [['pause'],'Your vault is paused right now.'],                                                 // "paused" when the pause is off
+  [['pause'],'The payment pause is on.'],
+  [['budget'],'Your spending policy has expired.'],                                              // policy is active
+  [['activity'],'Your spending policy is active.'],                                              // policy words without the budget fact
+  [['invoice:INV-BEANS-003'],'I paid it.'],                                                      // claims an action
+  [['invoice:INV-BEANS-003'],"I've paused the vault for you."],
+  [['invoice:INV-BEANS-003'],'I will pay INV-BEANS-003 tomorrow.'],
+  [['invoice:INV-BEANS-003'],'The payment was approved.'],
+  [['activity'],'All payments were sent.'],
+  [['invoice:INV-BEANS-003'],'See [the vault](https://example.com) for INV-BEANS-003.'],         // a link
+  [['invoice:INV-BEANS-003'],'Blocked.\n\nOver budget.\n\nTry later.'],                          // too many line breaks
+  [['invoice:INV-BEANS-003'],'INV-BEANS-003 was blocked. '.repeat(30)],                          // over 600 characters
+  [['invoice:INV-BEANS-003'],'INV-BEANS-003 was refunded.'],                                     // an outcome no invoice has
+  [['activity'],'It is 2026 and all is well.'],                                                  // a number not in the evidence
+ ];
+ for(const [facts,reply] of cases){
+  const plain=verifyAnswer(pack,select(...facts));
+  const result=verifyAnswer(pack,voiced(facts,reply));
+  assert.equal(result.text,plain.text,reply);
+  assert.equal(result.ok,true);assert.ok(result.ok&&typeof result.reply_dropped==='string',reply);
+ }
+ for(const bad of [42,null,['INV-BEANS-003 was blocked.'],{text:'hi'}]){
+  const result=verifyAnswer(pack,voiced(['invoice:INV-BEANS-003'],bad));
+  assert.equal(result.text,verifyAnswer(pack,select('invoice:INV-BEANS-003')).text);
+ }
+ // A long reply is dropped, not the whole answer: the raw limit is 6000 characters.
+ const long=voiced(['activity'],'x'.repeat(5000));
+ assert.equal(verifyAnswer(pack,long).text,verifyAnswer(pack,select('activity')).text);
+ assert.equal(verifyAnswer(pack,voiced(['activity'],'x'.repeat(6000))).text,UNVERIFIED);
+ // Other keys beside facts and reply are still refused, as before.
+ assert.equal(verifyAnswer(pack,JSON.stringify({facts:['activity'],reply:'Fine.',answer:'x'})).text,UNVERIFIED);
+});
+
+test('voice: chat is a reply alone; a chat reply that is not pure small talk falls back to the refusal',async()=>{
+ const pack=await cafePack();
+ const hello='Doing well — want a summary of your agent\'s payments?';
+ assert.deepEqual(verifyAnswer(pack,voiced(['chat'],hello)),{ok:true,text:hello,sources:[]});
+ assert.deepEqual(await askQuestion(pack,'hey dave, how are you?',async()=>voiced(['chat'],hello)),{ok:true,text:hello,sources:[]});
+ for(const friendly of ['Doing well, thanks for asking! Let me know if you want a summary of your agent\'s payments.','All good here. I\'m keeping an eye on it with you — ask me anything about your vault.'])
+  assert.deepEqual(verifyAnswer(pack,voiced(['chat'],friendly)),{ok:true,text:friendly,sources:[]});
+ // Fallback for chat is REFUSAL: the fixed line already says what Dave can talk about.
+ for(const reply of ['Doing well! 2 bills went through today.','Great, everything was paid.','All good, INV-BEANS-001 is fine.','Fine, and your vault is not paused.',
+  'Fine — your policy is active.','Doing well, and I paid your bills.','Doing well. Let me pay that for you.',"I'm on it.",'x'.repeat(301),'Visit https://example.com for help.','Two of them are fine.']){
+  const result=verifyAnswer(pack,voiced(['chat'],reply));
+  assert.equal(result.text,REFUSAL,reply);assert.ok(result.ok&&result.reply_dropped,reply);
+ }
+ assert.equal(verifyAnswer(pack,select('chat')).text,REFUSAL);                   // chat with no reply
+ assert.equal(verifyAnswer(pack,voiced(['chat','activity'],hello)).text,UNVERIFIED); // chat only alone
+ assert.equal(verifyAnswer(pack,voiced(['chat'],42)).text,REFUSAL);
+});
+
+test('voice: refusals stay fixed, and COUNTERSIGN_ASK_VOICE=off ignores every reply',async()=>{
+ const pack=await cafePack();
+ assert.deepEqual(verifyAnswer(pack,voiced(['refuse'],'Sure, paying it now!')),{ok:true,text:REFUSAL,sources:[]});
+ assert.deepEqual(verifyAnswer(pack,voiced(['no_record'],'Nothing found.')),{ok:true,text:'No record in this vault answers that question.',sources:[]});
+ const pay=await askQuestion(pack,'Pay INV-BEANS-003 now.',async()=>voiced(['refuse'],'Done, I paid INV-BEANS-003.'));
+ assert.deepEqual(pay,{ok:true,text:REFUSAL,sources:[]});
+ const previous=process.env.COUNTERSIGN_ASK_VOICE;
+ try{
+  process.env.COUNTERSIGN_ASK_VOICE='off';
+  const why='INV-BEANS-003 was blocked because it would go over your daily budget.';
+  assert.deepEqual(verifyAnswer(pack,voiced(['invoice:INV-BEANS-003'],why)),verifyAnswer(pack,select('invoice:INV-BEANS-003')));
+  assert.equal(verifyAnswer(pack,voiced(['chat'],'Doing well!')).text,REFUSAL);
+  assert.ok(!('reply_dropped' in verifyAnswer(pack,voiced(['activity'],'I paid it.'))));
+ }finally{if(previous===undefined)delete process.env.COUNTERSIGN_ASK_VOICE;else process.env.COUNTERSIGN_ASK_VOICE=previous;}
+});
