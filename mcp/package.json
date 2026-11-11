@@ -1,0 +1,17 @@
+{
+  "name": "countersign-local-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo:setup": "node --disable-warning=ExperimentalWarning demo.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test mcp.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0"
+  }
+}

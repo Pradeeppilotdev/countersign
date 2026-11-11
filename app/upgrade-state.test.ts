@@ -16,6 +16,14 @@ test('only a pinned pre-weekly upgrade can resume without the weekly billing met
   assert.throws(()=>checkWeeklyUpgradeMethods(oldMethods,withService),/Missing weekly billing method/);
  }
 });
+test('pinned older weekly upgrades can finish, but correction records require correction support',()=>{
+ const methods=new Set(['add_weekly_service','revoke_weekly_service','get_weekly_service','current_service_period','get_service_claim','authorize_signed_invoice','get_invoice_auth']);
+ const storage=[{key:encode('weekly-claims-v1'),value:encode('first')}];
+ assert.doesNotThrow(()=>checkWeeklyUpgradeMethods(methods,storage));
+ assert.throws(()=>checkWeeklyUpgradeMethods(methods),/correct_weekly_invoice/);
+ storage.push({key:encode('weekly-corrections-v1'),value:encode('successor')});
+ assert.throws(()=>checkWeeklyUpgradeMethods(methods,storage),/correct_weekly_invoice/);
+});
 test('upgrade detects a changed or missing owner renewal intent',()=>{
  const dir=mkdtempSync(join(tmpdir(),'upgrade-renewal-records-'));
  try{

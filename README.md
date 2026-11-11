@@ -12,6 +12,8 @@ Countersign pays merchant invoices from a NEAR vault. An agent can request payme
 
 [90-second narrated replay of the terminal run (MP4)](docs/demo/weekly-payment.mp4?raw=1) · [Attack results and recorded balances](docs/attack-results/README.md)
 
+**Try it from an agent.** Connect a local MCP client to a disposable café vault, request both signed bills by ID, and inspect the vault receipt. [MCP setup and crash test](mcp/README.md)
+
 ## Quick start
 
 **Run it on GitHub.** Open the *Race two signed bills, crash the worker and retry* step in a verification run. It builds two contract revisions, starts a fresh local NEAR chain and checks the merchant’s balance. To run it yourself without installing tools, fork the repo and choose **Actions → Local payment verification → Run workflow**. A successful run publishes `weekly-payment-result` with the measured balances. [Verification runs](https://github.com/Pradeeppilotdev/countersign/actions/workflows/verify.yml)
@@ -23,6 +25,8 @@ npm run test:upgrade:weekly
 ```
 
 Look for `PASS crash` and `PASS weekly`. Either bill can win. The merchant balance must increase by 0.04 once, with 0.00 extra on retry. The command prints the path to your own `result.json`.
+
+If a supplier corrects a bill before reservation, the owner can transfer that week's claim to the exact signed replacement. Run `npm run test:weekly:correction` after the local build to race a 0.03 correction against the original 0.04 bill and crash the paying worker in each order. [Owner commands](docs/local-guide.md#one-payment-per-service-week)
 
 ## What runs
 

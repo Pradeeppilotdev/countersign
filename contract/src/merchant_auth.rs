@@ -36,6 +36,11 @@ fn bytes(s:&SignedInvoice)->Vec<u8>{
  }
  out
 }
+pub(super) fn signed_envelope_hash(signed: &SignedInvoice) -> [u8; 32] {
+ let mut payload = bytes(signed);
+ payload.extend_from_slice(&signed.signature.0);
+ env::sha256_array(&payload)
+}
 pub(super) fn require_unsigned(merchant:&String){near_sdk::require!(keys().get(merchant).is_none(),"merchant signature required");}
 pub(super) fn check_bound(invoice:&Invoice,merchant:&String){
  if let Some(key)=keys().get(merchant){
@@ -63,9 +68,17 @@ impl Contract {
   let key=MerchantKey{version:U64(version),public_key};keys().insert(&merchant_id,&key);key
  }
  pub fn get_merchant_key(&self,merchant_id:String)->Option<MerchantKey>{keys().get(&merchant_id)}
+ pub fn get_merchant_bill_invoice(&self,merchant_id:String,bill_id:String)->Option<String>{bills().get(&(merchant_id,bill_id))}
  pub fn get_invoice_auth(&self,invoice_id:String)->Option<InvoiceAuth>{receipts().get(&invoice_id)}
  pub fn authorize_signed_invoice(&mut self,signed:SignedInvoice)->Payment{
   near_sdk::require!(env::predecessor_account_id()==self.executor,"executor only");
+  self.apply_signed_invoice(signed)
+ }
+}
+
+// Shared with owner-approved weekly corrections. Callers enforce their own role.
+impl Contract {
+ pub(super) fn apply_signed_invoice(&mut self,signed:SignedInvoice)->Payment {
   controls::require_running();
   near_sdk::require!(valid_id(&signed.merchant_id)&&valid_id(&signed.bill_id),"invalid merchant bill id");
   near_sdk::require!(signed.vault==env::current_account_id(),"signed vault mismatch");

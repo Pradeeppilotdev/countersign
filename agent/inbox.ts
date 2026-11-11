@@ -2,11 +2,12 @@ import {DatabaseSync} from 'node:sqlite';
 import {commitment,type Invoice,type Payment} from '../executor/core.ts';
 import {InvoicePaymentTool,validateInvoiceProposal} from './payment-tool.ts';
 import type {VaultTransport} from '../executor/vault.ts';
-import {parseSignedInvoice,verifySignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
+import {matchesInvoiceReceipt,parseSignedInvoice,signedInvoiceHash,verifySignedInvoice,type SignedInvoice} from '../merchant/invoice.ts';
 import {publicError} from '../app/errors.ts';
 import {vaultReason} from '../executor/errors.ts';
 
 type Proposer=(invoice:Readonly<Invoice>)=>Promise<unknown>;
+export class CancellationMismatch extends Error {}
 export class AgentInbox {
  private db:DatabaseSync;
  private path:string; private identity:string; private transport:VaultTransport;
@@ -68,8 +69,33 @@ export class AgentInbox {
   if(!changed.changes)throw Error('Only interrupted or failed proposals can be retried');
   return this.get(id);
  }
+ // An external agent's ID-only tool call is already its proposal. Save it in
+ // one SQLite update so a crash before dispatch can resume that exact request.
+ async requestSignedPayment(id:string){
+  const {signed}=this.checkedInvoice(id);
+  if(!signed)throw Error('Signed invoice required for an external payment request.');
+  const proposal=validateInvoiceProposal(signed.invoice,{name:'request_payment',arguments:{invoice_id:id}});
+  this.db.prepare("UPDATE inbox SET state='proposal_ready',proposal=?,error=NULL WHERE id=? AND state='queued'")
+   .run(JSON.stringify(proposal),id);
+  return this.resume(id);
+ }
  async resume(id:string){
-  const row=this.get(id);
+  let row=this.get(id);
+  if(row.state==='period_claimed' && row.signed_invoice?.service){
+   // An owner correction can select a previously blocked, already proposed bill.
+   // Recover even if the owner's process died before updating this inbox.
+   const winner:unknown=await this.transport.view('get_service_claim',{service:row.signed_invoice.service});
+   if(winner!==id){
+    if(typeof winner==='string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(winner)){
+     this.db.prepare("UPDATE inbox SET error=? WHERE id=? AND state='period_claimed'").run(`Service period already claimed by [${winner}].`,id);
+    }
+    return this.get(id);
+   }
+   const receipt=await this.transport.view('get_invoice_auth',{invoice_id:id});
+   if(!matchesInvoiceReceipt(row.signed_invoice,receipt))throw Error('Signed invoice differs from the vault authorization.');
+   this.restoreBlockedProposal(id);
+   row=this.get(id);
+  }
   if(row.state!=='proposal_ready')return row; // Never infer or invent consent during recovery.
   const proposal=validateInvoiceProposal(row.invoice,row.proposal);
   if(commitment(row.invoice)!==row.commitment)throw Error('Inbox commitment mismatch');
@@ -77,12 +103,13 @@ export class AgentInbox {
   try{
    const result=await tool.request(proposal.arguments);
    const state=['settled','failed','cancelled'].includes(result.state)?result.state:'proposal_ready';
-   this.db.prepare("UPDATE inbox SET state=?,error=? WHERE id=? AND state='proposal_ready'").run(state,state==='proposal_ready'?'Payment outcome pending; resume the same invoice':null,id);
+   if(state==='cancelled')this.markCancelled(id,row.commitment);
+   else this.db.prepare("UPDATE inbox SET state=?,error=? WHERE id=? AND state='proposal_ready'").run(state,state==='proposal_ready'?'Payment outcome pending; resume the same invoice':null,id);
   }catch(error){
    const signed:SignedInvoice|null=row.signed_invoice;
    if(signed?.service && vaultReason(error)?.startsWith('service period already claimed by [')){
-    // Only a permanent on-chain claim can make this rejection terminal. A
-    // timeout or an unverifiable error leaves the saved proposal retryable.
+    // Only a confirmed competing claim blocks this proposal. The owner
+    // can later name this exact signed bill in a correction.
     const winner:unknown=await this.transport.view('get_service_claim',{service:signed.service}).catch(()=>null);
     if(typeof winner==='string' && winner!==id && /^[A-Za-z0-9_.:-]{1,128}$/.test(winner)){
      this.db.prepare("UPDATE inbox SET state='period_claimed',error=? WHERE id=? AND state='proposal_ready'").run(`Service period already claimed by [${winner}].`,id);
@@ -95,13 +122,67 @@ export class AgentInbox {
   }
   return this.get(id);
  }
- // Operator-only cancellation is separate from the agent capability. Trust only
- // a confirmed contract cancellation; never release an uncertain execution locally.
- async cancel(id:string,cancelOnChain:(id:string)=>Promise<Payment>){
-  const row=this.get(id),payment=await cancelOnChain(id);
-  if(payment.state!=='Cancelled'||payment.commitment!==row.commitment||commitment(payment.invoice)!==row.commitment)throw Error('Cancellation not confirmed for this invoice');
-  this.db.prepare("UPDATE inbox SET state='cancelled',generation=generation+1,error=NULL WHERE id=?").run(id);
+ private checkedInvoice(id:string) {
+  const row = this.get(id);
+  const expected = commitment(row.invoice);
+  if (row.invoice.id !== id || row.commitment !== expected) throw new CancellationMismatch('Inbox invoice commitment mismatch.');
+  const signed = row.signed_invoice === null ? null : parseSignedInvoice(row.signed_invoice);
+  if (signed && (signed.merchant_id !== row.merchant || commitment(signed.invoice) !== expected)) {
+   throw new CancellationMismatch('Signed invoice does not match the inbox record.');
+  }
+  return {expected,signed};
+ }
+ private markCancelled(id:string,expected:string) {
+  // A worker can die after recording its local attempt but before reserve.
+  // Finish that existing attempt before marking the inbox row terminal.
+  if(this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='attempts'").get()){
+   this.db.prepare("UPDATE attempts SET state='cancelled' WHERE invoice_id=? AND commitment=? AND state IN ('claimed','unknown')").run(id,expected);
+  }
+  this.db.prepare("UPDATE inbox SET state='cancelled',generation=generation+1,error=NULL WHERE id=? AND state!='cancelled'").run(id);
+ }
+ private restoreBlockedProposal(id:string) {
+  this.db.prepare("UPDATE inbox SET state='proposal_ready',error=NULL WHERE id=? AND state='period_claimed' AND proposal IS NOT NULL").run(id);
+ }
+ // Terms and signed receipts are immutable once the vault authorizes an ID.
+ // The vault checks the current state again when the owner submits cancel.
+ async cancel(id: string, cancelOnChain: (id: string) => Promise<Payment>) {
+  const {expected,signed}=this.checkedInvoice(id);
+  const args = {invoice_id:id};
+  const payment = await this.transport.view('get_payment', args);
+  if (!payment) throw Error('Unknown invoice in the vault.');
+  const matchesTerms = (p: Payment) => p.commitment === expected && commitment(p.invoice) === expected;
+  if (!matchesTerms(payment)) throw new CancellationMismatch('Invoice already bound to different terms in the vault.');
+  const receipt = await this.transport.view('get_invoice_auth', args);
+  if (!matchesInvoiceReceipt(signed, receipt)) throw new CancellationMismatch('Signed invoice differs from the vault authorization.');
+
+  if (payment.state !== 'Cancelled') {
+   const result = await cancelOnChain(id);
+   if (result?.state !== 'Cancelled' || !matchesTerms(result)) throw Error('Cancellation not confirmed for this invoice');
+  }
+  this.markCancelled(id,expected);
   return this.get(id);
+ }
+ async prepareWeekly(id:string) {
+  const {signed}=this.checkedInvoice(id);
+  if(!signed?.service)throw Error('Signed invoice with a service week required.');
+  return this.transport.call('authorize_signed_invoice',{signed});
+ }
+ async correctWeekly(originalId:string,replacementId:string,submit:(args:{
+  original_id:string;original_payload_hash:string;replacement:SignedInvoice;
+ })=>Promise<Payment>) {
+  const {signed:original,expected:originalCommitment}=this.checkedInvoice(originalId);
+  const {signed:replacement,expected}=this.checkedInvoice(replacementId);
+  if(!original?.service || !replacement?.service)throw Error('Signed invoice with a service week required for both bills.');
+  const payment=await submit({original_id:originalId,original_payload_hash:signedInvoiceHash(original),replacement});
+  if(payment?.commitment!==expected || commitment(payment.invoice)!==expected)throw Error('Weekly correction could not be confirmed.');
+  this.db.exec('BEGIN IMMEDIATE');
+  try {
+   this.markCancelled(originalId,originalCommitment);
+   if(payment.state==='Cancelled')this.markCancelled(replacementId,expected);
+   else this.restoreBlockedProposal(replacementId);
+   this.db.exec('COMMIT');
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+  return payment;
  }
  async run(id:string,proposer:Proposer){await this.propose(id,proposer);return this.resume(id);}
 }

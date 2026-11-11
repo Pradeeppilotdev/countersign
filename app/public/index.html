@@ -1,15 +1,414 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Countersign — Payment assurance</title><link rel="stylesheet" href="/style.css"></head><body>
-<aside><a class="brand" href="/">◈ <span>COUNTERSIGN</span></a><p class="aside-label">WORKSPACE</p><a class="nav active" href="#workspace">◫ &nbsp; Payment desk</a><div class="aside-bottom"><span class="dot"></span> Local development<br><small>NEAR payment assurance</small></div></aside>
-<main id="workspace"><header><span>Workspace <b>/</b> Payment desk</span><a class="report-link" href="/attack-results/">Attack results</a><span class="pill">LOCAL TEST LAB</span></header>
-<section class="heading"><div><p class="eyebrow">CONTROL BEFORE EXECUTION</p><h1>Every payment.<br>On your terms.</h1><p>Review an invoice, verify its quote, and rehearse what happens next.</p></div><button id="demo" class="secondary">Load signed demo <span>↗</span></button></section>
-<div class="notice"><span>◉</span><div><strong>No real funds.</strong> The vault uses a local sandbox. 1Click quotes remain dry-run only.</div></div>
-<section class="panel sandbox"><div class="panel-title"><h2>NEAR vault · local sandbox</h2><span class="pill">TEST FUNDS ONLY</span></div><p class="muted">Start a private local chain, authorize an invoice, and send test NEAR through the vault. Restarting the app reconnects to the same local vault and checks saved payment attempts.</p><button id="sandbox-start" class="secondary">Start local sandbox</button><div id="sandbox-message" role="status" aria-live="polite"></div><div id="sandbox-body" hidden><div id="sandbox-balances" class="stats"></div><form id="sandbox-invoice"><div class="two"><label>Sandbox invoice reference<input name="id" required pattern="[A-Za-z0-9_.:-]{1,128}" value="SANDBOX-001"></label><label>Amount · test NEAR<input name="amount" required type="text" inputmode="decimal" value="0.1"></label></div><p class="hint" id="sandbox-payee"></p><button class="primary" type="submit">Authorize invoice as sandbox owner →</button></form><div id="sandbox-invoices"></div><h3>On-chain activity</h3><div id="sandbox-events"></div><p class="hint">The local demo server holds the test owner and executor keys. This is a development harness, not production wallet authentication.</p></div></section><div class="stats"><div><small>SAVED REVIEWS</small><strong id="count">0</strong></div><div><small>NEEDS REVIEW</small><strong id="held">0</strong></div><div><small>FUNDS MOVED</small><strong>0 <span>USDC</span></strong></div></div>
-<div id="message" role="status" aria-live="polite"></div>
-<div class="grid"><section class="panel"><div class="panel-title"><span class="number">01</span><h2>Invoice details</h2></div><p class="muted">Request an exact-output USDC quote.</p>
-<form id="invoice"><label>Invoice reference<input name="id" required pattern="[A-Za-z0-9_.:-]{1,128}" placeholder="INV-2026-001" value="INV-2026-001"></label>
-<div class="route"><div><small>FROM</small><strong><i>N</i> NEAR</strong></div><span>→</span><div><small>TO</small><strong><i>B</i> Base</strong></div></div>
-<div class="two"><label>Invoice amount · USDC<input name="amount" required type="number" min="0.000001" step="0.000001" value="1"></label><label>Spending cap · USDC<input name="cap" required type="number" min="0.000001" step="0.000001" value="2"></label></div>
-<label>Recipient on Base<input name="recipient" required pattern="0x[a-fA-F0-9]{40}" placeholder="0x…"></label><label>Refund account on NEAR<input name="refundTo" required minlength="2" maxlength="64" pattern="[a-z0-9]+([._\-][a-z0-9]+)*" placeholder="your-account.near"></label>
-<p class="hint">Use your approved addresses. Or load the signed demo to explore without entering any details.</p><button class="primary" type="submit" id="quote">Verify dry-run quote <span>→</span></button></form></section>
-<section class="panel review"><div class="panel-title"><span class="number">02</span><h2>Quote & settlement review</h2></div><div id="empty"><div class="empty-icon">◇</div><h3>A clear view before you pay.</h3><p>Your verified quote and simulation timeline will appear here.</p><span class="muted">Start with an invoice or load the signed demo.</span></div><div id="detail" hidden></div></section></div>
-<section class="panel history"><div class="panel-title"><h2>Review history</h2><span class="muted">Saved on this computer</span></div><div id="history"></div></section><footer>COUNTERSIGN / NEAR HACKATHON <span>Authorization first. Execution later.</span></footer></main><script type="module" src="/app.js"></script><script type="module" src="/sandbox.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f6f5f0" />
+    <title>Countersign · Payment desk</title>
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Skip to workspace</a>
+    <aside class="sidebar">
+      <a class="brand" href="#payments" aria-label="Countersign home"
+        ><img src="/logo.svg" width="36" height="36" alt="" /><span
+          >Countersign<span class="brand-period">.</span></span
+        ></a
+      >
+      <div class="workspace-name">
+        <span class="workspace-avatar">L</span>
+        <div>Local workspace<small>NEAR payment assurance</small></div>
+      </div>
+      <nav class="main-nav" aria-label="Workspace">
+        <a
+          class="nav-item"
+          href="#payments"
+          data-view="payments"
+          aria-current="page"
+          ><span data-icon="wallet"></span>Payment desk</a
+        >
+        <a class="nav-item" href="#quote-lab" data-view="quote-lab"
+          ><span data-icon="route"></span>1Click lab<span class="nav-note"
+            >Dry run</span
+          ></a
+        >
+        <a class="nav-item" href="/attack-results/"
+          ><span data-icon="shield"></span>Attack results<span
+            data-icon="arrow-up-right"
+            class="nav-tail"
+          ></span
+        ></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-note">
+          <span data-icon="check-circle"></span>
+          <h2>One bill. One payment.</h2>
+          <p>Every retry is checked against the vault’s record.</p>
+          <a href="/attack-results/"
+            >See the proof <span aria-hidden="true">↗</span></a
+          >
+        </div>
+        <div class="local-indicator">
+          <span class="status-dot"></span>Runs on your computer
+        </div>
+      </div>
+    </aside>
+    <main id="workspace" tabindex="-1">
+      <header class="topbar">
+        <div class="breadcrumb">
+          Workspace <span aria-hidden="true">/</span>
+          <strong id="page-label">Payment desk</strong>
+        </div>
+        <span class="badge neutral"
+          ><span class="status-dot"></span>Local test funds</span
+        >
+      </header>
+      <div class="content">
+        <section
+          id="payments"
+          class="workspace-view sandbox"
+          aria-labelledby="payments-title"
+        >
+          <div class="page-heading">
+            <div>
+              <h1 id="payments-title">Payment desk</h1>
+              <p>Your bills, your approval. Every payment accounted for.</p>
+            </div>
+            <button id="new-invoice" class="button primary" disabled>
+              <span data-icon="plus"></span>New invoice
+            </button>
+          </div>
+          <div class="environment-note">
+            <span data-icon="shield"></span
+            ><span
+              ><strong>A safe place to try it.</strong> Payments here use local
+              test NEAR. No real funds.</span
+            ><span class="connection" id="connection">Connecting…</span>
+          </div>
+          <div
+            id="sandbox-message"
+            class="feedback-region"
+            role="status"
+            aria-live="polite"
+          ></div>
+          <button id="sandbox-start" class="button secondary" hidden>
+            Reconnect local vault
+          </button>
+          <div
+            class="balance-strip"
+            id="sandbox-balances"
+            aria-label="Local vault balances"
+          >
+            <div class="balance-primary">
+              <span class="metric-label">Available in vault</span
+              ><strong>— <span>NEAR</span></strong
+              ><small>Reading the local chain…</small>
+            </div>
+            <div>
+              <span class="metric-label">Paid to merchant</span
+              ><strong>— <span>NEAR</span></strong
+              ><small>Confirmed transfers only</small>
+            </div>
+            <div>
+              <span class="metric-label">Invoices</span><strong>—</strong
+              ><small>Your saved payment records</small>
+            </div>
+          </div>
+          <div id="sandbox-body" hidden>
+            <div class="payment-layout">
+              <section
+                class="panel ledger"
+                aria-labelledby="invoice-list-title"
+              >
+                <div class="panel-header">
+                  <div>
+                    <h2 id="invoice-list-title">
+                      Invoices <span id="invoice-count" class="count">0</span>
+                    </h2>
+                    <p>Follow a bill from approval to settlement.</p>
+                  </div>
+                  <button class="button ghost small" id="sandbox-refresh">
+                    <span data-icon="refresh"></span>Refresh
+                  </button>
+                </div>
+                <div class="ledger-tools">
+                  <label class="search-field"
+                    ><span data-icon="search"></span
+                    ><input
+                      id="invoice-search"
+                      type="search"
+                      placeholder="Find an invoice…"
+                      aria-label="Find an invoice" /></label
+                  ><label class="sr-only" for="invoice-filter"
+                    >Filter invoices</label
+                  ><select id="invoice-filter">
+                    <option value="all">All invoices</option>
+                    <option value="open">Needs action</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </div>
+                <div id="sandbox-invoices"></div>
+                <div class="ledger-footer">
+                  <span data-icon="lock"></span
+                  ><span>Payee and amount are bound when you authorize.</span>
+                </div>
+              </section>
+              <section class="panel composer" aria-labelledby="authorize-title">
+                <div class="panel-header">
+                  <div>
+                    <span class="section-icon" data-icon="signature"></span>
+                    <h2 id="authorize-title">Authorize an invoice</h2>
+                    <p>
+                      Approve the exact amount before any funds are reserved.
+                    </p>
+                  </div>
+                </div>
+                <form id="sandbox-invoice">
+                  <label for="local-id">Invoice reference</label
+                  ><input
+                    id="local-id"
+                    name="id"
+                    required
+                    maxlength="128"
+                    pattern="[A-Za-z0-9_.:\-]{1,128}"
+                    value="SANDBOX-001"
+                    autocomplete="off"
+                    aria-describedby="invoice-reference-help"
+                  />
+                  <p id="invoice-reference-help" class="field-hint">
+                    A unique reference for this bill.
+                  </p>
+                  <label for="local-amount">Amount</label>
+                  <div class="input-suffix">
+                    <input
+                      id="local-amount"
+                      name="amount"
+                      required
+                      type="text"
+                      inputmode="decimal"
+                      value="0.1"
+                      autocomplete="off"
+                      aria-describedby="amount-help"
+                    /><span>Test NEAR</span>
+                  </div>
+                  <p class="field-hint" id="amount-help">
+                    Up to 5 NEAR per invoice.
+                  </p>
+                  <div class="payee-box">
+                    <span class="merchant-avatar" data-icon="store"></span>
+                    <div>
+                      <span class="field-hint">Fixed test merchant</span
+                      ><strong id="sandbox-payee">Reading account…</strong>
+                    </div>
+                    <span class="payee-lock" data-icon="lock"></span>
+                  </div>
+                  <div
+                    id="authorization-feedback"
+                    class="feedback-region"
+                    role="status"
+                    aria-live="polite"
+                  ></div>
+                  <button
+                    class="button primary full"
+                    type="submit"
+                    id="authorize"
+                  >
+                    <span data-icon="signature"></span
+                    ><span id="authorize-label">Authorize invoice</span>
+                  </button>
+                  <p class="form-footnote">
+                    <span data-icon="info"></span>This records your approval.
+                    Reserve and pay from the invoice list.
+                  </p>
+                </form>
+              </section>
+            </div>
+            <section
+              class="panel activity-panel"
+              aria-labelledby="activity-title"
+            >
+              <div class="panel-header">
+                <div>
+                  <h2 id="activity-title">Vault activity</h2>
+                  <p>Confirmed actions, newest first.</p>
+                </div>
+                <span class="badge neutral" id="activity-count">0 events</span>
+              </div>
+              <ol id="sandbox-events" class="activity-list"></ol>
+              <details class="vault-details">
+                <summary>Local vault details</summary>
+                <p id="sandbox-vault" class="mono"></p>
+                <p>
+                  This local demo holds disposable owner and executor keys.
+                  Production wallet sign-in is not connected.
+                </p>
+              </details>
+            </section>
+          </div>
+        </section>
+        <section
+          id="quote-lab"
+          class="workspace-view"
+          hidden
+          aria-labelledby="quotes-title"
+        >
+          <div class="page-heading">
+            <div>
+              <h1 id="quotes-title">1Click lab</h1>
+              <p>Inspect a signed quote. Rehearse uncertain settlement.</p>
+            </div>
+            <button id="demo" class="button secondary">
+              <span data-icon="play"></span>Load signed demo
+            </button>
+          </div>
+          <div class="environment-note">
+            <span data-icon="flask"></span
+            ><span
+              ><strong>Preview and simulation only.</strong> This lab cannot
+              fund or execute a swap.</span
+            ><span class="badge neutral">No funds moved</span>
+          </div>
+          <div class="lab-summary">
+            <span><strong id="count">0</strong> saved reviews</span
+            ><span><strong id="held">0</strong> need review</span
+            ><span>Route <strong>USDC on NEAR → Base</strong></span>
+          </div>
+          <div class="quote-layout">
+            <section class="panel quote-form">
+              <div class="panel-header">
+                <div>
+                  <h2>Quote request</h2>
+                  <p>Set the exact USDC amount the recipient should receive.</p>
+                </div>
+              </div>
+              <form id="invoice">
+                <label for="quote-id">Invoice reference</label
+                ><input
+                  id="quote-id"
+                  name="id"
+                  required
+                  maxlength="128"
+                  pattern="[A-Za-z0-9_.:\-]{1,128}"
+                  value="INV-2026-001"
+                  autocomplete="off"
+                />
+                <div class="route">
+                  <div>
+                    <span class="network-mark">N</span>
+                    <div><strong>USDC</strong><small>On NEAR</small></div>
+                  </div>
+                  <span data-icon="arrow-right"></span>
+                  <div>
+                    <span class="network-mark base-mark">B</span>
+                    <div><strong>USDC</strong><small>On Base</small></div>
+                  </div>
+                </div>
+                <div class="two">
+                  <div>
+                    <label for="quote-amount">Receive · USDC</label
+                    ><input
+                      id="quote-amount"
+                      name="amount"
+                      required
+                      type="text"
+                      inputmode="decimal"
+                      value="1"
+                      autocomplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label for="quote-cap">Spend at most · USDC</label
+                    ><input
+                      id="quote-cap"
+                      name="cap"
+                      required
+                      type="text"
+                      inputmode="decimal"
+                      value="2"
+                      autocomplete="off"
+                    />
+                  </div>
+                </div>
+                <label for="quote-recipient">Recipient on Base</label
+                ><input
+                  id="quote-recipient"
+                  name="recipient"
+                  required
+                  pattern="0x[a-fA-F0-9]{40}"
+                  placeholder="0x…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <label for="quote-refund">Refund account on NEAR</label
+                ><input
+                  id="quote-refund"
+                  name="refundTo"
+                  required
+                  minlength="2"
+                  maxlength="64"
+                  pattern="[a-z0-9]+([._\-][a-z0-9]+)*"
+                  placeholder="your-account.near"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div
+                  id="message"
+                  class="feedback-region"
+                  role="status"
+                  aria-live="polite"
+                ></div>
+                <button class="button primary full" type="submit" id="quote">
+                  <span data-icon="check-circle"></span>Verify dry-run quote
+                </button>
+                <p class="form-footnote">
+                  Requests a live quote from 1Click. Use the signed demo for an
+                  offline walkthrough.
+                </p>
+              </form>
+            </section>
+            <section class="panel quote-review" aria-labelledby="review-title">
+              <div class="panel-header">
+                <div>
+                  <h2 id="review-title">Quote review</h2>
+                  <p>Signature, amounts and settlement history.</p>
+                </div>
+                <span class="section-icon" data-icon="receipt"></span>
+              </div>
+              <div id="empty" class="empty-state">
+                <div class="empty-illustration" aria-hidden="true">
+                  <span data-icon="receipt"></span
+                  ><span class="seal" data-icon="check"></span>
+                </div>
+                <h3>Check the details before the next step.</h3>
+                <p>
+                  Verify your request or load a signed demo to explore the
+                  settlement states.
+                </p>
+              </div>
+              <div id="detail" hidden></div>
+            </section>
+          </div>
+          <section class="panel history">
+            <div class="panel-header">
+              <div>
+                <h2>Saved reviews</h2>
+                <p>Previous quotes stay attached to their original invoice.</p>
+              </div>
+              <span class="badge neutral">Saved locally</span>
+            </div>
+            <div id="history"></div>
+          </section>
+        </section>
+        <footer class="footer">
+          <span
+            >Countersign <span class="footer-divider">/</span> Built on
+            NEAR</span
+          ><span>Your agent proposes. Your vault enforces.</span>
+        </footer>
+      </div>
+    </main>
+    <script type="module" src="/app.js"></script>
+    <script type="module" src="/sandbox.js"></script>
+  </body>
+</html>

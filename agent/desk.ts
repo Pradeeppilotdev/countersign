@@ -8,7 +8,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readVaultControls,replaceLocalExecutor} from '../app/vault-controls.ts';
 import {SandboxDesk,parseNear} from '../app/sandbox.ts';
-import {AgentInbox} from './inbox.ts';
+import {AgentInbox,CancellationMismatch} from './inbox.ts';
 import {demoProposer} from './demo-proposer.ts';
 import {validMillis} from '../merchant/invoice.ts';
 async function main(){
@@ -18,10 +18,19 @@ const sdkRequire=createRequire(createRequire(import.meta.url).resolve('near-work
 sdkRequire('near-api-js').utils.Logger.overrideLogger();
 process.env.NEAR_WORKSPACES_NO_LOGS='1';
 const [command,...args]=process.argv.slice(2);
-const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],'weekly-service':[4],'service-status':[1,2],'revoke-service':[1],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1]};
-if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | weekly-service <agreement> <merchant> <cap NEAR> <anchor UTC ms> | service-status <agreement> [period start ms] | revoke-service <agreement> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label>');
+const counts:Record<string,number[]>={init:[0],status:[0],policy:[3,4],'renew-policy':[2],'weekly-service':[4],'service-status':[1,2],'revoke-service':[1],'correct-weekly':[2],'prepare-weekly':[1],revoke:[0],enqueue:[2],run:[1,2],resume:[0,1],'retry-proposal':[1],cancel:[1],'merchant-key':[2],'revoke-key':[1],import:[1],capacity:[0],'clear-approvals':[0],pause:[0],unpause:[0],'rotate-executor':[1],ask:[1,2]};
+if(!counts[command]?.includes(args.length)||(command==='run'&&args[1]!==undefined&&args[1]!=='--live-model'))throw Error('Usage: agent:desk init | status | policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR] | renew-policy <minutes> <renewal-id> | revoke | enqueue <id> <NEAR> | run <id> [--live-model] | resume [id] | retry-proposal <id> | cancel <id> | merchant-key <merchant> <base64 public key> | revoke-key <merchant> | weekly-service <agreement> <merchant> <cap NEAR> <anchor UTC ms> | service-status <agreement> [period start ms] | revoke-service <agreement> | prepare-weekly <inbox-id> | correct-weekly <original-inbox-id> <replacement-inbox-id> | import <signed-invoice.json> | capacity | clear-approvals | pause | unpause | rotate-executor <executor-local-label> | ask --facts | ask --check <signed-invoice.json> | ask --account <account_id> | ask "<question>"');
 const directory=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
-if(command!=='init'&&!existsSync(join(directory,'desk.json')))throw Error('Initialize the separate local agent vault with agent:desk init first');
+// A testnet or mainnet account check reads no local vault, so it needs no initialized desk.
+const remoteAccount=command==='ask'&&args[0]==='--account'&&['testnet','mainnet'].includes(process.env.COUNTERSIGN_NETWORK??'');
+if(command!=='init'&&!remoteAccount&&!existsSync(join(directory,'desk.json')))throw Error('Initialize the separate local agent vault with agent:desk init first');
+if(command==='ask'){
+ // Read-only: no SandboxDesk, no command lock, no owner/executor account or key.
+ const {askCommand,AskError}=await import('./ask/cli.ts');
+ try{console.log(await askCommand(args,directory));}
+ catch(error){if(!(error instanceof AskError))throw error;console.error(error.message);process.exitCode=1;}
+ return;
+}
 if(command==='run'){
  console.log(args[1]?'LIVE MODEL → SAVED POLICY → LOCAL TEST FUNDS ONLY':'FIXTURE MODEL → SAVED POLICY → LOCAL TEST FUNDS ONLY');
  const result=await runPersistentInvoice(directory,args[0],invoice=>demoProposer(args.slice(1)).propose(invoice));
@@ -40,7 +49,14 @@ try{
   await capacity();
   result=await desk.owner.call(desk.vault,'clear_policy_approvals',{},{gas:'300000000000000'});
   const known=new Set(inbox.list().map(row=>row.id));
-  for(const id of result)if(known.has(id))await inbox.cancel(id,invoice_id=>desk.vault.view('get_payment',{invoice_id}));
+  for(const id of result){
+   if(!known.has(id))continue;
+   try{await inbox.cancel(id,invoice_id=>desk.vault.view('get_payment',{invoice_id}));}
+   catch(error){
+    // The bulk operation already cleared this vault ID. A different inbox bill must keep its own state.
+    if(!(error instanceof CancellationMismatch))throw error;
+   }
+  }
  }
  else if(command==='pause'||command==='unpause'){result=await desk.owner.call(desk.vault,'set_paused',{paused:command==='pause'});}
  else if(command==='rotate-executor'){result=await replaceLocalExecutor(desk,args[0]);}
@@ -57,6 +73,16 @@ try{
   result=await desk.owner.call(desk.vault,'add_weekly_service',{agreement_id,merchant_id,cap:parseNear(amount),anchor_ms});
  }else if(command==='revoke-service'){
   result=await desk.owner.call(desk.vault,'revoke_weekly_service',{agreement_id:args[0]});
+ }else if(command==='prepare-weekly'){
+  result=await inbox.prepareWeekly(args[0]);
+ }else if(command==='correct-weekly'){
+  result=await inbox.correctWeekly(args[0],args[1],async request=>{
+   try{return await desk.owner.call(desk.vault,'correct_weekly_invoice',request,{gas:'100000000000000'});}
+   catch(error){
+    if(error instanceof Error && error.message.includes('MethodNotFound'))throw Error('Upgrade the local vault before correcting weekly bills.');
+    throw error;
+   }
+  });
  }else if(command==='service-status'){
   const [agreement_id,period_start_ms]=args;
   if(period_start_ms!==undefined&&!validMillis(period_start_ms))throw Error('Enter a UTC timestamp in integer milliseconds.');
@@ -75,8 +101,13 @@ try{
  }else if(command==='revoke'){await desk.owner.call(desk.vault,'revoke_policy',{});result={revoked:true};}
  else if(command==='enqueue')result=inbox.enqueue({id:args[0],payee:desk.merchant.accountId,asset:'near',amount:parseNear(args[1])},'local-merchant');
  else if(command==='resume'){
-  result=[];const ids=args.length?args:inbox.list().filter(r=>r.state==='proposal_ready').map(r=>String(r.id));
-  for(const id of ids){try{result.push(await inbox.resume(id));}catch{result.push(inbox.get(id));}}
+  result=[];
+  const candidates=args.length?[inbox.get(args[0])]:inbox.list().filter(r=>r.state==='proposal_ready'||r.state==='period_claimed');
+  for(const row of candidates){
+   const id=String(row.id);
+   const updated=await inbox.resume(id).catch(()=>inbox!.get(id));
+   if(args.length || row.state!=='period_claimed' || updated.state!=='period_claimed')result.push(updated);
+  }
  }else if(command==='cancel')result=await inbox.cancel(args[0],id=>desk.owner.call(desk.vault,'cancel',{invoice_id:id}));
  else if(command==='retry-proposal')result=inbox.retryProposal(args[0]);
  else result={controls:await readVaultControls(desk.vault),network:'LOCAL_SANDBOX',vault:desk.vault.accountId,merchant:desk.merchant.accountId,policy:await desk.vault.view('get_policy',{}),usage:await desk.vault.view('policy_usage',{}),available:await desk.vault.view('available_balance',{}),merchantReceived:(BigInt((await desk.merchant.balance()).total.toString())-desk.baseline).toString(),invoices:inbox.list()};

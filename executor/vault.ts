@@ -39,7 +39,17 @@ export function vaultAdapters(transport: VaultTransport, invoiceId: string): { a
     };
     check();
     if(p.state==='Cancelled')return p;
-    if(p.state==='Authorized'){p=await callVault(transport,'reserve',{invoice:p.invoice,attempt_id:attempt});check();}
+    if(p.state==='Authorized'){
+     try{p=await callVault(transport,'reserve',{invoice:p.invoice,attempt_id:attempt});}
+     catch(error){
+      // A confirmed cancellation ends this stale worker. Every other lost
+      // reservation acknowledgement still requires a separate recovery call.
+      const observed=await read();
+      if(observed.state!=='Cancelled')throw error;
+      p=observed;
+     }
+     check();
+    }
     if(p.state==='Reserved'){
      // Surface a definitive contract rejection. A timeout keeps the durable
      // record; the next recovery still uses exactly the same obligation.

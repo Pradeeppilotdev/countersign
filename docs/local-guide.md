@@ -300,7 +300,19 @@ npm run agent:desk -- service-status compute
 
 The owner pins the agreement to the merchant's policy payout account, a maximum payment and a UTC anchor in Unix milliseconds. Each period lasts exactly seven days from that anchor. The merchant passes the returned `service` object to `signInvoice` alongside its usual invoice fields. V2 signs the same fields as V1 under `COUNTERSIGN-SIGNED-INVOICE-V2\n`, followed by the agreement ID and exact period start in the same length-prefixed encoding. Import and run the signed file using the existing desk commands.
 
-The vault checks the current week on its own clock. The first valid authorization claims the week atomically with its policy charge. Dispatch must begin before both the invoice expiry and the end of the week. The claim survives cancellation, confirmed failure, lost responses and policy or key replacement. A failed or cancelled winner therefore uses that week's slot even when its spending allowance is returned. To inspect an earlier week, run `service-status compute <period-start-ms>`.
+The vault checks the current week on its own clock. The first valid authorization claims the week atomically with its policy charge. Dispatch must begin before both the invoice expiry and the end of the week. Cancellation, confirmed failure, lost responses and policy or key replacement all preserve the claim. To inspect an earlier week, run `service-status compute <period-start-ms>`.
+
+**Correct a weekly bill before reservation.** Import both merchant-signed bills into the local agent desk. Use `prepare-weekly` to authorize the original under the spending policy and stop before reservation. Skip that step if it already holds the current week. The owner can also correct a previously cancelled, never-reserved bill.
+
+```sh
+npm run agent:desk -- prepare-weekly ORIGINAL-ID
+npm run agent:desk -- correct-weekly ORIGINAL-ID CORRECTED-ID
+npm run agent:desk -- run CORRECTED-ID
+```
+
+The correction returns the replacement authorization. It switches the weekly claim and spending allowance together, checks both bill identities and keeps the original cancelled. The replacement needs fresh invoice and merchant bill IDs, the same merchant, payout account and service week, and an equal or lower amount within current policy. Repeating the same correction returns the replacement's recorded state. The final command runs the usual agent payment and recovery flow.
+
+Run `npm run test:weekly:correction` after building the contract. When the correction wins, the merchant receives 0.03 local test NEAR. When reservation wins, the owner sees “Correction requires a never-reserved bill” and the merchant receives 0.04. Each run kills the paying worker after settlement and checks that retrying both bills adds 0.00.
 
 Enrollment protects future dispatches to that payout account, including older unexecuted plain approvals and alternate merchant names. Payments already dispatched keep their original outcome. The owner can stop future authorizations and dispatches with `revoke-service compute`. Revocation preserves claims and the signature requirement. Each separately approved agreement has its own weekly allowance. Duplicate detection outside a defined service period still relies on the merchant's bill ID.
 
@@ -336,3 +348,16 @@ After building and explicitly upgrading an existing local vault, `npm run agent:
 Expired never-reserved approvals disappear from `policy_usage` immediately at the chain's expiry boundary. Their ledger entries are compacted on a successful new policy authorization or owner cleanup; their invoice records are retained and cannot be reused. No vault balance is credited by automatic expiry pruning because those invoices never reserved native funds.
 
 `npm run test:policy:recovery` → verify expiry pruning, retained expired reservations, dust rejection, pending-cap exhaustion, bulk recovery, cleanup/reservation races and clean CLI failure reasons on disposable local chains. The signed-invoice integration test also rewrites both the SQLite invoice and commitment, then strips its signature: both attacks are rejected before authorization. The exact 24-hour settlement-aging boundary remains covered by the Rust clock-boundary test; no successful real-chain 24-hour fast-forward is claimed.
+
+## Ask Dave
+
+Start the saved local chain with `npm run agent:desk -- status`. Ask Dave reads the inbox and consults the vault at a single block. It has no signing key or payment tools.
+
+- `npm run agent:desk -- ask --facts` → see the invoice outcomes, supplier totals, available balance, spending rules and unusual activity. This command runs locally.
+- `npm run agent:desk -- ask --check /absolute/path/signed-invoice.json` → see whether the signature, payout account, amount and service week fit the vault’s rules at that block. A bill without a service week gets a red flag if either the supplier or payout account is enrolled, even before the first weekly invoice arrives. The checker also reads the vault’s bill register, so a duplicate supplier bill is caught even after local inbox history is lost. An older vault missing a required lookup reports `cannot verify`.
+- `npm run agent:desk -- ask "Why was INV-001 blocked?"` → see the recorded reason and the invoice and block used to answer. For a control, try `npm run agent:desk -- ask "Are payments paused?"`.
+- `npm run test:ask` → verify the explanations, citations and invoice checks with fixture replies. `npm run test:ask:sandbox` → reproduce the paid, tampered, duplicate, over-budget and weekly bills on a disposable local chain.
+
+Natural-language questions send the question and available evidence to NEAR AI using the configured `NEAR_AI_API_KEY` and `NEAR_AI_MODEL`. The model selects records. Countersign supplies the amounts, outcomes, pause setting and citations from those records. An unsupported model reply produces “I couldn't verify that answer.” Set `COUNTERSIGN_ASK_DEBUG=1` to see the reason.
+
+Supplier totals count payments with a matching invoice commitment and signed supplier receipt. Transfers lacking that evidence appear in `totals.unattributed`. The inbox has no payment timestamps, so the weekly answer uses signed service periods and the daily budget uses the vault’s rolling 24-hour usage. The facts list weekly services named by inbox bills. Files rejected at import have no inbox record.

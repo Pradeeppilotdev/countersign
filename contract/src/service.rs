@@ -37,15 +37,23 @@ fn claims() -> LookupMap<ServicePeriod, String> {
 fn invoice_periods() -> LookupMap<String, ServicePeriod> {
     LookupMap::new(b"weekly-invoice-periods-v1".to_vec())
 }
+// Each original has at most one successor. The digest binds the full signed
+// replacement so an exact retry can recover after expiry or key rotation.
+fn corrections() -> LookupMap<String, (String, [u8; 32])> {
+    LookupMap::new(b"weekly-corrections-v1".to_vec())
+}
 
 fn current_start(anchor: u64, now: u64) -> Option<u64> {
     let elapsed = now.checked_sub(anchor)?;
     Some(now - elapsed % WEEK_MS)
 }
 
+fn period_required(merchant_id: &String, payee: &AccountId) -> bool {
+    protected_merchants().contains_key(merchant_id) || protected_payees().contains_key(payee)
+}
+
 pub(super) fn require_unprotected(invoice: &Invoice, merchant_id: &String) {
-    near_sdk::require!(!protected_merchants().contains_key(merchant_id), "signed service period required");
-    require_manual_payee(&invoice.payee);
+    near_sdk::require!(!period_required(merchant_id, &invoice.payee), "signed service period required");
 }
 
 pub(super) fn require_manual_payee(payee: &AccountId) {
@@ -73,7 +81,7 @@ pub(super) fn authorization_expiry(signed: &SignedInvoice) -> U64 {
 }
 
 // Called in the same receipt as policy authorization. No external promises or
-// cleanup paths touch a claim, including cancellation, failure and renewal.
+// cleanup paths touch a claim. Only an explicit owner correction can move it.
 pub(super) fn record(invoice_id: &String, period: &ServicePeriod) {
     claims().insert(period, invoice_id);
     invoice_periods().insert(invoice_id, period);
@@ -126,6 +134,10 @@ impl Contract {
         agreements().get(&agreement_id)
     }
 
+    pub fn requires_service_period(&self, merchant_id: String, payee: AccountId) -> bool {
+        period_required(&merchant_id, &payee)
+    }
+
     pub fn current_service_period(&self, agreement_id: String) -> Option<ServicePeriod> {
         let agreement = agreements().get(&agreement_id)?;
         if agreement.revoked { return None; }
@@ -135,6 +147,47 @@ impl Contract {
 
     pub fn get_service_claim(&self, service: ServicePeriod) -> Option<String> {
         claims().get(&service)
+    }
+
+    pub fn get_weekly_correction(&self, original_id: String) -> Option<String> {
+        corrections().get(&original_id).map(|(successor, _)| successor)
+    }
+
+    pub fn correct_weekly_invoice(
+        &mut self, original_id: String, original_payload_hash: String, replacement: SignedInvoice,
+    ) -> Payment {
+        near_sdk::require!(env::predecessor_account_id() == self.owner, "owner only");
+        let auth = self.get_invoice_auth(original_id.clone())
+            .unwrap_or_else(|| env::panic_str("original signed bill not found"));
+        near_sdk::require!(auth.payload_hash == original_payload_hash, "original signed bill mismatch");
+        let next_id = replacement.invoice.id.clone();
+        let digest = merchant_auth::signed_envelope_hash(&replacement);
+        if let Some((successor, previous_digest)) = corrections().get(&original_id) {
+            near_sdk::require!(successor == next_id && digest == previous_digest, "correction already bound");
+            return self.payments.get(&successor).expect("missing corrected payment");
+        }
+
+        controls::require_running();
+        let original = self.payments.get(&original_id).expect("missing original payment");
+        near_sdk::require!(original.attempt_id.is_none()
+            && matches!(original.state, State::Authorized | State::Cancelled),
+            "correction requires a never-reserved bill");
+        let period = invoice_periods().get(&original_id)
+            .unwrap_or_else(|| env::panic_str("original is not a weekly bill"));
+        near_sdk::require!(claims().get(&period).as_ref() == Some(&original_id), "service claim mismatch");
+        near_sdk::require!(replacement.service.as_ref() == Some(&period)
+            && replacement.merchant_id == auth.merchant_id && replacement.invoice.payee == original.invoice.payee
+            && replacement.invoice.asset == original.invoice.asset, "correction changes the service or payee");
+        near_sdk::require!(replacement.invoice.amount.0 <= original.invoice.amount.0, "correction increases amount");
+        near_sdk::require!(self.payments.get(&next_id).is_none(), "replacement invoice id already used");
+
+        // One synchronous receipt. If signature, current policy or bill checks
+        // fail, NEAR rolls back the cancellation, its quota release and the claim.
+        self.cancel(original_id.clone());
+        claims().insert(&period, &next_id);
+        let payment = self.apply_signed_invoice(replacement);
+        corrections().insert(&original_id, &(next_id, digest));
+        payment
     }
 }
 
@@ -175,6 +228,21 @@ mod tests {
     }
 
     #[test]
+    fn weekly_requirement_follows_either_identity_and_survives_revocation() {
+        let (mut vault, signed) = authorized_period();
+        let check = |vault: &Contract| {
+            let other = "other.near".parse::<AccountId>().unwrap();
+            assert!(vault.requires_service_period(signed.merchant_id.clone(), other.clone()));
+            assert!(vault.requires_service_period("alias".into(), signed.invoice.payee.clone()));
+            assert!(!vault.requires_service_period("alias".into(), other));
+        };
+        check(&vault);
+        testing_env!(context("owner.near", 2000));
+        vault.revoke_weekly_service("compute".into());
+        check(&vault);
+    }
+
+    #[test]
     fn cancelling_an_unspent_approval_releases_budget_and_preserves_its_week() {
         let (mut vault, signed) = authorized_period();
         vault.authorize_signed_invoice(signed.clone());
@@ -184,6 +252,20 @@ mod tests {
         assert_eq!(vault.available, 100);
         assert_eq!(vault.policy_usage().0, 0);
         assert_eq!(vault.get_service_claim(signed.service.unwrap()), Some(signed.invoice.id));
+    }
+
+    #[test]
+    #[should_panic(expected = "correction requires a never-reserved bill")]
+    fn cancelling_an_expired_reservation_does_not_make_it_correctable() {
+        let (mut vault, signed) = authorized_period();
+        let id = signed.invoice.id.clone();
+        let hash = vault.get_invoice_auth(id.clone()).unwrap().payload_hash;
+        vault.reserve(signed.invoice.clone(), "reserved".into());
+        testing_env!(context("owner.near", signed.expires_at.0));
+        let cancelled = vault.cancel(id.clone());
+        assert_eq!(cancelled.state, State::Cancelled);
+        assert_eq!(cancelled.attempt_id.as_deref(), Some("reserved"));
+        vault.correct_weekly_invoice(id, hash, signed);
     }
 
     #[test]

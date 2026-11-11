@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {SandboxDesk} from '../app/sandbox.ts';
-import {Executor} from '../executor/core.ts';
+import {SandboxDesk,parseNear} from '../app/sandbox.ts';
+import {Executor,type Payment} from '../executor/core.ts';
 import {vaultAdapters} from '../executor/vault.ts';
 
 test('atomic initialization, browser RPC denial, and native recovery across interrupted submissions',{timeout:240_000},async()=>{
@@ -52,5 +52,52 @@ test('atomic initialization, browser RPC denial, and native recovery across inte
  }finally{
   await d.close();
   try{const c=JSON.parse(readFileSync(join(directory,'chain.json'),'utf8'));if(c.pid)process.kill(c.pid,'SIGTERM');}catch{}
+ }
+});
+
+test('a delayed vault read preserves the confirmed payment across restart', {timeout:120_000}, async () => {
+ const desk = new SandboxDesk();
+ const directory = mkdtempSync(join(tmpdir(), 'countersign-recovery-order-'));
+ const journal = join(directory, 'attempts.db');
+ try {
+  await desk.start();
+  const invoice = {id:'out-of-order', payee:desk.merchant.accountId, asset:'near', amount:parseNear('0.04')};
+  const attempt = 'original';
+  const args = {invoice_id:invoice.id};
+  await desk.owner.call(desk.vault, 'authorize', {invoice});
+  await desk.executor.call(desk.vault, 'reserve', {invoice, attempt_id:attempt});
+  const tx = await desk.executor.callRaw(desk.vault, 'execute', {...args, attempt_id:attempt}, {gas:'100000000000000'});
+  assert.equal(tx.failed, false);
+
+  // Read the real pre-callback state at a receipt block, independent of RPC timing.
+  let executing: Payment | undefined;
+  for (const receipt of tx.result.receipts_outcome) {
+   const read = await desk.worker.provider.viewCall(desk.vault.accountId, 'get_payment', args, {block_id:receipt.block_hash});
+   const payment: Payment = JSON.parse(Buffer.from(read.result).toString());
+   if (payment.state === 'Executing') { executing = payment; break; }
+  }
+  assert.ok(executing, 'expected to find the transfer in progress before its callback');
+  const earlier = executing;
+  const noWrite = async () => { throw Error('Reading a completed transfer must not send a transaction'); };
+  const current = vaultAdapters({call:noWrite, view:(method, params) => desk.vault.view(method, params)}, invoice.id);
+  const observer = new Executor(journal, current.auth, current.rail);
+  const delayed = vaultAdapters({call:noWrite, async view() {
+   assert.equal(await observer.reconcile(invoice.id), 'settled');
+   return earlier; // Deliver the older response after the other worker saved the callback.
+  }}, invoice.id);
+  const worker = new Executor(journal, delayed.auth, delayed.rail);
+  try {
+   assert.equal(await worker.execute(invoice, attempt), 'settled');
+  } finally { worker.close(); observer.close(); }
+
+  const offline = vaultAdapters({call:noWrite, view:async () => { throw Error('Vault offline'); }}, invoice.id);
+  const restarted = new Executor(journal, offline.auth, offline.rail);
+  try {
+   assert.equal(await restarted.execute(invoice, attempt), 'settled');
+  } finally { restarted.close(); }
+  assert.equal((await desk.snapshot()).merchantReceived, invoice.amount);
+ } finally {
+  await desk.close();
+  rmSync(directory, {recursive:true});
  }
 });

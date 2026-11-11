@@ -5,12 +5,14 @@ import {join} from 'node:path';
 
 export type StorageEntry={key:string,value:string};
 export function checkWeeklyUpgradeMethods(methods:ReadonlySet<string>,journalStorage?:StorageEntry[]){
+ // A pinned journal predating either feature can still finish its original
+ // deployment. Once records exist, the deployed code must understand them.
+ const hasRecords=(prefix:string)=>!journalStorage || journalStorage.some(entry=>Buffer.from(entry.key,'base64').toString('utf8').startsWith(prefix));
+ if(!hasRecords('weekly-'))return;
  const required=['add_weekly_service','revoke_weekly_service','get_weekly_service','current_service_period','get_service_claim','authorize_signed_invoice','get_invoice_auth'];
+ if(hasRecords('weekly-corrections-v1'))required.push('correct_weekly_invoice','get_weekly_correction');
  const missing=required.find(name=>!methods.has(name));
  if(!missing)return;
- // A pre-weekly journal can finish its original pinned deployment. Once a
- // weekly record exists, recovery must preserve the ability to enforce it.
- if(journalStorage && !journalStorage.some(entry=>Buffer.from(entry.key,'base64').toString('utf8').startsWith('weekly-')))return;
  throw Error('Build the current contract before upgrading. Missing weekly billing method '+missing+'.');
 }
 export const digest=(data:string|Uint8Array)=>createHash('sha256').update(data).digest('hex');

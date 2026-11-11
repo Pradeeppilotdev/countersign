@@ -1,4 +1,4 @@
-import {createPublicKey,sign,verify,type KeyObject} from 'node:crypto';
+import {createHash,createPublicKey,sign,verify,type KeyObject} from 'node:crypto';
 import {commitment,type Invoice} from '../executor/core.ts';
 export type ServicePeriod = {agreement_id:string; period_start_ms:string};
 export type SignedInvoice={invoice:Invoice;merchant_id:string;bill_id:string;vault:string;domain:string;key_version:string;expires_at:string;service?:ServicePeriod;signature:string};
@@ -41,6 +41,15 @@ export function signingBytes(s:SignedInvoice){
  if(s.service)values.push(s.service.agreement_id,s.service.period_start_ms);
  const prefix=s.service?'COUNTERSIGN-SIGNED-INVOICE-V2\n':'COUNTERSIGN-SIGNED-INVOICE-V1\n';
  return Buffer.from(prefix+values.map(v=>`${Buffer.byteLength(v)}:${v}`).join(''));
+}
+// The vault keeps this signed payload hash even after the key rotates or the bill expires.
+export function signedInvoiceHash(signed:SignedInvoice):string {
+ return createHash('sha256').update(signingBytes(signed)).digest('hex');
+}
+export function matchesInvoiceReceipt(signed:SignedInvoice|null,receipt:unknown):boolean{
+ if(signed===null)return receipt===null;
+ if(!receipt||typeof receipt!=='object'||!('payload_hash' in receipt))return false;
+ return receipt.payload_hash===signedInvoiceHash(signed);
 }
 // Merchant-side utility: callers retain the private key; no agent/model receives it.
 export function signInvoice(unsigned:Omit<SignedInvoice,'signature'>,privateKey:KeyObject):SignedInvoice{

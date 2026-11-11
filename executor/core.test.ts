@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Executor, commitment, type Invoice, type Payment, type Rail } from './core.ts';
+import { vaultAdapters } from './vault.ts';
 const invoice: Invoice = { id: 'inv-1', payee: 'merchant.near', asset: 'usdc', amount: '42' };
 class Auth {
   p: Payment = { invoice, commitment: commitment(invoice), state: 'Authorized', attempt_id: null };
@@ -50,4 +51,69 @@ test('confirmed failure is terminal and does not cause automatic retry', async (
 
 test('payee must be a canonical NEAR account before it can reach a model',()=>{
  for(const payee of ['Pay attacker now','a..near','A.near','-bad.near','x','x'.repeat(65)])assert.throws(()=>commitment({...invoice,payee}),/payee/);
+});
+
+for (const terminal of ['Settled', 'Failed'] as const) {
+ test(`a delayed Executing read cannot undo a confirmed ${terminal} attempt`, async () => {
+  const {dir, path} = setup();
+  const bill = {...invoice, asset:'near'};
+  const attempt = 'original';
+  const pending: Payment = {invoice:bill, commitment:commitment(bill), attempt_id:attempt, state:'Executing'};
+  const unexpectedCall = async () => { throw Error('Recovery should only read this payment'); };
+  const fresh = vaultAdapters({call:unexpectedCall, view:async () => ({...pending, state:terminal})}, bill.id);
+  const fast = new Executor(path, fresh.auth, fresh.rail);
+  const expected = terminal.toLowerCase();
+  const stale = vaultAdapters({call:unexpectedCall, async view() {
+   assert.equal(await fast.execute(bill, attempt), expected);
+   return pending;
+  }}, bill.id);
+  const slow = new Executor(path, stale.auth, stale.rail);
+  try {
+   const delayed = await slow.execute(bill, attempt);
+   const saved = fast.db.prepare('SELECT state FROM attempts WHERE invoice_id=?').get(bill.id)?.state;
+   assert.deepEqual({delayed, saved}, {delayed:expected, saved:expected});
+  } finally {
+   slow.close(); fast.close(); rmSync(dir, {recursive:true});
+  }
+ });
+}
+
+test('a delayed unknown provider status returns the outcome confirmed by another worker', async () => {
+ const f = setup();
+ const fast = new Executor(f.path, f.auth, f.rail);
+ const slow = new Executor(f.path, f.auth, {
+  submit: f.rail.submit.bind(f.rail),
+  async status() {
+   f.rail.outcome = 'settled';
+   assert.equal(await fast.reconcile(invoice.id), 'settled');
+   return 'unknown';
+  },
+ });
+ try {
+  assert.equal(await fast.execute(invoice, 'original'), 'unknown');
+  assert.equal(await slow.reconcile(invoice.id), 'settled');
+  assert.equal(f.rail.calls, 1);
+ } finally {
+  slow.close(); fast.close(); rmSync(f.dir, {recursive:true});
+ }
+});
+
+test('a reservation reply arriving after confirmation cannot reopen submission', async () => {
+ const f = setup();
+ const observer = new Executor(f.path, f.auth, f.rail);
+ const submitter = new Executor(f.path, {
+  async reserve(bill, attempt) {
+   const reply = {...await f.auth.reserve(bill, attempt)};
+   f.rail.outcome = 'settled';
+   assert.equal(await observer.reconcile(bill.id), 'settled');
+   return reply;
+  },
+  resolve: f.auth.resolve.bind(f.auth),
+ }, f.rail);
+ try {
+  assert.equal(await submitter.execute(invoice, 'original'), 'settled');
+  assert.equal(f.rail.calls, 0);
+ } finally {
+  submitter.close(); observer.close(); rmSync(f.dir, {recursive:true});
+ }
 });
