@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {DatabaseSync} from 'node:sqlite';
 import {generateKeyPairSync} from 'node:crypto';
-import {signInvoice} from '../merchant/invoice.ts';
+import {signInvoice,signedInvoiceHash} from '../merchant/invoice.ts';
 import {commitment} from '../executor/core.ts';
 import type {VaultTransport} from '../executor/vault.ts';
 import {AgentInbox} from './inbox.ts';
@@ -150,4 +150,48 @@ test('a weekly duplicate becomes terminal only when the vault identifies the oth
   assert.equal((await inbox.resume(invoice.id)).state,'period_claimed');
   assert.equal(calls,2);
  } finally {inbox.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('queued signed cancellation needs exact on-chain evidence and invalidates a late proposal once',async()=>{
+ const signed=signInvoice({invoice,merchant_id:'supplier',bill_id:'queued-bill',vault:'vault.near',domain:'a'.repeat(64),key_version:'1',expires_at:'2000'},generateKeyPairSync('ed25519').privateKey);
+ const cancelled={invoice,commitment:commitment(invoice),state:'Cancelled' as const,attempt_id:null};
+ let payment:any=null,receipt:unknown=null,calls=0;
+ const {dir,inbox}=setup({call:async()=>{throw Error('No payment calls');},view:async(method):Promise<any>=>{
+  if(method==='get_payment')return payment;
+  assert.equal(method,'get_invoice_auth');return receipt;
+ }});
+ try {
+  inbox.enqueue(invoice,'supplier',signed);
+  let finish!:(p:unknown)=>void;
+  const inference=inbox.propose(invoice.id,async()=>new Promise(resolve=>{finish=resolve;}));
+  const cancel=()=>inbox.cancel(invoice.id,async()=>{throw Error('ID-only cancellation must not be used');},async exact=>{
+   assert.deepEqual(exact,signed);calls++;payment=cancelled;return cancelled;
+  });
+  await assert.rejects(cancel,/Signed invoice differs/); // A claimed result alone is insufficient.
+  assert.equal(inbox.get(invoice.id).state,'inference_pending');
+  receipt={payload_hash:signedInvoiceHash(signed)};
+  for(let n=0;n<2;n++)assert.equal((await cancel()).state,'cancelled');
+  assert.equal(calls,1);assert.equal(inbox.get(invoice.id).generation,1);
+  finish(proposal);await assert.rejects(inference,/superseded/);
+  assert.equal(inbox.get(invoice.id).state,'cancelled');
+ } finally {inbox.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('lost queued cancellation response stays recoverable without a second owner call',async()=>{
+ const signed=signInvoice({invoice,merchant_id:'supplier',bill_id:'lost-cancel',vault:'vault.near',domain:'a'.repeat(64),key_version:'1',expires_at:'2000'},generateKeyPairSync('ed25519').privateKey);
+ let payment:any=null,receipt:unknown=null,calls=0;
+ const {dir,db,inbox}=setup({call:async()=>{throw Error('No payment calls');},view:async(method):Promise<any>=>method==='get_payment'?payment:receipt});
+ let reopened:AgentInbox|undefined;
+ try {
+  inbox.enqueue(invoice,'supplier',signed);
+  await assert.rejects(inbox.cancel(invoice.id,async()=>{throw Error('Unexpected legacy call');},async()=>{
+   calls++;payment={invoice,commitment:commitment(invoice),state:'Cancelled',attempt_id:null};
+   receipt={payload_hash:signedInvoiceHash(signed)};throw Error('response lost');
+  }),/response lost/);
+  assert.equal(inbox.get(invoice.id).state,'queued');
+  reopened=new AgentInbox(db,'local:vault',{call:async()=>{throw Error('No payment');},view:async(method):Promise<any>=>method==='get_payment'?payment:receipt});
+  const stop=async()=>{throw Error('No owner resubmission');};
+  for(let n=0;n<2;n++)assert.equal((await reopened.cancel(invoice.id,stop,stop)).generation,1);
+  assert.equal(calls,1);
+ } finally {reopened?.close();inbox.close();rmSync(dir,{recursive:true,force:true});}
 });

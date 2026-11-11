@@ -47,6 +47,11 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   try{assert.equal((await runBill(beforeUpgrade,firstBill)).state,'settled');}finally{beforeUpgrade.close();}
   const route={invoice_id:'dry-approval',origin_asset:'near',destination_asset:'base-usdc',recipient:'0x1111111111111111111111111111111111111111',refund_to:desk.owner.accountId,amount_out:'1',max_amount_in:'2',quoted_amount_in:'1',expires_at:String(Date.now()+60000),quote_hash:'1'.repeat(32),response_hash:'a'.repeat(64)};
   await desk.owner.call(desk.vault,'authorize_route',{route});await desk.owner.call(desk.vault,'set_paused',{paused:true});
+  const stopped=signInvoice({...signed,invoice:unsigned('cancelled-before-approval'),bill_id:'never-approved'},keys.privateKey);
+  const queued=openInbox();
+  try{await queued.enqueueSigned(stopped,desk.vault.accountId);}finally{queued.close();}
+  await desk.owner.call(desk.vault,'cancel_signed_invoice',{signed:stopped},{gas:'100000000000000'});
+  const stoppedReceipt=await desk.vault.view('get_invoice_auth',{invoice_id:stopped.invoice.id});
   const before=await desk.vault.viewStateRaw(),localBefore=localRecords(directory),merchantBefore=(await desk.merchant.balance()).total.toString();
   const available=await desk.vault.view('available_balance',{}),policy=await desk.vault.view('get_policy',{}),key=await desk.vault.view('get_merchant_key',{merchant_id:'signed'}),bill=await desk.vault.view('get_invoice_auth',{invoice_id:'signed-paid'});
   await desk.close();closed=true;
@@ -72,8 +77,8 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   assert.ok(localBefore.files['policy-renewals/before-upgrade.json']);
   assert.deepEqual(await desk.vault.view('get_policy_renewal',{renewal_id:'before-upgrade'}),renewal.receipt);
   console.log('PASS: upgrade retained both the owner renewal journal and the on-chain receipt.');
-  assert.deepEqual(result.invoices.map((p:any)=>p.id).sort(),['held','orphan-approved','signed-paid','ui-approved','weekly-first']);
-  assert.equal(result.localRecords['inbox.db'].invoices,3);assert.equal(result.localRecords['inbox.db'].attempts,2);
+  assert.deepEqual(result.invoices.map((p:any)=>p.id).sort(),['cancelled-before-approval','held','orphan-approved','signed-paid','ui-approved','weekly-first']);
+  assert.equal(result.localRecords['inbox.db'].invoices,4);assert.equal(result.localRecords['inbox.db'].attempts,2);
   assert.equal(result.controls.paused,true);assert.equal(result.capacity.max_pending,16);
   assert.equal(await desk.vault.view('available_balance',{}),available);assert.equal((await desk.merchant.balance()).total.toString(),merchantBefore);
   assert.deepEqual(await desk.vault.view('get_policy',{}),policy);assert.deepEqual(await desk.vault.view('get_merchant_key',{merchant_id:'signed'}),key);assert.deepEqual(await desk.vault.view('get_invoice_auth',{invoice_id:'signed-paid'}),bill);
@@ -92,6 +97,10 @@ test('saved-vault upgrade preserves full state, blocks interrupted startup and r
   const usage=await desk.vault.view('policy_usage',{});
   const recovered=openInbox();
   try{
+   assert.equal(recovered.get(stopped.invoice.id).state,'queued'); // The owner died before saving the local result.
+   const noOwnerCall=async()=>{throw Error('Cancellation must recover from the retained receipt');};
+   assert.equal((await recovered.cancel(stopped.invoice.id,noOwnerCall,noOwnerCall)).state,'cancelled');
+   assert.deepEqual(await desk.vault.view('get_invoice_auth',{invoice_id:stopped.invoice.id}),stoppedReceipt);
    assert.deepEqual(recovered.get(firstBill.invoice.id).signed_invoice,firstBill);
    assert.equal((await runBill(recovered,firstBill)).state,'settled');
    const duplicate=await runBill(recovered,secondBill);

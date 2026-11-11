@@ -145,12 +145,20 @@ export class AgentInbox {
  }
  // Terms and signed receipts are immutable once the vault authorizes an ID.
  // The vault checks the current state again when the owner submits cancel.
- async cancel(id: string, cancelOnChain: (id: string) => Promise<Payment>) {
+ async cancel(id: string, cancelOnChain: (id: string) => Promise<Payment>, cancelUnapproved?: (signed: SignedInvoice) => Promise<Payment>) {
   const {expected,signed}=this.checkedInvoice(id);
   const args = {invoice_id:id};
-  const payment = await this.transport.view('get_payment', args);
-  if (!payment) throw Error('Unknown invoice in the vault.');
   const matchesTerms = (p: Payment) => p.commitment === expected && commitment(p.invoice) === expected;
+  let payment = await this.transport.view('get_payment', args);
+  if (!payment) {
+   if (!signed || !cancelUnapproved) throw Error('Unknown invoice in the vault.');
+   // Absence is not permission to mark a local row cancelled: a submission
+   // may already be in flight. The owner must atomically bind the exact bill.
+   const result = await cancelUnapproved(signed);
+   if (result?.state !== 'Cancelled' || !matchesTerms(result)) throw Error('Cancellation not confirmed for this invoice');
+   payment = await this.transport.view('get_payment', args);
+   if (payment?.state !== 'Cancelled') throw Error('Cancellation not confirmed for this invoice');
+  }
   if (!matchesTerms(payment)) throw new CancellationMismatch('Invoice already bound to different terms in the vault.');
   const receipt = await this.transport.view('get_invoice_auth', args);
   if (!matchesInvoiceReceipt(signed, receipt)) throw new CancellationMismatch('Signed invoice differs from the vault authorization.');

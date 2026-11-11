@@ -108,7 +108,13 @@ try{
    const updated=await inbox.resume(id).catch(()=>inbox!.get(id));
    if(args.length || row.state!=='period_claimed' || updated.state!=='period_claimed')result.push(updated);
   }
- }else if(command==='cancel')result=await inbox.cancel(args[0],id=>desk.owner.call(desk.vault,'cancel',{invoice_id:id}));
+ }else if(command==='cancel')result=await inbox.cancel(args[0],id=>desk.owner.call(desk.vault,'cancel',{invoice_id:id}),async signed=>{
+  try{return await desk.owner.call(desk.vault,'cancel_signed_invoice',{signed},{gas:'100000000000000'});}
+  catch(error){
+   if(error instanceof Error&&error.message.includes('MethodNotFound'))throw Error('Upgrade the local vault before cancelling a signed bill that has not been authorized.');
+   throw error;
+  }
+ });
  else if(command==='retry-proposal')result=inbox.retryProposal(args[0]);
  else result={controls:await readVaultControls(desk.vault),network:'LOCAL_SANDBOX',vault:desk.vault.accountId,merchant:desk.merchant.accountId,policy:await desk.vault.view('get_policy',{}),usage:await desk.vault.view('policy_usage',{}),available:await desk.vault.view('available_balance',{}),merchantReceived:(BigInt((await desk.merchant.balance()).total.toString())-desk.baseline).toString(),invoices:inbox.list()};
  console.log(JSON.stringify(result,null,2));

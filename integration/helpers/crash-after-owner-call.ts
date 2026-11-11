@@ -6,6 +6,6 @@ const callRaw = Account.prototype.callRaw;
 Account.prototype.callRaw = async function (...args: Parameters<typeof callRaw>) {
  const result = await callRaw.apply(this, args);
  const method=process.env.COUNTERSIGN_TEST_OWNER_RECEIPT ?? 'cancel';
- if (args[1] === method && !result.failed) process.kill(process.pid, 'SIGKILL');
+ if (method.split(',').includes(args[1]) && !result.failed) process.kill(process.pid, 'SIGKILL');
  return result;
 };
