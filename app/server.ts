@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { DryRunWorkflow } from '../oneclick/workflow.ts';
 import { preview } from '../oneclick/quotes.ts';
+import {askSource} from './ask-source.ts';
 mkdirSync(new URL('../work/',import.meta.url),{recursive:true});
 const workflow = new DryRunWorkflow(process.env.COUNTERSIGN_WORKFLOW_DB ?? fileURLToPath(new URL('../work/app.db',import.meta.url)));
 const port=Number(process.env.COUNTERSIGN_PORT ?? process.env.AEGIS_PORT ?? 4317), origin=`http://127.0.0.1:${port}`;
@@ -14,11 +15,15 @@ const assets: Record<string,[string,string]>={
  '/':['public/index.html','text/html'], '/app.js':['public/app.js','text/javascript'],
  '/sandbox.js':['public/sandbox.js','text/javascript'], '/style.css':['public/style.css','text/css'],
  '/components.js':['public/components.js','text/javascript'], '/state.js':['public/state.js','text/javascript'],
+ '/ask-source.js':['public/ask-source.js','text/javascript'],
  '/logo.svg':['public/logo.svg','image/svg+xml'], '/fonts/manrope.ttf':['public/fonts/manrope.ttf','font/ttf'],
  '/attack-results/style.css':['public/attack-results.css','text/css'],
  '/attack-results/result.json':['../docs/attack-results/result.json','application/json'],
 };
-const sandbox=new SandboxDesk(process.env.COUNTERSIGN_SANDBOX_DIR ?? process.env.AEGIS_SANDBOX_DIR ?? fileURLToPath(new URL('../work/local-vault/',import.meta.url)));
+const paymentDir=resolve(process.env.COUNTERSIGN_SANDBOX_DIR ?? process.env.AEGIS_SANDBOX_DIR ?? fileURLToPath(new URL('../work/local-vault/',import.meta.url)));
+const agentDir=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
+const source=()=>askSource(agentDir,paymentDir,process.env.COUNTERSIGN_NETWORK);
+const sandbox=new SandboxDesk(paymentDir);
 await sandbox.start();
 const server=createServer(async(req,res)=>{
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Cache-Control','no-store');
@@ -40,6 +45,7 @@ const server=createServer(async(req,res)=>{
   }
   if(req.method==='GET' && assets[url.pathname]) {const [file,type]=assets[url.pathname];res.writeHead(200,{'Content-Type':type});return res.end(readFileSync(new URL(file,import.meta.url)));}
   if(req.method==='GET' && url.pathname==='/api/sandbox') return json(200,await sandbox.snapshot());
+  if(req.method==='GET' && url.pathname==='/api/ask/source') return json(200,source());
   if(req.method==='GET' && url.pathname==='/api/workflows') {
    const ids=workflow.tracker.db.prepare('SELECT id FROM dry_quotes ORDER BY recorded DESC LIMIT 100').all();
    return json(200,ids.map(row=>workflow.inspect(String(row.id))));
@@ -50,11 +56,10 @@ const server=createServer(async(req,res)=>{
   if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid invoice reference or request.');
   if(url.pathname==='/api/ask') {
     // Read-only: the real Ask Dave CLI, same directory rule as agent/desk.ts.
-    const agentDir=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
     const {handleAsk}=await import('./ask-route.ts');
     const {askCommand}=await import('../agent/ask/cli.ts');
     const result=await handleAsk(input,{ask:askCommand,agentDir,vaultExists:()=>existsSync(join(agentDir,'desk.json')),now:Date.now});
-    return json(result.status,result.body);
+    return json(result.status,{...result.body,source:source()});
   }
   if(url.pathname==='/api/sandbox/start')return json(200,await sandbox.start());
   if(url.pathname.startsWith('/api/sandbox/'))return json(200,await sandbox.action(url.pathname.split('/').pop()!,input));

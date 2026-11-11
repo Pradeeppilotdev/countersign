@@ -412,8 +412,11 @@
           <div class="page-heading">
             <div>
               <h1 id="ask-dave-title">Ask Dave</h1>
-              <p>Ask about your agent's payments, blocks and rules. Read-only.</p>
+              <p>Ask about the saved agent vault's payments, blocks and rules. Read-only.</p>
             </div>
+          </div>
+          <div id="ask-source" class="ask-source" aria-live="polite">
+            Questions read the saved local agent vault. Loading its account…
           </div>
           <div class="ask-layout">
             <section class="panel ask-forms" aria-labelledby="ask-forms-title">
@@ -464,6 +467,7 @@
               </form>
               <div class="ask-check">
                 <h3>Would you pay this account?</h3>
+                <p id="ask-account-network">Checking the account lookup network…</p>
                 <form id="ask-account-form" class="ask-form">
                   <label for="ask-account">Account to check</label
                   ><input
@@ -488,9 +492,9 @@
               <div class="panel-header">
                 <div>
                   <h2 id="ask-answers-title">Answers</h2>
-                  <p>Newest first. Every answer is a read of the local vault.</p>
+                  <p>Newest first. The source is shown with each answer.</p>
                 </div>
-                <span class="badge neutral">Local vault</span>
+                <span class="badge neutral">Read-only</span>
               </div>
               <div
                 id="ask-answers"
@@ -501,7 +505,7 @@
           </div>
           <p class="ask-footer">
             Read-only. Ask Dave can't move funds. Account data powered by
-            Nearblocks.io APIs.
+            the selected chain; public account age and activity use Nearblocks.io APIs.
           </p>
         </section>
         <footer class="footer">

@@ -16,6 +16,7 @@ import {
   simulationState,
   createQuoteSelection,
 } from "./state.js";
+import { askSourceLabels } from "./ask-source.js";
 mountIcons();
 function navigate() {
   const view =
@@ -38,6 +39,7 @@ function navigate() {
         ? "Ask Dave"
         : "1Click lab";
   document.title = "Countersign · " + $("#page-label").textContent;
+  if (view === "ask-dave") refreshAskSource();
 }
 window.addEventListener("hashchange", navigate);
 navigate();
@@ -337,6 +339,22 @@ setInterval(() => {
 
 // --- Ask Dave -------------------------------------------------------------
 const askList = $("#ask-answers");
+function showAskSource(source) {
+  const labels = askSourceLabels(source);
+  notice($("#ask-source"), labels.question, source.agentVault ? "info" : "warning", labels.detail);
+  $("#ask-account-network").textContent = "Account checks: " + labels.account;
+  $("#ask-account").placeholder = source.accountNetwork === "local"
+    ? "merchant.test.near"
+    : source.accountNetwork === "testnet" ? "supplier.testnet" : "supplier.near";
+  return labels;
+}
+async function refreshAskSource() {
+  try { showAskSource(await api("/api/ask/source")); }
+  catch {
+    notice($("#ask-source"), "Agent vault source unavailable", "warning", "Reconnect to the local app to identify the vault before asking.");
+    $("#ask-account-network").textContent = "Account lookup network unavailable";
+  }
+}
 let askEmpty = el("p", "Ask a question or check an account to see an answer here.", "ask-empty");
 askList.append(askEmpty);
 const askForm = $("#ask-question-form"),
@@ -398,6 +416,10 @@ async function runAsk(kind, label, payload, button, labelNode, busyText) {
   labelNode.textContent = busyText;
   try {
     const data = await api("/api/ask", payload);
+    if (data.source) {
+      const labels = showAskSource(data.source);
+      card.insertBefore(el("p", "Source: " + (isAccount ? labels.account : labels.question), "ask-sources"), body);
+    }
     if (data.ok && data.text != null) setAnswer(head, body, data.text, isAccount);
     else setCardError(body, data.error ?? "No answer.");
   } catch (error) {
