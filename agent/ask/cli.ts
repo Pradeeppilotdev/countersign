@@ -47,7 +47,10 @@ export async function askCommand(args:string[],directory:string):Promise<string>
  const complete=nearChat(modelConfig()); // fails here, before any read, when no key is set
  const verdict=await askQuestion(await collectFacts(directory),first,complete);
  // Developer aid only: say why an answer was discarded. The owner still sees the fixed line.
- if(!verdict.ok&&process.env.COUNTERSIGN_ASK_DEBUG)console.error(`[ask debug] ${verdict.why}`);
+ if(process.env.COUNTERSIGN_ASK_DEBUG){
+  if(!verdict.ok)console.error(`[ask debug] ${verdict.why}`);
+  else if(verdict.reply_dropped)console.error(`[ask debug] reply dropped: ${verdict.reply_dropped}`);
+ }
  return verdict.text;
 }
 export {AskError};

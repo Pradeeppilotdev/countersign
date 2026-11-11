@@ -351,6 +351,8 @@ Expired never-reserved approvals disappear from `policy_usage` immediately at th
 
 ## Ask Dave
 
+Dave can write a short conversational reply above the cited facts. Amounts, outcomes and explanations must match the specific selected bill or budget field; unsupported claims or phrasing leave the exact facts visible instead. The reply may greet you and combine supported statements, but it cannot promise a payment will succeed. Set `COUNTERSIGN_ASK_VOICE=off` for facts only.
+
 Start the saved local chain with `npm run agent:desk -- status`. Ask Dave reads the inbox and consults the vault at a single block. It has no signing key or payment tools.
 
 - `npm run agent:desk -- ask --facts` → see the invoice outcomes, supplier totals, available balance, spending rules and unusual activity. This command runs locally.
