@@ -3,6 +3,7 @@ import {serveStdio} from '@modelcontextprotocol/server/stdio';
 import {z} from 'zod';
 import {publicError} from '../app/errors.ts';
 import {listInvoices, LocalDeskError, readTarget, requestPayment, restrictRpc} from './local-vault.ts';
+import {invoiceStatus} from './invoice-status.ts';
 
 function message(error: unknown) {
   return error instanceof LocalDeskError ? error.message : publicError(error);
@@ -26,8 +27,15 @@ try {
     }, () => {
       try { return result(listInvoices(target)); } catch (error) { return failure(error); }
     });
+    server.registerTool('get_invoice_status', {
+      description: 'Read one exact signed bill at a finalized local vault block without requesting payment. Works while paused or after executor rotation, without signing keys. Only payment_confirmed=true with a matching Settled receipt confirms payment; inbox_state is only the last saved worker state.',
+      inputSchema: z.strictObject({invoice_id: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/)}),
+      annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false},
+    }, async ({invoice_id}) => {
+      try { return result(await invoiceStatus(target, invoice_id)); } catch (error) { return failure(error); }
+    });
     server.registerTool('request_payment', {
-      description: 'Request or reconcile one existing signed bill by ID using local test NEAR. The vault enforces its policy. Only a Settled vault receipt confirms payment. Retry the same ID after interruption.',
+      description: 'Request or reconcile one existing signed bill by ID using local test NEAR. The vault enforces its policy. Only a Settled vault receipt confirms payment. Retry the same ID after interruption. Use get_invoice_status to inspect without submitting, including while paused.',
       inputSchema: z.strictObject({invoice_id: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/)}),
       annotations: {readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false},
     }, async ({invoice_id}) => {

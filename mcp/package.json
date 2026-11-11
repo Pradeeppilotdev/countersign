@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "demo:setup": "node --disable-warning=ExperimentalWarning demo.ts",
-    "test": "node --disable-warning=ExperimentalWarning --test mcp.test.ts"
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 *.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",

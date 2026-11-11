@@ -100,7 +100,13 @@ try{
  else if(command==='enqueue')result=inbox.enqueue({id:args[0],payee:desk.merchant.accountId,asset:'near',amount:parseNear(args[1])},'local-merchant');
  else if(command==='resume'){
   result=await resumeDeskInvoices(inbox,args[0]);
- }else if(command==='cancel')result=await inbox.cancel(args[0],id=>desk.owner.call(desk.vault,'cancel',{invoice_id:id}));
+ }else if(command==='cancel')result=await inbox.cancel(args[0],id=>desk.owner.call(desk.vault,'cancel',{invoice_id:id}),async signed=>{
+  try{return await desk.owner.call(desk.vault,'cancel_signed_invoice',{signed},{gas:'100000000000000'});}
+  catch(error){
+   if(error instanceof Error&&error.message.includes('MethodNotFound'))throw Error('Upgrade the local vault before cancelling a signed bill that has not been authorized.');
+   throw error;
+  }
+ });
  else if(command==='retry-proposal')result=inbox.retryProposal(args[0]);
  else result=await readDeskStatus(desk,inbox);
  console.log(JSON.stringify(result,null,2));
