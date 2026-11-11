@@ -901,6 +901,19 @@ test('voice: every supplied phrasing example verifies, and unsupported chat clai
  assert.ok(verifyAnswer(unattributed,voiced(['invoice:INV-BEANS-001'],'INV-BEANS-001 was paid 0.1 NEAR.')).text===verifyAnswer(unattributed,select('invoice:INV-BEANS-001')).text);
 });
 
+test('voice: known historical reasons remain conversational without claiming Dave took an action',async()=>{
+ const pack=await cafePack();
+ const bill=pack.invoices.find(i=>i.id==='INV-BEANS-003')!;
+ for(const explanation of Object.values(GLOSSARY)){
+  bill.explanation=explanation;
+  for(const detail of [explanation.meaning,explanation.what_to_do]){
+   const text=`For ${bill.id}, ${detail}`;
+   const result=verifyAnswer(pack,voiced(['invoice:'+bill.id],text));
+   assert.ok(result.ok&&!result.reply_dropped,text);
+  }
+ }
+});
+
 test('voice: the old format is unchanged, and a verified reply sits above the identical facts block',async()=>{
  const pack=await cafePack();
  for(const facts of [['invoice:INV-BEANS-003'],['activity'],['pause','budget'],['suppliers','flags']]){

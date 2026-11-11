@@ -102,7 +102,7 @@ const POLICY_WORD=/\b(?:expired?|expires|expiring|active|inactive)\b/i;
 // The model cannot act, so a reply that says it did, will or can is never true.
 const ACTION=[
  /\bI(?:\s*'(?:ve|ll|m|d)|\s+(?:have|will|am|would|can|could|just|already|went ahead and))*\s+(?:(?:going|able)\s+to\s+)?(?:paid|pay|paying|paused|pause|pausing|unpaused|unpause|approved|approve|sent|send|cancel+ed|cancel|released|release|renewed|renew|revoked|revoke|blocked|block|transferred|transfer|retried|retry|resumed|resume|moved|move|changed|change|set|raised|raise|updated|update|fixed|fix|done|handled|processed|process|unblocked|unblock)\b/i,
- /\b(?:approved|sent)\b/i,/\blet me\b(?!\s+know\b)/i,/\bI(?:'m|\s+am)\s+on\s+it\b|\b(?:done that|taken care of)\b/i, // "let me know" and "an eye on it" are not actions
+ /\blet me\b(?!\s+know\b)/i,/\bI(?:'m|\s+am)\s+on\s+it\b|\b(?:done that|taken care of)\b/i, // Historical approvals/sends still need a complete, grounded clause.
 ];
 const escape=(s:string)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
