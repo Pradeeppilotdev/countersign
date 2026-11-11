@@ -1,9 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {buildFacts,formatNear,reasonCode} from './ask/facts.ts';
 import {readInbox} from './ask/inbox-reader.ts';
@@ -14,6 +14,7 @@ import {MAX_TOKENS,nearChat} from './ask/model.ts';
 import {GLOSSARY,explain} from './ask/glossary.ts';
 import {commitmentOf,payloadHash,signedBytes} from './ask/receipt.ts';
 import {askCommand} from './ask/cli.ts';
+import {LOOKALIKE_STOP,MISSING_STOP,checkAccount,renderAccount} from './ask/account.ts';
 import {createServer} from 'node:http';
 import {writeFileSync} from 'node:fs';
 import {commitment} from '../executor/core.ts';
@@ -29,9 +30,9 @@ const near=(n:string)=>{const [w,f='']=n.split('.');return (BigInt(w)*10n**24n+B
 test('Ask Dave module imports no signing or transaction code',()=>{
  // Only these may be loaded by anything under agent/ask: file reads, SQLite, .env parsing,
  // signature verification and its own files.
- const allowed=new Set(['node:fs','node:path','node:sqlite','node:util','node:crypto']);
+ const allowed=new Set(['node:fs','node:path','node:url','node:sqlite','node:util','node:crypto']);
  const files=readdirSync(askDir,{recursive:true}).map(String).filter(f=>f.endsWith('.ts'));
- assert.deepEqual(files.sort(),['answer.ts','check.ts','cli.ts','facts.ts','glossary.ts','inbox-reader.ts','model.ts','receipt.ts','views.ts']);
+ assert.deepEqual(files.sort(),['account.ts','answer.ts','check.ts','cli.ts','facts.ts','glossary.ts','inbox-reader.ts','model.ts','receipt.ts','views.ts']);
  for(const file of files){
   const text=readFileSync(join(askDir,file),'utf8');
   const code=text.replace(/\/\/.*$/gm,'');
@@ -50,12 +51,18 @@ test('Ask Dave module imports no signing or transaction code',()=>{
   const cryptoUse:Record<string,string[]>={'check.ts':['createPublicKey','verify'],'receipt.ts':['createHash']};
   if(cryptoUse[file])assert.deepEqual(crypto?.[1].split(',').map(n=>n.trim()).sort(),cryptoUse[file]);
   else assert.equal(code.includes('node:crypto'),false,file);
-  // Network: the loopback vault reader and one model endpoint, nothing else.
-  assert.equal(/\bfetch\b|\bsend\s*\(/.test(code),file==='views.ts'||file==='model.ts',file);
+  // Network: the loopback vault reader, one model endpoint and the account check's free read-only sources, nothing else.
+  assert.equal(/\bfetch\b|\bsend\s*\(/.test(code),file==='views.ts'||file==='model.ts'||file==='account.ts',file);
  }
  const model=readFileSync(join(askDir,'model.ts'),'utf8');
  assert.equal(/tools|tool_choice|functions\s*:/.test(model.replace(/\/\/.*$/gm,'')),false);
  assert.deepEqual(model.match(/https?:\/\/[^'"`\s]+/g),['https://cloud-api.near.ai/v1/chat/completions']);
+ // The account check: fixed free endpoints, RPC query reads of accounts and keys only, GET only on NearBlocks.
+ const accountRaw=readFileSync(join(askDir,'account.ts'),'utf8'),account=accountRaw.replace(/\/\/.*$/gm,'');
+ assert.deepEqual(accountRaw.match(/https?:\/\/[^'"`\s]+/g),['https://test.rpc.fastnear.com','https://free.rpc.fastnear.com','https://api-testnet.nearblocks.io','https://api.nearblocks.io','http://127.0.0.1:${chain.port}']);
+ assert.deepEqual([...account.matchAll(/method:'([A-Za-z_]+)'/g)].map(m=>m[1]).sort(),['GET','POST','query']);
+ assert.deepEqual([...new Set([...account.matchAll(/request_type:'([a-z_]+)'/g)].map(m=>m[1]))].sort(),['view_access_key_list','view_account']);
+ assert.equal(/call_function|Authorization|api_?key/i.test(account),false);
  const views=readFileSync(join(askDir,'views.ts'),'utf8');
  assert.deepEqual([...views.matchAll(/rpc\('([a-z_]+)'/g)].map(m=>m[1]).sort(),['block','query']);
  assert.ok(views.includes("request_type:'call_function'"));
@@ -601,4 +608,217 @@ test('report card: an unknown reason is shown exactly as stored, never invented,
  for(const entry of Object.values(GLOSSARY))assert.ok(!text.includes(entry.meaning));
  assert.ok(!JSON.stringify(buildMessages(pack,'How is my agent doing?')).includes('Teapot'));
  assert.equal((await askQuestion(pack,'How is my agent doing?',async()=>select('activity'))).text,text);
+});
+
+// "Would you pay this account?" Every request is answered by a mock: no network in unit tests.
+const DAY_NS=86_400_000_000_000n,NOW=Date.UTC(2026,10,10);
+function accountNet(o:{exists?:boolean;code?:string;keys?:string[];created_days?:number|null;txns?:number;more?:boolean;limited?:boolean}={}){
+ const calls:{url:string;body:any}[]=[];
+ const send:typeof fetch=async(url,init)=>{
+  const body=init?.body?JSON.parse(String(init.body)):null;calls.push({url:String(url),body});
+  assert.equal(init?.redirect,'error');
+  if(body){
+   assert.equal(body.method,'query');
+   if(o.exists===false)return Response.json({jsonrpc:'2.0',id:'ask-dave',error:{name:'HANDLER_ERROR',cause:{name:'UNKNOWN_ACCOUNT',info:{requested_account_id:body.params.account_id}}}});
+   if(body.params.request_type==='view_account')return Response.json({result:{amount:'1',locked:'0',code_hash:o.code??'11111111111111111111111111111111',storage_usage:100,block_height:4242,block_hash:'h'}});
+   if(body.params.request_type==='view_access_key_list'){assert.equal(body.params.block_id,4242);return Response.json({result:{block_height:4242,keys:(o.keys??['FullAccess']).map(p=>({public_key:'ed25519:x',access_key:{nonce:1,permission:p==='FullAccess'?'FullAccess':{FunctionCall:{allowance:null,receiver_id:'v',method_names:[]}}}}))}});}
+  }
+  assert.equal(init?.method,'GET');
+  if(o.limited)return new Response('{"message":"rate limited"}',{status:429,headers:{'retry-after':'30'}});
+  if(String(url).includes('/txns?limit=25'))return Response.json({data:Array.from({length:o.txns??0},(_,i)=>({transaction_hash:'t'+i})),...(o.more?{meta:{next_page:'c'}}:{})});
+  const created=o.created_days===null?{}:{block_timestamp:(BigInt(NOW)*1_000_000n-BigInt(o.created_days??400)*DAY_NS).toString(),transaction_hash:'x'};
+  return Response.json({data:{account_id:'a',created,deleted:{},locked:false}});
+ };
+ return {send,calls};
+}
+function localDir(){const dir=mkdtempSync(join(tmpdir(),'ask-account-'));writeFileSync(join(dir,'chain.json'),JSON.stringify({port:3030}));return dir;}
+
+test('account check: a missing account is STOP and nothing else is fetched',async()=>{
+ const cache=mkdtempSync(join(tmpdir(),'ask-cache-'));
+ try{
+  const net=accountNet({exists:false});
+  const check=await checkAccount('no-such-account-q7.testnet',{network:'testnet',directory:cache,send:net.send,cacheDir:cache,now:NOW});
+  assert.deepEqual([check.verdict,check.reasons],['STOP',[MISSING_STOP]]);
+  assert.equal(net.calls.length,1);assert.equal(net.calls[0].url,'https://test.rpc.fastnear.com');
+  assert.equal(renderAccount(check).split('\n')[0],'STOP: Account does not exist.');
+  await assert.rejects(()=>checkAccount('Not An Account!',{network:'testnet',directory:cache,send:net.send,cacheDir:cache}),/not a valid NEAR account ID/);
+ }finally{rmSync(cache,{recursive:true,force:true});}
+});
+
+test('account check: a lookalike of a pinned payout is STOP; the pinned payout with paid history is PAY',async()=>{
+ const dir=localDir(),pack=await cafePack();
+ try{
+  for(const copy of ['rnerchant.test.near','merchant.testnet','merchants.test.near']){
+   const net=accountNet();
+   const check=await checkAccount(copy,{network:'local',directory:dir,pack,send:net.send,now:NOW});
+   assert.deepEqual([check.verdict,check.reasons],['STOP',[LOOKALIKE_STOP]],copy);
+   assert.ok(check.facts.includes(`Lookalike: yes, it looks like ${payee} (pinned for local-merchant).`));
+   assert.ok(net.calls.every(c=>c.url==='http://127.0.0.1:3030'),'local checks never leave the loopback RPC');
+  }
+  const net=accountNet({keys:['FullAccess','FunctionCall'],code:'Abc'});
+  const pay=await checkAccount(payee,{network:'local',directory:dir,pack,send:net.send,now:NOW});
+  assert.equal(pay.verdict,'PAY');
+  assert.deepEqual(renderAccount(pay).split('\n'),['PAY: pinned supplier payout account with paid history.',
+   '- Exists: yes.','- Contract: yes, contract code is deployed (code hash Abc).','- Access keys: 2, of which 1 full-access.',
+   '- Age: age unknown (no public indexer for the local sandbox).','- Activity: unknown (no public indexer for the local sandbox).',
+   '- Pinned payout: yes, for supplier local-merchant.','- Paid before by this vault: yes, 2 payments totalling 0.2 NEAR (INV-BEANS-001, INV-CUPS-004).',
+   '- Lookalike: no.',`Sources: local sandbox RPC at block 4242; vault ${vaultId} policy and inbox at block 9`]);
+  // Pinned but never paid, and an unrelated account: WARN.
+  const unpaid=await cafePack(undefined,async(m:string,a:any)=>m==='get_payment'?null:cafeView(m,a));
+  assert.deepEqual((await checkAccount(payee,{network:'local',directory:dir,pack:unpaid,send:accountNet().send})).reasons,['It is pinned, but this vault has never paid it.']);
+  const stranger=await checkAccount('bakery-supplies.test.near',{network:'local',directory:dir,pack,send:accountNet().send});
+  assert.deepEqual([stranger.verdict,stranger.reasons],['WARN',['It is not a pinned supplier payout account in your vault.']]);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('account check: a new account with no activity is WARN, with its age, activity and NearBlocks source',async()=>{
+ const cache=mkdtempSync(join(tmpdir(),'ask-cache-'));
+ try{
+  const net=accountNet({created_days:2,txns:0});
+  const check=await checkAccount('fresh-payee.testnet',{network:'testnet',directory:cache,send:net.send,cacheDir:cache,now:NOW});
+  assert.equal(check.verdict,'WARN');
+  assert.deepEqual(check.reasons,['It is not a pinned supplier payout account in your vault.','It was created less than 7 days ago.','It has no prior transactions.']);
+  assert.ok(check.facts.includes('Age: created 2026-11-08T00:00:00.000Z (2 days ago).'));
+  assert.ok(check.facts.includes('Activity: 0 transactions on record.'));
+  assert.deepEqual(net.calls.map(c=>c.url),['https://test.rpc.fastnear.com','https://test.rpc.fastnear.com',
+   'https://api-testnet.nearblocks.io/v3/accounts/fresh-payee.testnet','https://api-testnet.nearblocks.io/v3/accounts/fresh-payee.testnet/txns?limit=25']);
+  assert.ok(check.sources.includes('NearBlocks testnet API v3, fetched 2026-11-10T00:00:00.000Z'));
+  // Within the hour NearBlocks is read from the cache; an older account with more history is not new.
+  const again=accountNet({created_days:400,txns:25,more:true});
+  const cached=await checkAccount('fresh-payee.testnet',{network:'testnet',directory:cache,send:again.send,cacheDir:cache,now:NOW+HOUR_MS-1});
+  assert.equal(again.calls.filter(c=>c.url.includes('nearblocks')).length,0);assert.ok(cached.facts.includes('Age: created 2026-11-08T00:00:00.000Z (2 days ago).'));
+  const later=await checkAccount('fresh-payee.testnet',{network:'testnet',directory:cache,send:again.send,cacheDir:cache,now:NOW+HOUR_MS});
+  assert.ok(later.facts.includes('Activity: 25+ transactions on record.'));assert.deepEqual(later.reasons,['It is not a pinned supplier payout account in your vault.']);
+ }finally{rmSync(cache,{recursive:true,force:true});}
+});
+
+test('account check: NearBlocks 429 gives "age unknown", backs off, and never crashes',async()=>{
+ const cache=mkdtempSync(join(tmpdir(),'ask-cache-'));
+ try{
+  const net=accountNet({limited:true});
+  const check=await checkAccount('busy-payee.testnet',{network:'testnet',directory:cache,send:net.send,cacheDir:cache,now:NOW});
+  assert.equal(check.verdict,'WARN');
+  assert.ok(check.facts.includes('Age: age unknown (NearBlocks rate limit).'));
+  assert.ok(check.facts.includes('Activity: unknown (NearBlocks rate limit).'));
+  assert.equal(net.calls.filter(c=>c.url.includes('nearblocks')).length,1,'no second request after a 429');
+  assert.ok(!check.reasons.some(r=>/created|transactions/.test(r)),'unknown age or activity is never guessed');
+  // During the back-off no request is made at all.
+  const after=accountNet({created_days:400,txns:3});
+  const waiting=await checkAccount('busy-payee.testnet',{network:'testnet',directory:cache,send:after.send,cacheDir:cache,now:NOW+30_000});
+  assert.equal(after.calls.filter(c=>c.url.includes('nearblocks')).length,0);
+  assert.ok(waiting.facts.includes('Age: age unknown (NearBlocks rate limit; backing off).'));
+  const resumed=await checkAccount('busy-payee.testnet',{network:'testnet',directory:cache,send:after.send,cacheDir:cache,now:NOW+60_000});
+  assert.ok(resumed.facts.includes('Activity: 3 transactions on record.'));
+ }finally{rmSync(cache,{recursive:true,force:true});}
+});
+const HOUR_MS=3_600_000;
+
+test('ask --check includes account findings in the overall invoice verdict without weakening other checks',async t=>{
+ const cases=[
+  {name:'missing payee',account:'missing',history:true,verdict:'bad',accountVerdict:'STOP',grade:'bad',reason:/Account does not exist/},
+  {name:'pinned but never paid',account:'exists',history:false,verdict:'caution',accountVerdict:'WARN',grade:'caution',reason:/never paid/},
+  {name:'account RPC unavailable',account:'unavailable',history:true,verdict:'cannot verify',accountVerdict:null,grade:'cannot verify',reason:/RPC is not answering/},
+  {name:'known paid payee',account:'exists',history:true,verdict:'good',accountVerdict:'PAY',grade:'good',reason:/pinned supplier payout/},
+  {name:'tampered invoice with known payee',account:'exists',history:true,tampered:true,verdict:'bad',accountVerdict:'PAY',grade:'good',reason:/pinned supplier payout/},
+  {name:'tampered invoice with unavailable account',account:'unavailable',history:true,tampered:true,verdict:'bad',accountVerdict:null,grade:'cannot verify',reason:/RPC is not answering/},
+  {name:'missing vault evidence with a warning',account:'exists',history:false,missingView:true,verdict:'cannot verify',accountVerdict:'WARN',grade:'caution',reason:/never paid/},
+  {name:'over-budget invoice with known payee',account:'exists',history:true,overBudget:true,verdict:'caution',accountVerdict:'PAY',grade:'good',reason:/pinned supplier payout/},
+ ] as const;
+ for(const c of cases)await t.test(c.name,async t=>{
+  const {dir,file}=vaultDir(3030,`session-1:${vaultId}`);
+  const net=accountNet({exists:c.account!=='missing'}),requests:any[]=[];
+  if(c.history){
+   const row=cafeInbox()[0],db=new DatabaseSync(join(dir,'inbox.db'));
+   try{db.prepare('INSERT INTO inbox(id,invoice,merchant,commitment,state,signed_invoice) VALUES(?,?,?,?,?,?)')
+    .run(row.id,JSON.stringify(row.invoice),row.merchant,row.commitment,row.state,JSON.stringify(signInvoice(cafeBill(row.id,'0.1',row.signed.bill_id),pair.privateKey)));}
+   finally{db.close();}
+  }
+  const bill=signInvoice(cafeBill('INV-Z','overBudget' in c?'0.5':'0.1','BILL-Z'),pair.privateKey);
+  if('tampered' in c)bill.invoice.amount=near('0.2');
+  writeFileSync(file,JSON.stringify(bill));
+  const before=readFileSync(join(dir,'inbox.db'));
+  t.mock.method(globalThis,'fetch',async(url:any,init:any)=>{
+   assert.equal(new URL(String(url)).origin,'http://127.0.0.1:3030');
+   const body=JSON.parse(String(init.body));requests.push(body);
+   if(body.method==='block')return Response.json({result:{header:{height:9}}});
+   if(body.params.request_type==='call_function'){
+    if('missingView' in c&&body.params.method_name==='requires_service_period')return Response.json({error:{name:'MethodNotFound'}});
+    const value=await cafeView(body.params.method_name,JSON.parse(Buffer.from(body.params.args_base64,'base64').toString()));
+    return Response.json({result:{result:[...Buffer.from(JSON.stringify(value))]}});
+   }
+   if(c.account==='unavailable')throw Error('fixture RPC outage');
+   return net.send(url,init);
+  });
+  try{
+   const result=JSON.parse(await askCommand(['--check',file],dir));
+   assert.equal(result.verdict,c.verdict);
+   assert.equal(result.payee_account.verdict,c.accountVerdict);
+   const check=result.checks.find((v:any)=>v.check==='payee_account');
+   assert.equal(check?.result,c.grade);assert.match(check.reason,c.reason);
+   if(c.account==='unavailable')assert.match(result.payee_account.unavailable,c.reason);
+   assert.deepEqual(readFileSync(join(dir,'inbox.db')),before);
+   assert.ok(requests.every(r=>r.method==='block'||r.method==='query'));
+  }finally{rmSync(dir,{recursive:true,force:true});}
+ });
+});
+
+test('ask --check follows the local invoice source even when a public network preference is set',async t=>{
+ const old=process.env.COUNTERSIGN_NETWORK,{dir,file}=vaultDir(3030,`session-1:${vaultId}`);
+ const urls:string[]=[],net=accountNet();
+ t.mock.method(globalThis,'fetch',async(url:any,init:any)=>{
+  urls.push(String(url));
+  const body=JSON.parse(String(init.body));
+  if(body.method==='block')return Response.json({result:{header:{height:9}}});
+  if(body.params.request_type==='call_function'){
+   const value=await cafeView(body.params.method_name,JSON.parse(Buffer.from(body.params.args_base64,'base64').toString()));
+   return Response.json({result:{result:[...Buffer.from(JSON.stringify(value))]}});
+  }
+  // A fixture for standalone public account checks; no real public request is made.
+  if(new URL(String(url)).hostname!=='127.0.0.1')return accountNet({exists:false}).send(url,init);
+  return net.send(url,init);
+ });
+ try{
+  for(const network of ['testnet','mainnet']){
+   process.env.COUNTERSIGN_NETWORK=network;
+   const result=JSON.parse(await askCommand(['--check',file],dir));
+   assert.equal(result.payee_account.network,'local',network);
+   assert.equal(result.payee_account.account,payee);
+  }
+  assert.ok(urls.every(url=>new URL(url).origin==='http://127.0.0.1:3030'));
+  // The standalone feature still honors an explicit public-network preference.
+  for(const [network,endpoint] of [['testnet','https://test.rpc.fastnear.com'],['mainnet','https://free.rpc.fastnear.com']]){
+   urls.length=0;process.env.COUNTERSIGN_NETWORK=network;
+   assert.match(await askCommand(['--account','unknown-payee.testnet'],dir),/^STOP: Account does not exist\./);
+   assert.deepEqual(urls,[endpoint]);
+  }
+ }finally{
+  if(old===undefined)delete process.env.COUNTERSIGN_NETWORK;else process.env.COUNTERSIGN_NETWORK=old;
+  rmSync(dir,{recursive:true,force:true});
+ }
+});
+
+test('default account cache and rate-limit backoff work in a checkout path with spaces and URL characters',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'ask-cache-path-')),repo=join(root,'Near hack #% café');
+ try{
+  mkdirSync(join(repo,'agent'),{recursive:true});
+  cpSync(askDir,join(repo,'agent/ask'),{recursive:true});
+  writeFileSync(join(repo,'package.json'),JSON.stringify({type:'module'}));
+  const {checkAccount:check}=await import(pathToFileURL(join(repo,'agent/ask/account.ts')).href);
+  const net=accountNet({created_days:400,txns:3});
+  const options={network:'testnet',directory:repo,send:net.send,now:NOW};
+  await check('supplier.testnet',options);
+  const cache=join(repo,'work/ask-cache');
+  assert.ok(existsSync(join(cache,'nearblocks-testnet-account-supplier.testnet.json')));
+  assert.ok(existsSync(join(cache,'nearblocks-testnet-txns-supplier.testnet.json')));
+  await check('supplier.testnet',options);
+  assert.equal(net.calls.filter(c=>c.url.includes('nearblocks')).length,2,'repeat lookup uses the default cache');
+  const limited=accountNet({limited:true});
+  await check('busy.testnet',{...options,send:limited.send});
+  assert.ok(existsSync(join(cache,'nearblocks-testnet-backoff.json')));
+  assert.equal(limited.calls.filter(c=>c.url.includes('nearblocks')).length,1);
+  const retry=accountNet();
+  await check('other.testnet',{...options,send:retry.send,now:NOW+30_000});
+  assert.equal(retry.calls.filter(c=>c.url.includes('nearblocks')).length,0,'backoff survives the next lookup');
+  assert.deepEqual(readdirSync(root),['Near hack #% café'],'no percent-encoded sibling directory is created');
+ }finally{rmSync(root,{recursive:true,force:true});}
 });
