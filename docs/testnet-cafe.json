@@ -1,0 +1,1012 @@
+{
+  "network": "testnet",
+  "accounts": {
+    "owner": "countersign-owner-7d8cc5331e.testnet",
+    "executor": "countersign-executor-7d8cc5331e.testnet",
+    "merchant": "countersign-merchant-7d8cc5331e.testnet",
+    "vault": "countersign-vault-7d8cc5331e.testnet"
+  },
+  "live_model_calls": 0,
+  "policy": {
+    "merchants": [
+      {
+        "id": "daves-cafe",
+        "payee": "countersign-merchant-7d8cc5331e.testnet"
+      }
+    ],
+    "per_payment": "500000000000000000000000",
+    "daily_limit": "800000000000000000000000",
+    "min_payment": "10000000000000000000000",
+    "expires_at": "1794334143219"
+  },
+  "setup": {
+    "fund": {
+      "hash": "EH15gCKNAbSx4TsGcvuDwCMUjXxMgyeYg8KV9hnphw6d",
+      "link": "https://testnet.nearblocks.io/txns/EH15gCKNAbSx4TsGcvuDwCMUjXxMgyeYg8KV9hnphw6d",
+      "signer": "countersign-owner-7d8cc5331e.testnet",
+      "receiver": "countersign-vault-7d8cc5331e.testnet",
+      "actions": [
+        {
+          "FunctionCall": {
+            "args": "e30=",
+            "deposit": "2000000000000000000000000",
+            "gas": 100000000000000,
+            "method_name": "fund"
+          }
+        }
+      ],
+      "status": {
+        "SuccessValue": ""
+      },
+      "block_hash": "AjbPLnMc8ZCwNQrEmjUcVaP33vPNbLYbWQz6djagffWw",
+      "receipts": [
+        {
+          "id": "ASRiLT5HnspFPfAUwPKz4hXvUJeMZ5D4mgc4aRLJ5Ssg",
+          "executor": "countersign-vault-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        },
+        {
+          "id": "5V8ByFpePDyMxmaCNBtfqZU19wkj8eRZnMyACvZS2W5a",
+          "executor": "countersign-owner-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        }
+      ]
+    },
+    "domain": {
+      "hash": "6emQfM6VzFtqZoJzECjhE9PVZaBDVopvP1NvbQ8AKr24",
+      "link": "https://testnet.nearblocks.io/txns/6emQfM6VzFtqZoJzECjhE9PVZaBDVopvP1NvbQ8AKr24",
+      "signer": "countersign-owner-7d8cc5331e.testnet",
+      "receiver": "countersign-vault-7d8cc5331e.testnet",
+      "actions": [
+        {
+          "FunctionCall": {
+            "args": "eyJkb21haW4iOiIwYjg4MzAyYTc0NzBiNjZmNzMxYTYzMDk5ZGY5YTM3NTg5NGUwMGRiYzRlZmZkNTMwNTdiZTBlMTFlOWJkZjMxIn0=",
+            "deposit": "0",
+            "gas": 100000000000000,
+            "method_name": "configure_invoice_auth"
+          }
+        }
+      ],
+      "status": {
+        "SuccessValue": "IjBiODgzMDJhNzQ3MGI2NmY3MzFhNjMwOTlkZjlhMzc1ODk0ZTAwZGJjNGVmZmQ1MzA1N2JlMGUxMWU5YmRmMzEi"
+      },
+      "block_hash": "3yLLp1p2WEGLzofwcuQvNZqAyGbQzfPjxvvenQNxR6jF",
+      "receipts": [
+        {
+          "id": "62uqiiLBhBrRg8hMZCC4ep62xMZc5FZfm1hUrLiov93Q",
+          "executor": "countersign-vault-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": "IjBiODgzMDJhNzQ3MGI2NmY3MzFhNjMwOTlkZjlhMzc1ODk0ZTAwZGJjNGVmZmQ1MzA1N2JlMGUxMWU5YmRmMzEi"
+          },
+          "logs": []
+        },
+        {
+          "id": "GibtMzDhbfpFNn79jEDwxjiW33Jfs3RsPAcptnHUuNAo",
+          "executor": "countersign-owner-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        }
+      ]
+    },
+    "merchant-key": {
+      "hash": "F9JNyBuR8WwBEx9NDgTzdsGWjw6aLc7Mj9Ngx6HbSvuT",
+      "link": "https://testnet.nearblocks.io/txns/F9JNyBuR8WwBEx9NDgTzdsGWjw6aLc7Mj9Ngx6HbSvuT",
+      "signer": "countersign-owner-7d8cc5331e.testnet",
+      "receiver": "countersign-vault-7d8cc5331e.testnet",
+      "actions": [
+        {
+          "FunctionCall": {
+            "args": "eyJtZXJjaGFudF9pZCI6ImRhdmVzLWNhZmUiLCJwdWJsaWNfa2V5IjoiSDJJZnd2RUh5aHQ2Z21Hb0VVbkd2TlZ3bkc2dHF0S1RGYmhwRUtCYUVHWT0ifQ==",
+            "deposit": "0",
+            "gas": 100000000000000,
+            "method_name": "set_merchant_key"
+          }
+        }
+      ],
+      "status": {
+        "SuccessValue": "eyJ2ZXJzaW9uIjoiMSIsInB1YmxpY19rZXkiOiJIMklmd3ZFSHlodDZnbUdvRVVuR3ZOVnduRzZ0cXRLVEZiaHBFS0JhRUdZPSJ9"
+      },
+      "block_hash": "8kYBLNUnY53TALipwhCEWxp3hVrdnDNPLmD6Pap2xvwe",
+      "receipts": [
+        {
+          "id": "6W5KNWsegaWjh95LYPczT1n5ZpWMf1ghSMbWFh3fpABJ",
+          "executor": "countersign-vault-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": "eyJ2ZXJzaW9uIjoiMSIsInB1YmxpY19rZXkiOiJIMklmd3ZFSHlodDZnbUdvRVVuR3ZOVnduRzZ0cXRLVEZiaHBFS0JhRUdZPSJ9"
+          },
+          "logs": []
+        },
+        {
+          "id": "8qKKFkSto8riKLgtdLfVG28Pb7DDUKc2dKK18i2Linpt",
+          "executor": "countersign-owner-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        }
+      ]
+    },
+    "policy": {
+      "hash": "DZvaAfBUJGMoHtUNQmT3pDRxAaThYsQ9QEzPXiZ7n3VX",
+      "link": "https://testnet.nearblocks.io/txns/DZvaAfBUJGMoHtUNQmT3pDRxAaThYsQ9QEzPXiZ7n3VX",
+      "signer": "countersign-owner-7d8cc5331e.testnet",
+      "receiver": "countersign-vault-7d8cc5331e.testnet",
+      "actions": [
+        {
+          "FunctionCall": {
+            "args": "eyJtZXJjaGFudHMiOlt7ImlkIjoiZGF2ZXMtY2FmZSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0In1dLCJwZXJfcGF5bWVudCI6IjUwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCIsImRhaWx5X2xpbWl0IjoiODAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwibWluX3BheW1lbnQiOiIxMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCIsImV4cGlyZXNfYXQiOiIxNzk0MzE4ODU1MTA2In0=",
+            "deposit": "0",
+            "gas": 100000000000000,
+            "method_name": "set_policy"
+          }
+        }
+      ],
+      "status": {
+        "SuccessValue": "eyJ2ZXJzaW9uIjoiMSIsIm1lcmNoYW50cyI6W3siaWQiOiJkYXZlcy1jYWZlIiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQifV0sInBlcl9wYXltZW50IjoiNTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZGFpbHlfbGltaXQiOiI4MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJleHBpcmVzX2F0IjoiMTc5NDMxODg1NTEwNiJ9"
+      },
+      "block_hash": "6stPSChMbmPk3cXepYRWN6SErFya1TBM1tff26346DxG",
+      "receipts": [
+        {
+          "id": "5doeD1rAH6zED6jPZHfPWtxq8HaAtivbpRJFtUiUyBAt",
+          "executor": "countersign-vault-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": "eyJ2ZXJzaW9uIjoiMSIsIm1lcmNoYW50cyI6W3siaWQiOiJkYXZlcy1jYWZlIiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQifV0sInBlcl9wYXltZW50IjoiNTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZGFpbHlfbGltaXQiOiI4MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJleHBpcmVzX2F0IjoiMTc5NDMxODg1NTEwNiJ9"
+          },
+          "logs": []
+        },
+        {
+          "id": "2aLCnXRa3W4Fn3JaBZrqxnxEwVAd6r182k9zCfxA9SCB",
+          "executor": "countersign-owner-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        }
+      ]
+    }
+  },
+  "cases": {
+    "paid": {
+      "outcome": {
+        "hash": "C5ok2A2DsLrkoJ7D89dQddmg9Y95qn9w7m78VcE1k5Ag",
+        "link": "https://testnet.nearblocks.io/txns/C5ok2A2DsLrkoJ7D89dQddmg9Y95qn9w7m78VcE1k5Ag",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJpbnZvaWNlX2lkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsImF0dGVtcHRfaWQiOiIxOTc0NjNhNzk5NWUwZWIyNmIwMjI4ZWQxMjhkMWRmOWNlYzlhMjI3ZDk4ZDljY2VkZjAyNGEzYmYzYjAyY2UxIn0=",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "execute"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJTZXR0bGVkIiwiYXR0ZW1wdF9pZCI6IjE5NzQ2M2E3OTk1ZTBlYjI2YjAyMjhlZDEyOGQxZGY5Y2VjOWEyMjdkOThkOWNjZWRmMDI0YTNiZjNiMDJjZTEifQ=="
+        },
+        "block_hash": "BkB4zShbco3QrrfrFSzuVpGenrkhAtFf76jAGjs6NFQh",
+        "receipts": [
+          {
+            "id": "AM8e7BFWRmnEAbof2YR2hbXY1ptvqtApru5PQYgepkzD",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessReceiptId": "8eexVoevGeYKCfYm4XJkyBANFnqMGvSQMhnepaV2sdAt"
+            },
+            "logs": []
+          },
+          {
+            "id": "7ME7kwjqPk8g3UPQyKDmMcjM5ApR4AW8VUV5FnyVA76R",
+            "executor": "countersign-merchant-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          },
+          {
+            "id": "BtECtFy3kJezGoLwirzVie2mnYX5zdoZ3mwhNpfwywBf",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          },
+          {
+            "id": "8eexVoevGeYKCfYm4XJkyBANFnqMGvSQMhnepaV2sdAt",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJTZXR0bGVkIiwiYXR0ZW1wdF9pZCI6IjE5NzQ2M2E3OTk1ZTBlYjI2YjAyMjhlZDEyOGQxZGY5Y2VjOWEyMjdkOThkOWNjZWRmMDI0YTNiZjNiMDJjZTEifQ=="
+            },
+            "logs": []
+          },
+          {
+            "id": "3s4VU7G7xddx3LTnAP25xYtcLiHjUgfxgTnnkfXtLMg8",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          },
+          {
+            "id": "GigFCzVxHBvwrCuxVwJsfecnA6u8QzKR2SqhfZyYGkZj",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "result": "Settled",
+      "invoice": {
+        "id": "daves-paid-2a7994a5",
+        "payee": "countersign-merchant-7d8cc5331e.testnet",
+        "asset": "near",
+        "amount": "400000000000000000000000"
+      },
+      "authorize": {
+        "hash": "EJCogWzvL8LLoU55hTAxBT9zHHZtuAzY7QF6EZSQrk1G",
+        "link": "https://testnet.nearblocks.io/txns/EJCogWzvL8LLoU55hTAxBT9zHHZtuAzY7QF6EZSQrk1G",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJzaWduZWQiOnsiaW52b2ljZSI6eyJpZCI6ImRhdmVzLXBhaWQtMmE3OTk0YTUiLCJwYXllZSI6ImNvdW50ZXJzaWduLW1lcmNoYW50LTdkOGNjNTMzMWUudGVzdG5ldCIsImFzc2V0IjoibmVhciIsImFtb3VudCI6IjQwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCJ9LCJtZXJjaGFudF9pZCI6ImRhdmVzLWNhZmUiLCJiaWxsX2lkIjoiZGF2ZXMtYmlsbC0wMDEtMmE3OTk0YTUiLCJ2YXVsdCI6ImNvdW50ZXJzaWduLXZhdWx0LTdkOGNjNTMzMWUudGVzdG5ldCIsImRvbWFpbiI6IjBiODgzMDJhNzQ3MGI2NmY3MzFhNjMwOTlkZjlhMzc1ODk0ZTAwZGJjNGVmZmQ1MzA1N2JlMGUxMWU5YmRmMzEiLCJrZXlfdmVyc2lvbiI6IjEiLCJleHBpcmVzX2F0IjoiMTc5NDMxODg1NTEwNiIsInNpZ25hdHVyZSI6InZMTTArNTI1NXdrSkxIdGZwNzNNQ1VzYmNUK2ZqTEszdnl2QmZpaEs2SUdwM3Y0WUtCanFQSXY5SUw2K2cya00xR3ZKVXJtTVFPTjFoU3JKSGJqUkR3PT0ifX0=",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "authorize_signed_invoice"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJBdXRob3JpemVkIiwiYXR0ZW1wdF9pZCI6bnVsbH0="
+        },
+        "block_hash": "HDVnSm2VAMN8ykLDSdWT2x4HpA54nEtZrkHPh7WEC4YH",
+        "receipts": [
+          {
+            "id": "4bT1e5pBu5dREu9wMt8H2kRKm2JXuvJJPwwcqTkGxeTF",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJBdXRob3JpemVkIiwiYXR0ZW1wdF9pZCI6bnVsbH0="
+            },
+            "logs": []
+          },
+          {
+            "id": "7TA9U94Mzq5FaEG3HW1PhgZwVd5hbzVcLCTghjekf6sV",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "reserve": {
+        "hash": "7C6pCzY7tmMZaEga1yD63C8WMBkqbF7PoCCM8FxFdw1h",
+        "link": "https://testnet.nearblocks.io/txns/7C6pCzY7tmMZaEga1yD63C8WMBkqbF7PoCCM8FxFdw1h",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImF0dGVtcHRfaWQiOiIxOTc0NjNhNzk5NWUwZWIyNmIwMjI4ZWQxMjhkMWRmOWNlYzlhMjI3ZDk4ZDljY2VkZjAyNGEzYmYzYjAyY2UxIn0=",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "reserve"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJSZXNlcnZlZCIsImF0dGVtcHRfaWQiOiIxOTc0NjNhNzk5NWUwZWIyNmIwMjI4ZWQxMjhkMWRmOWNlYzlhMjI3ZDk4ZDljY2VkZjAyNGEzYmYzYjAyY2UxIn0="
+        },
+        "block_hash": "DxUC2RwK2AuznD28npvnA2mm6Utue5eD7194GNML1XQU",
+        "receipts": [
+          {
+            "id": "BxmNM993S7gYCqABDyhTrGzB4d9NNL15uxDQirYL2iXa",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJSZXNlcnZlZCIsImF0dGVtcHRfaWQiOiIxOTc0NjNhNzk5NWUwZWIyNmIwMjI4ZWQxMjhkMWRmOWNlYzlhMjI3ZDk4ZDljY2VkZjAyNGEzYmYzYjAyY2UxIn0="
+            },
+            "logs": []
+          },
+          {
+            "id": "B4jVAnLA2eksaVwd8MhM16ZJYMTsUUmFkhJspuSQj4Nn",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "replay": {
+        "hash": "GUPKZcQ6cxfDk6qcwxf4V2CZ8CYvAY3QE8XxWAgeoxRa",
+        "link": "https://testnet.nearblocks.io/txns/GUPKZcQ6cxfDk6qcwxf4V2CZ8CYvAY3QE8XxWAgeoxRa",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJpbnZvaWNlX2lkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsImF0dGVtcHRfaWQiOiIxOTc0NjNhNzk5NWUwZWIyNmIwMjI4ZWQxMjhkMWRmOWNlYzlhMjI3ZDk4ZDljY2VkZjAyNGEzYmYzYjAyY2UxIn0=",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "execute"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJTZXR0bGVkIiwiYXR0ZW1wdF9pZCI6IjE5NzQ2M2E3OTk1ZTBlYjI2YjAyMjhlZDEyOGQxZGY5Y2VjOWEyMjdkOThkOWNjZWRmMDI0YTNiZjNiMDJjZTEifQ=="
+        },
+        "block_hash": "59PBVbN9FiKUeP2TuBRiGimhZqvew5yFTZMjmrDbkonG",
+        "receipts": [
+          {
+            "id": "H2Ad6CocR8yPhKxYveDRSJKyJdjjjuK3rh9LhAL7VonB",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcGFpZC0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImNvbW1pdG1lbnQiOiJjNzY0ZGRhZTc0MTM2N2YxZDk3YWUyYjBkYTA5ZDg2NGQyOThkNGI2MmJkYjhkZjAwNWU2NTk4ZWIyMmMxNTI4Iiwic3RhdGUiOiJTZXR0bGVkIiwiYXR0ZW1wdF9pZCI6IjE5NzQ2M2E3OTk1ZTBlYjI2YjAyMjhlZDEyOGQxZGY5Y2VjOWEyMjdkOThkOWNjZWRmMDI0YTNiZjNiMDJjZTEifQ=="
+            },
+            "logs": []
+          },
+          {
+            "id": "6Y3cnn4pbvcBzeTSmCafUzWjZ8YVMfcWBzYwF3jCafjJ",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "merchant_before": {
+        "amount": "10000000000000000000000000",
+        "block_hash": "4qHRGzVuCkxsXGuNgMhn8AaPUWV4xn6rytZMgdMRHini",
+        "block_height": 277051802
+      },
+      "merchant_after": {
+        "amount": "10400000000000000000000000",
+        "block_hash": "2S8akzTvmCed3wHotvRugthKoqa669NsANSFMjXQXgKw",
+        "block_height": 277051921
+      },
+      "merchant_after_replay": {
+        "amount": "10400000000000000000000000",
+        "block_hash": "BjCFmGnggsao3og3duoKqq4ahJnjVbdxhYjkykPrJiFp",
+        "block_height": 277051949
+      },
+      "credited_yocto": "400000000000000000000000",
+      "extra_on_replay_yocto": "0"
+    },
+    "tampered": {
+      "outcome": {
+        "hash": "UMJQ9TZzhuAZbvtYyRjKbSi5HzKhN6gzhMyAuzAHUSD",
+        "link": "https://testnet.nearblocks.io/txns/UMJQ9TZzhuAZbvtYyRjKbSi5HzKhN6gzhMyAuzAHUSD",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJzaWduZWQiOnsiaW52b2ljZSI6eyJpZCI6ImRhdmVzLXRhbXBlcmVkLTJhNzk5NGE1IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1vd25lci03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIxMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwibWVyY2hhbnRfaWQiOiJkYXZlcy1jYWZlIiwiYmlsbF9pZCI6ImRhdmVzLWJpbGwtMDAyLTJhNzk5NGE1IiwidmF1bHQiOiJjb3VudGVyc2lnbi12YXVsdC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJkb21haW4iOiIwYjg4MzAyYTc0NzBiNjZmNzMxYTYzMDk5ZGY5YTM3NTg5NGUwMGRiYzRlZmZkNTMwNTdiZTBlMTFlOWJkZjMxIiwia2V5X3ZlcnNpb24iOiIxIiwiZXhwaXJlc19hdCI6IjE3OTQzMTg4NTUxMDYiLCJzaWduYXR1cmUiOiJDVDBZNmdJV1IvNjRnSHMxK2U2UEZpdVR3ZVZzZFB1bTUxbnZzeVFMN2lEWkh2UEVRcURlY0ZIWG5wbVdaSzZnWG9heGRhQmRrWkJ6eGdac2c2Ti9CUT09In19",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "authorize_signed_invoice"
+            }
+          }
+        ],
+        "status": {
+          "Failure": {
+            "ActionError": {
+              "index": 0,
+              "kind": {
+                "FunctionCallError": {
+                  "ExecutionError": "Smart contract panicked: invalid merchant signature"
+                }
+              }
+            }
+          }
+        },
+        "block_hash": "DqNosrwwvrRDZhrpZrq6pgupxqndW6JaLFDR1mbpajcr",
+        "receipts": [
+          {
+            "id": "28MznLx6jfrgkcQr2MFsuXrTeLtfgdYJhqrQ2F5HgtND",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "Failure": {
+                "ActionError": {
+                  "index": 0,
+                  "kind": {
+                    "FunctionCallError": {
+                      "ExecutionError": "Smart contract panicked: invalid merchant signature"
+                    }
+                  }
+                }
+              }
+            },
+            "logs": []
+          },
+          {
+            "id": "42AuaLLR3TxizUAee28vh5BmemCzzskBUYMtCSAr2QYi",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "result": "Smart contract panicked: invalid merchant signature",
+      "invoice": {
+        "id": "daves-tampered-2a7994a5",
+        "payee": "countersign-owner-7d8cc5331e.testnet",
+        "asset": "near",
+        "amount": "100000000000000000000000"
+      },
+      "no_payment_record": true,
+      "merchant_unchanged": true,
+      "usage_unchanged": true
+    },
+    "duplicate": {
+      "outcome": {
+        "hash": "JMJyVdSeSyi6kyq48zBcHesF1diquLk7GDrVaQXtVrU",
+        "link": "https://testnet.nearblocks.io/txns/JMJyVdSeSyi6kyq48zBcHesF1diquLk7GDrVaQXtVrU",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJzaWduZWQiOnsiaW52b2ljZSI6eyJpZCI6ImRhdmVzLWR1cGxpY2F0ZS0yYTc5OTRhNSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sIm1lcmNoYW50X2lkIjoiZGF2ZXMtY2FmZSIsImJpbGxfaWQiOiJkYXZlcy1iaWxsLTAwMS0yYTc5OTRhNSIsInZhdWx0IjoiY291bnRlcnNpZ24tdmF1bHQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiZG9tYWluIjoiMGI4ODMwMmE3NDcwYjY2ZjczMWE2MzA5OWRmOWEzNzU4OTRlMDBkYmM0ZWZmZDUzMDU3YmUwZTExZTliZGYzMSIsImtleV92ZXJzaW9uIjoiMSIsImV4cGlyZXNfYXQiOiIxNzk0MzE4ODU1MTA2Iiwic2lnbmF0dXJlIjoieDNhOXJrRm1qcjFaOUtCTE1RY2hxWStsQUx4UHQvNVFLV1N6aGo4b2RqZ0JJRnhJMUwzdUNuNVYvSVlENTlMbGlwZlNobGduNWhYaHFGL1JYQXl0QkE9PSJ9fQ==",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "authorize_signed_invoice"
+            }
+          }
+        ],
+        "status": {
+          "Failure": {
+            "ActionError": {
+              "index": 0,
+              "kind": {
+                "FunctionCallError": {
+                  "ExecutionError": "Smart contract panicked: merchant bill already used"
+                }
+              }
+            }
+          }
+        },
+        "block_hash": "CAmk8Pi1gUb8YdZ8USke5MoAq7BGabk6CFigeKDBXN1e",
+        "receipts": [
+          {
+            "id": "6TfeUo2ovNFbUwcPJKDw2Aa2v2Yh1w7CurykV3ENQ7BJ",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "Failure": {
+                "ActionError": {
+                  "index": 0,
+                  "kind": {
+                    "FunctionCallError": {
+                      "ExecutionError": "Smart contract panicked: merchant bill already used"
+                    }
+                  }
+                }
+              }
+            },
+            "logs": []
+          },
+          {
+            "id": "FDsBNzo1a5BwAvp7eWXSC2B5sZuUXtVgt6aBxS3kggjp",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "result": "Smart contract panicked: merchant bill already used",
+      "invoice": {
+        "id": "daves-duplicate-2a7994a5",
+        "payee": "countersign-merchant-7d8cc5331e.testnet",
+        "asset": "near",
+        "amount": "400000000000000000000000"
+      },
+      "no_payment_record": true,
+      "merchant_unchanged": true,
+      "usage_unchanged": true
+    },
+    "over_budget": {
+      "outcome": {
+        "hash": "BD2wAqJz62Yb9ZfGA23KHdQ7pzyoj9749J5hDKWWmWy",
+        "link": "https://testnet.nearblocks.io/txns/BD2wAqJz62Yb9ZfGA23KHdQ7pzyoj9749J5hDKWWmWy",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJzaWduZWQiOnsiaW52b2ljZSI6eyJpZCI6ImRhdmVzLW92ZXItYnVkZ2V0LTJhNzk5NGE1IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiI1MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwibWVyY2hhbnRfaWQiOiJkYXZlcy1jYWZlIiwiYmlsbF9pZCI6ImRhdmVzLWJpbGwtMDAzLTJhNzk5NGE1IiwidmF1bHQiOiJjb3VudGVyc2lnbi12YXVsdC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJkb21haW4iOiIwYjg4MzAyYTc0NzBiNjZmNzMxYTYzMDk5ZGY5YTM3NTg5NGUwMGRiYzRlZmZkNTMwNTdiZTBlMTFlOWJkZjMxIiwia2V5X3ZlcnNpb24iOiIxIiwiZXhwaXJlc19hdCI6IjE3OTQzMTg4NTUxMDYiLCJzaWduYXR1cmUiOiJqOG1mWVhPdDI0YWM0bUpSVGNUZFpQbnErMk5aMU5uL3VGWG5VMEE3SGlueDl6bUYzejlhclZ5UkFzakIvdlJ1WjNtSTczSnFoTXFwTkhMeUZieEZDUT09In19",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "authorize_signed_invoice"
+            }
+          }
+        ],
+        "status": {
+          "Failure": {
+            "ActionError": {
+              "index": 0,
+              "kind": {
+                "FunctionCallError": {
+                  "ExecutionError": "Smart contract panicked: rolling daily budget exceeded"
+                }
+              }
+            }
+          }
+        },
+        "block_hash": "Ccx1MVQdaVZA1hJTRtGkhg3TDBmDFyj2BqnBwwPaSEmV",
+        "receipts": [
+          {
+            "id": "2KQosYciL4D2eb2LGR6gVunXxwFY2v4tNN3aDLTUeug5",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "Failure": {
+                "ActionError": {
+                  "index": 0,
+                  "kind": {
+                    "FunctionCallError": {
+                      "ExecutionError": "Smart contract panicked: rolling daily budget exceeded"
+                    }
+                  }
+                }
+              }
+            },
+            "logs": []
+          },
+          {
+            "id": "6i8tjQuPzpNxbkBGGwXzUsgGNnTJGc487c5fhJw4FmZf",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "result": "Smart contract panicked: rolling daily budget exceeded",
+      "invoice": {
+        "id": "daves-over-budget-2a7994a5",
+        "payee": "countersign-merchant-7d8cc5331e.testnet",
+        "asset": "near",
+        "amount": "500000000000000000000000"
+      },
+      "no_payment_record": true,
+      "merchant_unchanged": true,
+      "usage_unchanged": true
+    },
+    "restart": {
+      "outcome": {
+        "hash": "C1AY2bgfKehYPsKyN6rRSkpwKDjpyE6BkDyd9YFKMswG",
+        "link": "https://testnet.nearblocks.io/txns/C1AY2bgfKehYPsKyN6rRSkpwKDjpyE6BkDyd9YFKMswG",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJpbnZvaWNlX2lkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwiYXR0ZW1wdF9pZCI6ImY4ZjUxNmEwZDdkYTdiNTgxNDA1MTYzYWJkZjc0MzJjYzc2ZTgwYjY2YWI2NzUyOWYyMDdlOGQ0MGFhODAwMTQifQ==",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "execute"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IlNldHRsZWQiLCJhdHRlbXB0X2lkIjoiZjhmNTE2YTBkN2RhN2I1ODE0MDUxNjNhYmRmNzQzMmNjNzZlODBiNjZhYjY3NTI5ZjIwN2U4ZDQwYWE4MDAxNCJ9"
+        },
+        "block_hash": "FmFWbPsPFrpJ8oahT2dJQQmVJYXEn2MPepVouy2ifCyp",
+        "receipts": [
+          {
+            "id": "5Lg2gNYG9khagTwwy97QS7hSNbghqw5s2N8fQUZBZkXb",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessReceiptId": "DH4qNLh1kFsAWV6NfQgKQzsWnwGbkdoJ8Gz4FR6384WT"
+            },
+            "logs": []
+          },
+          {
+            "id": "7233FgYb2w6E7piN8kc7dW4iB4haP7sRA2uWXWYnGSkM",
+            "executor": "countersign-merchant-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          },
+          {
+            "id": "AfKHD7qDUqS1XbuA7DnXnn8k9e4dnSxphBayKS41yfpE",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          },
+          {
+            "id": "DH4qNLh1kFsAWV6NfQgKQzsWnwGbkdoJ8Gz4FR6384WT",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IlNldHRsZWQiLCJhdHRlbXB0X2lkIjoiZjhmNTE2YTBkN2RhN2I1ODE0MDUxNjNhYmRmNzQzMmNjNzZlODBiNjZhYjY3NTI5ZjIwN2U4ZDQwYWE4MDAxNCJ9"
+            },
+            "logs": []
+          },
+          {
+            "id": "GNYqsJVCvR1r1SH4jZLxWASwAwYRQRQb8nATRwpBRFD8",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          },
+          {
+            "id": "7xaSV1Y6hBErvp2DKWtXfMDAbYXVJrX4rXnKLKZsYRsT",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "result": "Settled",
+      "invoice": {
+        "id": "daves-restart-renewed-c7f31549",
+        "payee": "countersign-merchant-7d8cc5331e.testnet",
+        "asset": "near",
+        "amount": "300000000000000000000000"
+      },
+      "authorize": {
+        "hash": "7icZcPHZjkve5eJEqyb1quei5AmKuXLPd31m8tDjKna9",
+        "link": "https://testnet.nearblocks.io/txns/7icZcPHZjkve5eJEqyb1quei5AmKuXLPd31m8tDjKna9",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJzaWduZWQiOnsiaW52b2ljZSI6eyJpZCI6ImRhdmVzLXJlc3RhcnQtcmVuZXdlZC1jN2YzMTU0OSIsInBheWVlIjoiY291bnRlcnNpZ24tbWVyY2hhbnQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiYXNzZXQiOiJuZWFyIiwiYW1vdW50IjoiMzAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sIm1lcmNoYW50X2lkIjoiZGF2ZXMtY2FmZSIsImJpbGxfaWQiOiJkYXZlcy1iaWxsLTAwNC0yYTc5OTRhNSIsInZhdWx0IjoiY291bnRlcnNpZ24tdmF1bHQtN2Q4Y2M1MzMxZS50ZXN0bmV0IiwiZG9tYWluIjoiMGI4ODMwMmE3NDcwYjY2ZjczMWE2MzA5OWRmOWEzNzU4OTRlMDBkYmM0ZWZmZDUzMDU3YmUwZTExZTliZGYzMSIsImtleV92ZXJzaW9uIjoiMSIsImV4cGlyZXNfYXQiOiIxNzk0MzM0MTQzMjE5Iiwic2lnbmF0dXJlIjoiWGZ4L0JFVFVPNHZWRXkxT3dJeVJmWFFNL0YxMFVaSGRPQ1A0M0REU0RkOUVFZ09SVUNZL25LWktQb09vbUM1M096K2o1SytjbVpNQjkrM3pPaEhBQVE9PSJ9fQ==",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "authorize_signed_invoice"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IkF1dGhvcml6ZWQiLCJhdHRlbXB0X2lkIjpudWxsfQ=="
+        },
+        "block_hash": "DkqVi6koki6MiYKyRpBHdKwVbrTxkCz594hpxDgpZEHJ",
+        "receipts": [
+          {
+            "id": "AKC9XVAYwUFxiDXLyhxvB6rEYKkLDYB1H4WbF8MMFuxa",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IkF1dGhvcml6ZWQiLCJhdHRlbXB0X2lkIjpudWxsfQ=="
+            },
+            "logs": []
+          },
+          {
+            "id": "9v4JC8qtmF4KqRQvQ68w3eTgmGfr5bBLj8HjyLoRQXnr",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "reserve": {
+        "hash": "79ZGUuH58FXGrb4ofRghDWZ8dNfdux8a3vjsoDLDbq8d",
+        "link": "https://testnet.nearblocks.io/txns/79ZGUuH58FXGrb4ofRghDWZ8dNfdux8a3vjsoDLDbq8d",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiYXR0ZW1wdF9pZCI6ImY4ZjUxNmEwZDdkYTdiNTgxNDA1MTYzYWJkZjc0MzJjYzc2ZTgwYjY2YWI2NzUyOWYyMDdlOGQ0MGFhODAwMTQifQ==",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "reserve"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IlJlc2VydmVkIiwiYXR0ZW1wdF9pZCI6ImY4ZjUxNmEwZDdkYTdiNTgxNDA1MTYzYWJkZjc0MzJjYzc2ZTgwYjY2YWI2NzUyOWYyMDdlOGQ0MGFhODAwMTQifQ=="
+        },
+        "block_hash": "BCEgj5EE8GqajY2DMTyr96RET5CsesNUARjmR26VZU1C",
+        "receipts": [
+          {
+            "id": "E19wK1bzmoHmZJ6xhDX49xPJ49oGKERkR8NdTm7Xccgc",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IlJlc2VydmVkIiwiYXR0ZW1wdF9pZCI6ImY4ZjUxNmEwZDdkYTdiNTgxNDA1MTYzYWJkZjc0MzJjYzc2ZTgwYjY2YWI2NzUyOWYyMDdlOGQ0MGFhODAwMTQifQ=="
+            },
+            "logs": []
+          },
+          {
+            "id": "HMm1ehcbt8DbAwP8gyieRLQD9Hm6nqkKdNTVrumD8ZDe",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "replay": {
+        "hash": "gB6NKpA5yqhBfpAULU8tj17kBFxFqHV64NrggJFv6v1",
+        "link": "https://testnet.nearblocks.io/txns/gB6NKpA5yqhBfpAULU8tj17kBFxFqHV64NrggJFv6v1",
+        "signer": "countersign-executor-7d8cc5331e.testnet",
+        "receiver": "countersign-vault-7d8cc5331e.testnet",
+        "actions": [
+          {
+            "FunctionCall": {
+              "args": "eyJpbnZvaWNlX2lkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwiYXR0ZW1wdF9pZCI6ImY4ZjUxNmEwZDdkYTdiNTgxNDA1MTYzYWJkZjc0MzJjYzc2ZTgwYjY2YWI2NzUyOWYyMDdlOGQ0MGFhODAwMTQifQ==",
+              "deposit": "0",
+              "gas": 100000000000000,
+              "method_name": "execute"
+            }
+          }
+        ],
+        "status": {
+          "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IlNldHRsZWQiLCJhdHRlbXB0X2lkIjoiZjhmNTE2YTBkN2RhN2I1ODE0MDUxNjNhYmRmNzQzMmNjNzZlODBiNjZhYjY3NTI5ZjIwN2U4ZDQwYWE4MDAxNCJ9"
+        },
+        "block_hash": "362SVZR9BfW71pAHNXAB3GbLviWx9e59XgUcjhY9VZDq",
+        "receipts": [
+          {
+            "id": "9YUCQHqHy2fxu8bEjG8S4dBQ2eDxSwc2M3SmvpEWNqo6",
+            "executor": "countersign-vault-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": "eyJpbnZvaWNlIjp7ImlkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQiLCJhc3NldCI6Im5lYXIiLCJhbW91bnQiOiIzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiY29tbWl0bWVudCI6IjkxZjEzMzk0YTE4YzZjYzJlOTllZDM3M2EwYzQxOTFmNDBjYTdlMTkxY2I0OTdkYWVkZmQyMzRmMTc5OTMxNGIiLCJzdGF0ZSI6IlNldHRsZWQiLCJhdHRlbXB0X2lkIjoiZjhmNTE2YTBkN2RhN2I1ODE0MDUxNjNhYmRmNzQzMmNjNzZlODBiNjZhYjY3NTI5ZjIwN2U4ZDQwYWE4MDAxNCJ9"
+            },
+            "logs": []
+          },
+          {
+            "id": "HxrE2MBbwGnK8ZAkW1eX7x72sdyXSWPfhjY46BpjGxX2",
+            "executor": "countersign-executor-7d8cc5331e.testnet",
+            "status": {
+              "SuccessValue": ""
+            },
+            "logs": []
+          }
+        ]
+      },
+      "merchant_before": {
+        "amount": "10400000000000000000000000",
+        "block_hash": "8qS94pfTe8ucrt6WCg6qDfar1GbrPvcFgdD1iJre4GsH",
+        "block_height": 277077454
+      },
+      "merchant_after": {
+        "amount": "10700000000000000000000000",
+        "block_hash": "4wsZSgbM2D1qBi5W5YWB6cZMQDPGzt9NHQYhjf4QCazT",
+        "block_height": 277077817
+      },
+      "merchant_after_replay": {
+        "amount": "10700000000000000000000000",
+        "block_hash": "J5PWp2RgbPYuPX1XLkRqZ3GdMmS5AJxhWXU8ZK2bPtpx",
+        "block_height": 277077835
+      },
+      "credited_yocto": "300000000000000000000000",
+      "extra_on_replay_yocto": "0",
+      "killed": {
+        "pid": 93208,
+        "signal": "SIGKILL"
+      },
+      "observed_before_kill": {
+        "pid": 93208,
+        "payment": {
+          "invoice": {
+            "id": "daves-restart-renewed-c7f31549",
+            "payee": "countersign-merchant-7d8cc5331e.testnet",
+            "asset": "near",
+            "amount": "300000000000000000000000"
+          },
+          "commitment": "91f13394a18c6cc2e99ed373a0c4191f40ca7e191cb497daedfd234f1799314b",
+          "state": "Reserved",
+          "attempt_id": "f8f516a0d7da7b581405163abdf7432cc76e80b66ab67529f207e8d40aa80014"
+        },
+        "attempt": {
+          "invoice_id": "daves-restart-renewed-c7f31549",
+          "attempt_id": "f8f516a0d7da7b581405163abdf7432cc76e80b66ab67529f207e8d40aa80014",
+          "commitment": "91f13394a18c6cc2e99ed373a0c4191f40ca7e191cb497daedfd234f1799314b",
+          "state": "claimed"
+        },
+        "merchant": {
+          "amount": "10400000000000000000000000",
+          "block_hash": "7mCZqBaR4Ywu3wkhebnoLsrxc4e8TLQjHt3nhFMbBNrD",
+          "block_height": 277077781
+        }
+      },
+      "resumed_pid": 93241
+    }
+  },
+  "setup_complete": true,
+  "initial_policy": {
+    "merchants": [
+      {
+        "id": "daves-cafe",
+        "payee": "countersign-merchant-7d8cc5331e.testnet"
+      }
+    ],
+    "per_payment": "500000000000000000000000",
+    "daily_limit": "800000000000000000000000",
+    "min_payment": "10000000000000000000000",
+    "expires_at": "1794318855106"
+  },
+  "renewal": {
+    "outcome": {
+      "hash": "9xvdKg1npdD7NRaGRxyb7zXMKxV1fjuTTsbMP3hvEQUN",
+      "link": "https://testnet.nearblocks.io/txns/9xvdKg1npdD7NRaGRxyb7zXMKxV1fjuTTsbMP3hvEQUN",
+      "signer": "countersign-owner-7d8cc5331e.testnet",
+      "receiver": "countersign-vault-7d8cc5331e.testnet",
+      "actions": [
+        {
+          "FunctionCall": {
+            "args": "eyJyZW5ld2FsX2lkIjoiZGF2ZXMtcmVzdGFydC1yZW5ld2VkLWM3ZjMxNTQ5IiwiZXhwZWN0ZWRfdmVyc2lvbiI6IjEiLCJleHBpcmVzX2F0IjoiMTc5NDMzNDE0MzIxOSJ9",
+            "deposit": "0",
+            "gas": 100000000000000,
+            "method_name": "renew_policy"
+          }
+        }
+      ],
+      "status": {
+        "SuccessValue": "eyJ2ZXJzaW9uIjoiMiIsIm1lcmNoYW50cyI6W3siaWQiOiJkYXZlcy1jYWZlIiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQifV0sInBlcl9wYXltZW50IjoiNTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZGFpbHlfbGltaXQiOiI4MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJleHBpcmVzX2F0IjoiMTc5NDMzNDE0MzIxOSJ9"
+      },
+      "block_hash": "CHbHR8tV6FKrxE3BhQ8JVRfGerZExqXHVGrvx4zynKci",
+      "receipts": [
+        {
+          "id": "2uaXc3cadypyrzJFpUQReLcF9uvePJRposT2o7AGVZQ3",
+          "executor": "countersign-vault-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": "eyJ2ZXJzaW9uIjoiMiIsIm1lcmNoYW50cyI6W3siaWQiOiJkYXZlcy1jYWZlIiwicGF5ZWUiOiJjb3VudGVyc2lnbi1tZXJjaGFudC03ZDhjYzUzMzFlLnRlc3RuZXQifV0sInBlcl9wYXltZW50IjoiNTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZGFpbHlfbGltaXQiOiI4MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJleHBpcmVzX2F0IjoiMTc5NDMzNDE0MzIxOSJ9"
+          },
+          "logs": []
+        },
+        {
+          "id": "2nRnpeRKbq11s8cZA1WSN7zu3veCkaaaAxFnPsQ36gNK",
+          "executor": "countersign-owner-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        }
+      ]
+    },
+    "before": {
+      "policy": {
+        "version": "1",
+        "merchants": [
+          {
+            "id": "daves-cafe",
+            "payee": "countersign-merchant-7d8cc5331e.testnet"
+          }
+        ],
+        "per_payment": "500000000000000000000000",
+        "daily_limit": "800000000000000000000000",
+        "expires_at": "1794318855106"
+      },
+      "min_payment": "10000000000000000000000",
+      "usage": "400000000000000000000000",
+      "now": "1794319743219"
+    },
+    "after": {
+      "policy": {
+        "version": "2",
+        "merchants": [
+          {
+            "id": "daves-cafe",
+            "payee": "countersign-merchant-7d8cc5331e.testnet"
+          }
+        ],
+        "per_payment": "500000000000000000000000",
+        "daily_limit": "800000000000000000000000",
+        "expires_at": "1794334143219"
+      },
+      "min_payment": "10000000000000000000000",
+      "usage": "400000000000000000000000",
+      "now": "1794319755347"
+    },
+    "expired_invoice": {
+      "invoice": {
+        "id": "daves-restart-2a7994a5",
+        "payee": "countersign-merchant-7d8cc5331e.testnet",
+        "asset": "near",
+        "amount": "300000000000000000000000"
+      },
+      "merchant_id": "daves-cafe",
+      "bill_id": "daves-bill-004-2a7994a5",
+      "vault": "countersign-vault-7d8cc5331e.testnet",
+      "domain": "0b88302a7470b66f731a63099df9a375894e00dbc4effd53057be0e11e9bdf31",
+      "key_version": "1",
+      "expires_at": "1794318855106",
+      "signature": "QvMjQm36oXfWAW4pMlQj7LhnRnTPLmAcr505Yt2yKbVTxZKz9f4F0vegjtKVIz9VaCw3lX+ZCHLmE24cn2lhAA=="
+    },
+    "expired_attempt": {
+      "hash": "6jFyE7Sz6mVHoP6FGnAYBhvY3Gra8dnmigQ7BqBgbRQq",
+      "link": "https://testnet.nearblocks.io/txns/6jFyE7Sz6mVHoP6FGnAYBhvY3Gra8dnmigQ7BqBgbRQq",
+      "signer": "countersign-executor-7d8cc5331e.testnet",
+      "receiver": "countersign-vault-7d8cc5331e.testnet",
+      "actions": [
+        {
+          "FunctionCall": {
+            "args": "eyJzaWduZWQiOnsiaW52b2ljZSI6eyJpZCI6ImRhdmVzLXJlc3RhcnQtMmE3OTk0YTUiLCJwYXllZSI6ImNvdW50ZXJzaWduLW1lcmNoYW50LTdkOGNjNTMzMWUudGVzdG5ldCIsImFzc2V0IjoibmVhciIsImFtb3VudCI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCJ9LCJtZXJjaGFudF9pZCI6ImRhdmVzLWNhZmUiLCJiaWxsX2lkIjoiZGF2ZXMtYmlsbC0wMDQtMmE3OTk0YTUiLCJ2YXVsdCI6ImNvdW50ZXJzaWduLXZhdWx0LTdkOGNjNTMzMWUudGVzdG5ldCIsImRvbWFpbiI6IjBiODgzMDJhNzQ3MGI2NmY3MzFhNjMwOTlkZjlhMzc1ODk0ZTAwZGJjNGVmZmQ1MzA1N2JlMGUxMWU5YmRmMzEiLCJrZXlfdmVyc2lvbiI6IjEiLCJleHBpcmVzX2F0IjoiMTc5NDMxODg1NTEwNiIsInNpZ25hdHVyZSI6IlF2TWpRbTM2b1hmV0FXNHBNbFFqN0xoblJuVFBMbUFjcjUwNVl0MnlLYlZUeFpLejlmNEYwdmVnanRLVkl6OVZhQ3czbFgrWkNITG1FMjRjbjJsaEFBPT0ifX0=",
+            "deposit": "0",
+            "gas": 100000000000000,
+            "method_name": "authorize_signed_invoice"
+          }
+        }
+      ],
+      "status": {
+        "Failure": {
+          "ActionError": {
+            "index": 0,
+            "kind": {
+              "FunctionCallError": {
+                "ExecutionError": "Smart contract panicked: signed invoice expired or excessive lifetime"
+              }
+            }
+          }
+        }
+      },
+      "block_hash": "AWu6s3UKU9nbsrfYQ9hhYnUf299guDNTp9oKJybXQDP2",
+      "receipts": [
+        {
+          "id": "HWwCwE7zzAwL19knzNRvwUcZBALtWtQb7WELrZkY2wHX",
+          "executor": "countersign-vault-7d8cc5331e.testnet",
+          "status": {
+            "Failure": {
+              "ActionError": {
+                "index": 0,
+                "kind": {
+                  "FunctionCallError": {
+                    "ExecutionError": "Smart contract panicked: signed invoice expired or excessive lifetime"
+                  }
+                }
+              }
+            }
+          },
+          "logs": []
+        },
+        {
+          "id": "DAi3SSaMSMtRguoLqxRJiaavtoZ8iK1UMRQqtVAyjuwL",
+          "executor": "countersign-executor-7d8cc5331e.testnet",
+          "status": {
+            "SuccessValue": ""
+          },
+          "logs": []
+        }
+      ]
+    },
+    "reason": "Original four-hour window elapsed during RPC interruption; same limits and usage preserved"
+  },
+  "final": {
+    "available_balance": "1300000000000000000000000",
+    "policy_usage": "700000000000000000000000",
+    "merchant": {
+      "amount": "10700000000000000000000000",
+      "block_hash": "4NMVQY6CkabxutLTJ4KpeNGoqKDBM1yuGfLjnLv1Gn4H",
+      "block_height": 277077846
+    }
+  },
+  "completed_at": "2026-11-10T14:10:22.856Z",
+  "rpc": {
+    "initial": "https://rpc.testnet.near.org",
+    "resumed": "https://test.rpc.fastnear.com"
+  },
+  "validation": {
+    "rust_tests_passed": 37,
+    "javascript_unit_tests_passed": 60,
+    "testnet_checks_passed": 6,
+    "sandbox_integration_tests_passed": 17,
+    "app_and_chain_restart": "passed"
+  }
+}
