@@ -14,3 +14,4 @@
 
 #demo-cafe .cafe-live { white-space:nowrap; }
 #demo-cafe .cafe-live input { width:16px; height:16px; min-height:0; margin:0; padding:0; }
+#demo-cafe .cafe-budget-note { flex-basis:100%; border-left:3px solid var(--line); padding:8px 12px; margin:8px 0; font-size:13px; }

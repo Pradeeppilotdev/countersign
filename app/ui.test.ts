@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   formatUnits,
   parseUnits,
+  cafeBudgetSpent,
   invoiceState,
   paymentActions,
   draftStatus,
@@ -152,4 +153,17 @@ test("the shared request layer reports actionable server errors and connection f
     () => api("/api/sandbox"),
     /Refresh|refresh.*before retrying/,
   );
+});
+
+test("café budget note follows the vault's rolling remaining figure", () => {
+  const policy = { min_payment_near: "0.005" };
+  const spending = (remaining_near) => ({ remaining_near });
+  const queued = { outcome: "queued", amount_near: "0.4" };
+  assert.equal(cafeBudgetSpent(spending("1.2"), [queued], policy), false);
+  assert.equal(cafeBudgetSpent(spending("0.4"), [queued], policy), false);
+  assert.equal(cafeBudgetSpent(spending("0.3"), [queued], policy), true);
+  assert.equal(cafeBudgetSpent(spending("0"), [], policy), true);
+  assert.equal(cafeBudgetSpent(spending("0.3"), [{ outcome: "blocked", amount_near: "0.4" }], policy), false);
+  assert.equal(cafeBudgetSpent(null, [queued], policy), false);
+  assert.equal(cafeBudgetSpent(spending(null), [], policy), false);
 });

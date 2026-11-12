@@ -21,12 +21,12 @@ Countersign pays merchant invoices from a NEAR vault. An agent can request payme
 Start the local app with `COUNTERSIGN_PORT=4417 npm run dev`, then open
 [Demo café](http://127.0.0.1:4417/#demo). Leave `COUNTERSIGN_NETWORK` unset (or set it to `local`).
 
-1. **Open the café** to create a separate agent vault, three suppliers with pinned signing keys and payouts, a 0.5 NEAR payment cap, a 1.2 NEAR rolling daily budget, and a weekly Milk Co service. Rules expire after 120 minutes.
+1. **Open the café** to create a separate agent vault, three suppliers with pinned signing keys and payouts, a 0.5 NEAR payment cap, a 1.2 NEAR daily budget (rolling 24 hours), and a weekly Milk Co service. Rules expire after 120 minutes.
 2. **Receive today's invoices**, then **Pay all**. Signed bills arrive in shuffled order; the existing vault rules decide which payments settle. Fixture proposals are the default, with no model calls.
 3. Review **Supplier ledger**: each supplier's live balance increase, paid invoice count, and signed on-chain receipts. The scam payee's live balance increase remains zero. Initial account funding is excluded. **Agent payments** shows the payment outcomes and reasons; **Rejected at intake** shows the tampered signature rejection.
 4. **Ask Dave why** opens the floating panel with “How is my agent doing?”. Without a model key, Dave shows the existing no-key message.
 
-Receive again for fresh invoice IDs. **Top up vault (+5 test NEAR)** adds exactly 5 to the vault's available funds. **Reset café** stops the old local chain and moves the entire agent directory to `work/agent-vault.bak-<timestamp>-<suffix>` before starting fresh; it never deletes the old records. If an agent vault already exists, use reset to preserve it before setup. Keys remain in ignored `work/` files and never reach the browser. Café routes and navigation are disabled on other networks.
+Receive again for fresh invoice IDs. **Top up vault (+5 test NEAR)** adds exactly 5 to the vault's available funds. It does not raise the daily budget (rolling 24 hours): once that is spent, the café says so and later bills stay blocked until earlier payments are 24 hours old, or you reset. **Reset café** stops the old local chain and moves the entire agent directory to `work/agent-vault.bak-<timestamp>-<suffix>` before starting fresh; it never deletes the old records. If an agent vault already exists, use reset to preserve it before setup. Keys remain in ignored `work/` files and never reach the browser. Café routes and navigation are disabled on other networks.
 
 Receipts show contract state, attempt IDs, and signed payload hashes; the shared CLI transport does not retain transaction hashes. Supplier identities use the existing merchant IDs (`Bean-Co`, `Milk-Co`, `Pastry-Co`) in Agent payments and Ask Dave, with friendly names on the café cards.
 

@@ -1,5 +1,5 @@
 import {$,el,api,button,notice} from './components.js';
-import {formatUnits} from './state.js';
+import {formatUnits,cafeBudgetSpent} from './state.js';
 let enabled=false,busy=false,ask=null;
 const root=$('#demo-cafe'),feedback=$('#cafe-feedback');
 export function setCafeAsk(callback){ask=callback;}
@@ -8,7 +8,13 @@ export async function enableCafe(){
  $('#demo-nav').hidden=!enabled;return enabled;
 }
 function lock(){root.setAttribute('aria-busy',String(busy));root.querySelectorAll('button,input').forEach(n=>n.disabled=busy);}
-function render(state){
+const BUDGET_SPENT="Today's budget is spent: the vault is doing its job. Blocked bills will go through once earlier payments are 24 hours old. Press Reset café to start a fresh day.";
+// The existing Agent payments state already carries the vault's rolling usage.
+async function readSpending(state){
+ if(!state.ready)return null;
+ try{const reply=await api('/api/agent/state');return reply.ok?reply.state.spending:null;}catch{return null;}
+}
+function render(state,spending=null){
  const summary=$('#cafe-summary'),actions=$('#cafe-actions'),ledger=$('#cafe-ledger'),rejected=$('#cafe-rejected'),bills=$('#cafe-bills');
  for(const target of [summary,actions,ledger,rejected,bills])target.replaceChildren();
  if(!state.ready){
@@ -17,11 +23,14 @@ function render(state){
   return;
  }
  summary.append(el('p','Local sandbox · '+state.vault),el('p','Bean Co, Milk Co and Pastry Co have pinned signing keys and payouts. Milk Co has a weekly service.'),
-  el('p',`${state.policy.per_payment_near} NEAR per payment · ${state.policy.rolling_24h_limit_near} NEAR rolling 24h · expires ${new Date(state.policy.expires_at).toLocaleTimeString()}`),
+  el('p',`${state.policy.per_payment_near} NEAR per payment · ${state.policy.rolling_24h_limit_near} NEAR daily budget (rolling 24 hours) · expires ${new Date(state.policy.expires_at).toLocaleTimeString()}`),
   el('strong',formatUnits(state.available)+' test NEAR available'));
+ const spent=cafeBudgetSpent(spending,state.bills,state.policy);
  actions.append(button("Receive today's invoices",()=>mutate('receive'),{tone:'primary'}),button('Pay all',()=>mutate('pay-all',{live:$('#cafe-live').checked}),{tone:'primary'}));
  const live=el('input');live.type='checkbox';live.id='cafe-live';const label=el('label','','cafe-live');label.append(live,el('span','Use live AI'));actions.append(label,
   button('Top up vault (+5 test NEAR)',()=>mutate('faucet'),{tone:'secondary'}),button('Reset café',()=>mutate('reset'),{tone:'ghost'}),button('Refresh ledger',()=>refreshCafe(),{tone:'ghost'}));
+ // Sits directly under the action row, beside the faucet button.
+ if(spent){const note=el('p',BUDGET_SPENT+' Topping up adds balance; it does not raise the daily budget (rolling 24 hours).','cafe-budget-note');note.setAttribute('role','status');actions.append(note);}
  for(const supplier of state.suppliers){
   const card=el('article','','panel cafe-supplier');
   card.append(el('h3',supplier.name),el('code',supplier.payee),el('strong',formatUnits(supplier.received)+' NEAR received'),el('p',supplier.paid_count+(supplier.paid_count===1?' bill paid':' bills paid')));
@@ -40,7 +49,7 @@ function render(state){
 }
 export async function refreshCafe(){
  if(!enabled||busy)return;busy=true;lock();
- try{const reply=await api('/api/demo/state');if(!reply.ok)throw Error(reply.error);render(reply.state);}
+ try{const reply=await api('/api/demo/state');if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));}
  catch(error){notice(feedback,'Could not read café','danger',error.message);}finally{busy=false;lock();}
 }
 async function mutate(action,body={}){
@@ -50,7 +59,7 @@ async function mutate(action,body={}){
   if(polling)return;polling=true;
   try{const reply=await api('/api/demo/progress');if(reply.ok&&reply.progress.running)$('#cafe-progress').textContent=`${reply.progress.completed} / ${reply.progress.total} processed · ${reply.progress.current??'Starting'}`;}catch{}finally{polling=false;}
  },1200):null;
- try{const reply=await api('/api/demo/'+action,body);if(!reply.ok)throw Error(reply.error);render(reply.state);notice(feedback,action==='pay-all'?'Payment run complete. Review the supplier ledger and blocked bills.':'Café updated.','success');}
+ try{const reply=await api('/api/demo/'+action,body);if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,action==='pay-all'?'Payment run complete. Review the supplier ledger and blocked bills.':'Café updated.','success');}
  catch(error){notice(feedback,'Café operation could not finish','danger',error.message);}
  finally{clearInterval(timer);$('#cafe-progress').textContent='';busy=false;lock();}
 }
