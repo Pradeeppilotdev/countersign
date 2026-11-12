@@ -7,6 +7,12 @@ export function el(tag, value = "", className = "") {
   return node;
 }
 const paths = {
+  dave: [
+    "M8 3h8a5 5 0 0 1 5 5v6a5 5 0 0 1-5 5H8l-5 3V8a5 5 0 0 1 5-5Z",
+    "M9 7h2a4 4 0 0 1 0 8H9V7Z",
+  ],
+  tools: ["M4 7h6m4 0h6", "M4 17h10m4 0h2", "M10 4v6h4V4Z", "M14 14v6h4v-6Z"],
+  "chevron-down": ["m6 9 6 6 6-6"],
   wallet: [
     "M4 5h14a2 2 0 0 1 2 2v12H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13",
     "M20 10h-6v5h6",

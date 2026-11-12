@@ -1,5 +1,7 @@
-#agent-payments .agent-layout { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr); gap:22px; align-items:start; margin-top:24px; }
-#agent-payments .agent-side { display:grid; gap:22px; }
+#agent-payments .agent-layout { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr); grid-template-areas:"bills import" "bills rules"; grid-template-rows:auto 1fr; gap:22px; align-items:start; margin-top:24px; }
+#agent-payments .agent-import-panel { grid-area:import; }
+#agent-payments .agent-bills-panel { grid-area:bills; }
+#agent-payments .agent-rules-panel { grid-area:rules; }
 #agent-payments textarea { display:block; width:100%; min-height:140px; resize:vertical; border:1px solid var(--line); border-radius:7px; padding:12px; color:var(--ink); background:#fdfefb; font:11px/1.6 ui-monospace,monospace; }
 #agent-payments textarea:focus { outline:3px solid #176d6018; border-color:var(--teal); }
 #agent-payments .agent-live { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:11px; }
@@ -11,5 +13,13 @@
 #agent-payments .agent-rule-note { color:var(--muted); font-size:12px; margin-top:12px; }
 #agent-payments .invoice-identity small { overflow-wrap:anywhere; }
 #agent-payments #agent-source { overflow-wrap:anywhere; }
-@media(max-width:1000px) { #agent-payments .agent-layout { grid-template-columns:1fr; } #agent-payments .agent-side { grid-row:1; grid-template-columns:1fr 1fr; } }
-@media(max-width:720px) { .main-nav { flex-wrap:wrap; } #agent-payments .agent-side { grid-template-columns:1fr; } #agent-payments textarea { font-size:16px; } }
+.agent-source-line { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; margin-top:18px; }
+.agent-source-line .icon { width:16px; height:16px; }
+.agent-paste { margin:16px 0; }
+.agent-paste summary { cursor:pointer; color:var(--teal); font-size:12px; padding:8px 0; }
+.agent-policy-details { margin-top:12px; font-size:11px; color:var(--muted); }
+.agent-policy-details summary { cursor:pointer; padding:8px 0; }
+#agent-payments input[type="file"] { font-size:12px; min-width:0; padding:10px; }
+#agent-payments input[type="file"]::file-selector-button { font:inherit; color:var(--teal-dark); background:var(--teal-soft); border:0; border-radius:4px; padding:8px; margin-right:10px; cursor:pointer; }
+@media(max-width:1000px) { #agent-payments .agent-layout { grid-template-columns:1fr 1fr; grid-template-areas:"import rules" "bills bills"; grid-template-rows:auto auto; } }
+@media(max-width:720px) { #agent-payments .agent-layout { grid-template-columns:1fr; grid-template-areas:"import" "bills" "rules"; grid-template-rows:auto; } #agent-payments textarea { font-size:16px; } #agent-payments .invoice-actions .button { min-height:44px; font-size:11px; } }

@@ -24,13 +24,14 @@ mountIcons();
 let askWidgetView = null;
 function navigate() {
   const view =
-    location.hash === "#agent-payments"
-      ? "agent-payments"
+    location.hash === "#payments"
+      ? "payments"
       : location.hash === "#quote-lab"
       ? "quote-lab"
       : location.hash === "#ask-dave"
         ? "ask-dave"
-        : "payments";
+        : "agent-payments";
+  $("#nav-tools").open = view === "payments" || view === "quote-lab";
   document
     .querySelectorAll(".workspace-view")
     .forEach((node) => (node.hidden = node.id !== view));
@@ -42,7 +43,7 @@ function navigate() {
     view === "agent-payments"
       ? "Agent payments"
       : view === "payments"
-      ? "Payment desk"
+      ? "Manual payment desk"
       : view === "ask-dave"
         ? "Ask Dave"
         : "1Click lab";

@@ -1,19 +1,20 @@
-// Floating "Ask Dave" widget: a round button on every view except #ask-dave
-// that opens a compact read-only question panel. Reuses the shared Ask
+// Ask Dave panel: a docked desktop launcher and contextual bill actions.
+// Opens a compact read-only question panel. Reuses the shared Ask
 // Dave request/answer logic, so it answers exactly what the main view does.
-import { el } from "./components.js";
+import { el, icon } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
 import { runAsk } from "./ask-shared.js";
 import { questionForBill } from "./ask-suggest.js";
 
 const HISTORY = 3,
-  NOTE = "Dave answers about the agent vault's payments, blocks, rules and account checks. Not dates or anything outside the vault.";
+  NOTE = "Answers from your agent vault. Dave can explain payments and rules, but can't change them.";
 
 export function createAskWidget({ onNavigate } = {}) {
   let button, panel, form, input, submitBtn;
   let submitting = false, opener = null;
 
-  button = el("button", "Ask Dave", "ask-fab");
+  button = el("button", "", "ask-fab");
+  button.append(icon("dave"), el("span", "Ask Dave"));
   button.type = "button";
   button.title = "Ask Dave";
   button.setAttribute("aria-expanded", "false");
@@ -21,7 +22,7 @@ export function createAskWidget({ onNavigate } = {}) {
   button.setAttribute("aria-haspopup", "dialog");
   button.addEventListener("click", () => open(undefined, button));
 
-  const title = el("h2", "Ask Dave", "ask-widget-title"),
+  const title = el("h2", "", "ask-widget-title"),
     closeBtn = el("button", "Close", "button secondary small ask-widget-close"),
     header = el("div", "", "ask-widget-header"),
     hint = el("p", NOTE, "ask-widget-hint"),
@@ -33,6 +34,7 @@ export function createAskWidget({ onNavigate } = {}) {
   closeBtn.type = "button";
   closeBtn.setAttribute("aria-label", "Close Ask Dave");
   title.id = "ask-widget-title";
+  title.append(icon("dave"), el("span", "Ask Dave"));
   sourceNote.hidden = true;
   list.setAttribute("aria-label", "Recent Ask Dave answers");
   list.setAttribute("aria-live", "polite");
@@ -81,7 +83,8 @@ export function createAskWidget({ onNavigate } = {}) {
     }
   });
 
-  document.body.append(button, panel);
+  (document.querySelector('#dave-launcher') ?? document.body).append(button);
+  document.body.append(panel);
 
   async function ask(question) {
     if (submitting) return;
@@ -124,8 +127,9 @@ export function createAskWidget({ onNavigate } = {}) {
     panel.hidden = true;
     button.setAttribute("aria-expanded", "false");
     if (refocus) {
-      const target = opener?.isConnected && opener.getClientRects().length ? opener : button;
-      if (!target.hidden) target.focus();
+      const target = opener?.isConnected && opener.getClientRects().length ? opener
+        : button.getClientRects().length ? button : document.querySelector('[data-view="ask-dave"]');
+      if (target && !target.hidden) target.focus();
     }
   }
 

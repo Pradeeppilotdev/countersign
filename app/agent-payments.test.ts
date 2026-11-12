@@ -5,13 +5,14 @@ import assert from 'node:assert/strict';
 // and fake HTTP responses. No chain, model, credentials or payment is involved.
 class Element {
  tag:string;children:Element[]=[];dataset:Record<string,string>={};attributes:Record<string,string>={};
- handlers:Record<string,Function>={};className='';disabled=false;checked=false;open=false;private value='';
+ handlers:Record<string,Function>={};className='';disabled=false;checked=false;open=false;value='';resetCount=0;private text='';
  constructor(tag:string){this.tag=tag;}
  get childElementCount(){return this.children.length;}
- set textContent(value:string){this.value=String(value);this.children=[];}
- get textContent():string{return this.value+this.children.map(n=>n.textContent).join('');}
+ set textContent(value:string){this.text=String(value);this.children=[];}
+ get textContent():string{return this.text+this.children.map(n=>n.textContent).join('');}
  append(...nodes:Element[]){this.children.push(...nodes);}
- replaceChildren(...nodes:Element[]){this.value='';this.children=nodes;}
+ replaceChildren(...nodes:Element[]){this.text='';this.children=nodes;}
+ reset(){this.resetCount++;}
  setAttribute(name:string,value:string){this.attributes[name]=value;}
  addEventListener(name:string,handler:Function){this.handlers[name]=handler;}
  querySelectorAll(selector:string):Element[]{
@@ -40,6 +41,8 @@ for(const refreshFails of [false,true])test(`failed payment refreshes saved stat
  });
  const ui=await import(`./public/agent-payments.js?refreshFails=${refreshFails}`);
  await ui.refreshAgentPayments();
+ assert.equal(get('#agent-feedback').textContent,'');
+ assert.equal(get('#agent-refresh-status').textContent,'Agent vault refreshed');
  const pay=get('#agent-bills').querySelectorAll('button').find(n=>n.textContent==='Request payment')!;
  assert.ok(pay);await pay.handlers.click();
  assert.deepEqual(calls,['GET /api/agent/state','POST /api/agent/run','GET /api/agent/state']);
@@ -53,4 +56,35 @@ for(const refreshFails of [false,true])test(`failed payment refreshes saved stat
   assert.doesNotMatch(get('#agent-feedback').textContent,/read unavailable/);
  }
  assert.equal(get('#agent-payments').attributes['aria-busy'],'false');
+});
+
+test('collapsed file import blocks empty, pending and failed reads without paying or reusing an older bill',async t=>{
+ const nodes=new Map<string,Element>();
+ const get=(selector:string)=>{if(!nodes.has(selector))nodes.set(selector,new Element('div'));return nodes.get(selector)!;};
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'document');
+ Object.defineProperty(globalThis,'document',{value:{querySelector:get,createElement:(tag:string)=>new Element(tag),createElementNS:(_:string,tag:string)=>new Element(tag)},configurable:true});
+ t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else delete (globalThis as any).document;});
+ const calls:any[]=[];
+ t.mock.method(globalThis,'fetch',async(path:any,options:any)=>{
+  calls.push({path,body:JSON.parse(options.body)});
+  return Response.json({ok:true,already_imported:false,record:queued,state:snapshot(queued)});
+ });
+ await import('./public/agent-payments.js?file-import');
+ const form=get('#agent-import-form'),json=get('#agent-bill-json'),file=get('#agent-bill-file');
+ const submit=()=>form.handlers.submit({preventDefault(){}});
+ await submit();assert.equal(calls.length,0);assert.match(get('#agent-feedback').textContent,/Choose a signed bill file/);
+ let finish:(text:string)=>void=()=>{};
+ const reading=file.handlers.change({target:{files:[{size:40,text:()=>new Promise<string>(resolve=>finish=resolve)}]}});
+ await submit();assert.equal(calls.length,0);assert.equal(get('#agent-payments').attributes['aria-busy'],'true');
+ const signed={invoice:{id:'BILL-1'},signature:'fixture'};
+ finish(JSON.stringify(signed));await reading;await submit();
+ assert.deepEqual(calls,[{path:'/api/agent/import',body:{invoice:signed}}]);
+ assert.equal(get('#agent-paste').open,false);assert.equal(form.resetCount,1);
+ json.value=JSON.stringify(signed);
+ await file.handlers.change({target:{files:[{size:17000,text:async()=>'{oversize}'}]}});
+ await submit();assert.equal(calls.length,1);assert.equal(json.value,'');
+ json.value=JSON.stringify(signed);
+ await file.handlers.change({target:{files:[{size:40,text:async()=>{throw Error('read failure');}}]}});
+ assert.match(get('#agent-feedback').textContent,/Could not read the file/);
+ await submit();assert.equal(calls.length,1);assert.equal(json.value,'');
 });

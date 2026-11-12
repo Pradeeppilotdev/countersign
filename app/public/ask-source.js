@@ -4,8 +4,8 @@ export function askSourceLabels(source) {
   const payment = source.paymentVault ?? "unavailable";
   const question = "Local agent vault · " + agent;
   const detail = source.separate
-    ? "The Payments view uses a separate local vault: " + payment + ". Questions here read the agent vault and its inbox."
-    : "The agent and Payments view use the same saved vault. Questions also read the agent inbox.";
+    ? "The manual payment desk uses a separate local vault: " + payment + ". Questions here read the agent vault and its inbox."
+    : "The agent and manual payment desk use the same saved vault. Questions also read the agent inbox.";
   const account = source.accountNetwork === "local"
     ? "Local agent chain · " + agent
     : source.accountNetwork === "testnet" || source.accountNetwork === "mainnet"

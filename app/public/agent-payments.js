@@ -1,14 +1,14 @@
 import {$,el,icon,badge,button,notice,emptyState,api} from './components.js';
 
 const root=$('#agent-payments'),list=$('#agent-bills'),feedback=$('#agent-feedback');
-let state=null,busy=false,reading=false,revision=0,billAskHandler=null;
+let state=null,busy=false,reading=false,fileReading=false,revision=0,billAskHandler=null;
 // app.js registers the handler that opens the shared Ask Dave panel.
 export function askFromBill(handler){billAskHandler=handler;}
 const liveChoices=new Map(),requestErrors=new Map();
 const labels={paid:['Paid','success'],blocked:['Blocked','danger'],failed:['Blocked','danger'],pending:['Pending','warning'],queued:['Queued','neutral'],proposed:['Queued','neutral'],cancelled:['Cancelled','neutral']};
 function lock(){
- root.setAttribute('aria-busy',String(busy||reading));
- root.querySelectorAll('button,input,textarea').forEach(n=>{n.disabled=busy||reading;});
+ root.setAttribute('aria-busy',String(busy||reading||fileReading));
+ root.querySelectorAll('button,input,textarea').forEach(n=>{n.disabled=busy||reading||fileReading;});
 }
 function row(label,value){const node=el('div','','kv');node.append(el('span',label),el('strong',value??'Unavailable'));return node;}
 function renderRules(s){
@@ -18,8 +18,11 @@ function renderRules(s){
  if(!p){target.append(el('p','No spending policy is set.','agent-rule-note'));return;}
  target.append(row('Policy',p.expired?'Expired':'Active'),row('Per payment',p.per_payment_near+' NEAR'),
   row('Rolling 24h used',s.spending.used_near+' NEAR'),row('Rolling 24h limit',s.spending.limit_near+' NEAR'),
-  row('Rolling 24h remaining',s.spending.remaining_near+' NEAR'),row('Minimum',p.min_payment_near+' NEAR'),
+  row('Rolling 24h remaining',s.spending.remaining_near+' NEAR'));
+ const details=el('details','','agent-policy-details');
+ details.append(el('summary','Policy details'),row('Minimum',p.min_payment_near+' NEAR'),
   row('Expires',p.expires_at?new Date(p.expires_at).toLocaleString():'Unavailable'));
+ target.append(details);
  target.append(el('h3','Pinned suppliers','agent-suppliers-title'));
  for(const m of p.merchants){
   const key=s.merchants.find(k=>k.merchant_id===m.id);
@@ -72,19 +75,20 @@ function renderBills(){
 }
 function render(s){state=s;$('#agent-source').textContent='Local agent vault · '+s.vault;renderRules(s);renderBills();}
 export async function refreshAgentPayments(){
- if(busy||reading)return;
+ if(busy||reading||fileReading)return;
  reading=true;const token=revision;lock();
+ $('#agent-refresh-status').textContent='';
  notice(feedback,'Reading the agent vault…','busy');
- try{const reply=await api('/api/agent/state');if(token!==revision)return;if(!reply.ok)throw Error(reply.error);render(reply.state);notice(feedback,'Agent vault refreshed','success');}
+ try{const reply=await api('/api/agent/state');if(token!==revision)return;if(!reply.ok)throw Error(reply.error);render(reply.state);notice(feedback,'');$('#agent-refresh-status').textContent='Agent vault refreshed';}
  catch(error){if(token===revision)notice(feedback,'Could not read the agent vault','danger',error.message);}
  finally{reading=false;lock();}
 }
 async function mutate(path,body,message){
- if(busy)return;revision++;busy=true;requestErrors.delete(body.id);lock();notice(feedback,message,'busy');
+ if(busy||fileReading)return;revision++;busy=true;requestErrors.delete(body.id);lock();notice(feedback,message,'busy');
  try{
   const reply=await api(path,body);if(!reply.ok)throw Error(reply.error);
   render(reply.state);
-  if(path.endsWith('/import'))$('#agent-import-form').reset();
+  if(path.endsWith('/import')){$('#agent-import-form').reset();$('#agent-paste').open=false;}
   const [label,tone]=labels[reply.record.outcome]??['Pending','warning'];
   notice(feedback,reply.already_imported?'Already imported':path.endsWith('/import')?'Signed bill imported':label,
    reply.already_imported?'info':tone,reply.already_imported?'The existing bill and its payment record are unchanged.':reply.record.error??reply.record.id);
@@ -103,16 +107,23 @@ async function mutate(path,body,message){
 }
 $('#agent-refresh').addEventListener('click',refreshAgentPayments);
 $('#agent-bill-file').addEventListener('change',async event=>{
+ if(fileReading||busy)return;
  const file=event.target.files?.[0];if(!file)return;
+ $('#agent-bill-json').value='';
  if(file.size>16384){notice(feedback,'Signed bill is too large','danger','Choose a JSON file no larger than 16 KB.');return;}
- try{$('#agent-bill-json').value=await file.text();}
+ fileReading=true;lock();
+ notice(feedback,'Reading the signed bill…','busy');
+ try{$('#agent-bill-json').value=await file.text();notice(feedback,'');}
  catch{notice(feedback,'Could not read the file','danger');}
+ finally{fileReading=false;lock();}
 });
 $('#agent-import-form').addEventListener('submit',event=>{
- event.preventDefault();if(busy)return;
+ event.preventDefault();if(busy||fileReading)return;
  try{
-  const invoice=JSON.parse($('#agent-bill-json').value);
+  const text=$('#agent-bill-json').value.trim();
+  if(!text)throw Error('Choose a signed bill file or paste its JSON.');
+  const invoice=JSON.parse(text);
   if(new TextEncoder().encode(JSON.stringify({invoice})).byteLength>16384)throw Error('Request too large. Maximum 16 KB including the JSON wrapper.');
-  mutate('/api/agent/import',{invoice},'Checking the supplier’s signature…');
+  return mutate('/api/agent/import',{invoice},'Checking the supplier’s signature…');
  }catch(error){notice(feedback,'Check the signed bill','danger',error instanceof SyntaxError?'Paste a valid signed invoice JSON object.':error.message);}
 });

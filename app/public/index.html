@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#f6f5f0" />
-    <title>Countersign · Payment desk</title>
+    <title>Countersign · Agent payments</title>
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/agent-payments.css" />
@@ -13,7 +13,7 @@
   <body>
     <a class="skip-link" href="#workspace">Skip to workspace</a>
     <aside class="sidebar">
-      <a class="brand" href="#payments" aria-label="Countersign home"
+      <a class="brand" href="#agent-payments" aria-label="Countersign home"
         ><img src="/logo.svg" width="36" height="36" alt="" /><span
           >Countersign<span class="brand-period">.</span></span
         ></a
@@ -23,21 +23,9 @@
         <div>Local workspace<small>NEAR payment assurance</small></div>
       </div>
       <nav class="main-nav" aria-label="Workspace">
-        <a
-          class="nav-item"
-          href="#payments"
-          data-view="payments"
-          aria-current="page"
-          ><span data-icon="wallet"></span>Payment desk</a
-        >
-        <a class="nav-item" href="#quote-lab" data-view="quote-lab"
-          ><span data-icon="route"></span>1Click lab<span class="nav-note"
-            >Dry run</span
-          ></a
-        >
-        <a class="nav-item" href="#agent-payments" data-view="agent-payments"><span data-icon="receipt"></span>Agent payments</a>
+        <a class="nav-item" href="#agent-payments" data-view="agent-payments" aria-current="page"><span data-icon="receipt"></span>Agent payments</a>
         <a class="nav-item" href="#ask-dave" data-view="ask-dave"
-          ><span data-icon="info"></span>Ask Dave</a
+          ><span data-icon="dave"></span>Ask Dave</a
         >
         <a class="nav-item" href="/attack-results/"
           ><span data-icon="shield"></span>Attack results<span
@@ -45,16 +33,16 @@
             class="nav-tail"
           ></span
         ></a>
+        <details class="nav-tools" id="nav-tools">
+          <summary class="nav-item"><span data-icon="tools"></span>Tools<span data-icon="chevron-down" class="nav-tail"></span></summary>
+          <div class="nav-tool-links">
+            <a class="nav-item" href="#payments" data-view="payments"><span data-icon="wallet"></span>Manual payment desk</a>
+            <a class="nav-item" href="#quote-lab" data-view="quote-lab"><span data-icon="route"></span>1Click lab<span class="nav-note">Dry run</span></a>
+          </div>
+        </details>
       </nav>
       <div class="sidebar-bottom">
-        <div class="sidebar-note">
-          <span data-icon="check-circle"></span>
-          <h2>One bill. One payment.</h2>
-          <p>Every retry is checked against the vault’s record.</p>
-          <a href="/attack-results/"
-            >See the proof <span aria-hidden="true">↗</span></a
-          >
-        </div>
+        <div id="dave-launcher"></div>
         <div class="local-indicator">
           <span class="status-dot"></span>Runs on your computer
         </div>
@@ -64,7 +52,7 @@
       <header class="topbar">
         <div class="breadcrumb">
           Workspace <span aria-hidden="true">/</span>
-          <strong id="page-label">Payment desk</strong>
+          <strong id="page-label">Agent payments</strong>
         </div>
         <span class="badge neutral"
           ><span class="status-dot"></span>Local test funds</span
@@ -74,11 +62,12 @@
         <section
           id="payments"
           class="workspace-view sandbox"
+          hidden
           aria-labelledby="payments-title"
         >
           <div class="page-heading">
             <div>
-              <h1 id="payments-title">Payment desk</h1>
+              <h1 id="payments-title">Manual payment desk</h1>
               <p>Your bills, your approval. Every payment accounted for.</p>
             </div>
             <button id="new-invoice" class="button primary" disabled>
@@ -406,34 +395,36 @@
             <div id="history"></div>
           </section>
         </section>
-        <section id="agent-payments" class="workspace-view" hidden aria-labelledby="agent-payments-title">
+        <section id="agent-payments" class="workspace-view" aria-labelledby="agent-payments-title">
           <div class="page-heading">
             <div><h1 id="agent-payments-title">Agent payments</h1><p>Signed supplier bills. Your rules. Verified receipts.</p></div>
             <button id="agent-refresh" class="button secondary"><span data-icon="refresh"></span>Refresh</button>
           </div>
-          <div class="environment-note"><span data-icon="shield"></span><span id="agent-source">Local agent vault · Loading saved account…</span></div>
+          <p class="agent-source-line"><span data-icon="shield"></span><span id="agent-source">Local agent vault · Loading saved account…</span></p>
+          <span id="agent-refresh-status" class="sr-only" role="status" aria-live="polite"></span>
           <div id="agent-feedback" class="feedback-region" role="status" aria-live="polite"></div>
           <div class="agent-layout">
-            <section class="panel" aria-labelledby="agent-bills-title">
+            <section class="panel agent-import-panel" aria-labelledby="agent-import-title">
+              <div class="panel-header"><div><h2 id="agent-import-title">Import signed bill</h2><p>Choose the file your supplier signed.</p></div></div>
+              <form id="agent-import-form">
+                <label for="agent-bill-file">Signed bill file (.json)</label><input id="agent-bill-file" type="file" accept=".json,application/json" />
+                <details id="agent-paste" class="agent-paste">
+                  <summary>Paste JSON instead</summary>
+                  <label for="agent-bill-json">Signed bill JSON</label><textarea id="agent-bill-json" maxlength="16384" spellcheck="false" placeholder="Paste the signed invoice JSON"></textarea>
+                </details>
+                <button type="submit" class="button primary full">Import signed bill</button>
+                <p class="form-footnote">Importing checks the signature. Payment starts only when you request it.</p>
+              </form>
+            </section>
+            <section class="panel agent-bills-panel" aria-labelledby="agent-bills-title">
               <div class="panel-header"><div><h2 id="agent-bills-title">Bills <span id="agent-bill-count" class="count">0</span></h2><p>Request payment under your saved spending rules.</p></div></div>
               <div id="agent-bills"><p class="history-empty">Reading your inbox…</p></div>
               <div class="ledger-footer"><span data-icon="lock"></span>Every retry checks the same saved bill.</div>
             </section>
-            <div class="agent-side">
-              <section class="panel" aria-labelledby="agent-import-title">
-                <div class="panel-header"><div><h2 id="agent-import-title">Import signed bill</h2><p>Choose a supplier’s JSON file or paste it below.</p></div></div>
-                <form id="agent-import-form">
-                  <label for="agent-bill-file">JSON file</label><input id="agent-bill-file" type="file" accept=".json,application/json" />
-                  <label for="agent-bill-json">Signed bill JSON</label><textarea id="agent-bill-json" required maxlength="16384" spellcheck="false" placeholder="Paste the signed invoice JSON"></textarea>
-                  <button type="submit" class="button primary full">Import signed bill</button>
-                  <p class="form-footnote">Importing checks the signature. Payment starts only when you request it.</p>
-                </form>
-              </section>
-              <section class="panel" aria-labelledby="agent-rules-title">
-                <div class="panel-header"><div><h2 id="agent-rules-title">Rules</h2><p>Your saved policy and pinned suppliers.</p></div><span class="badge neutral">Read-only</span></div>
-                <div id="agent-rules"><p class="agent-rule-note">Reading the vault’s rules…</p></div>
-              </section>
-            </div>
+            <section class="panel agent-rules-panel" aria-labelledby="agent-rules-title">
+              <div class="panel-header"><div><h2 id="agent-rules-title">Spending rules</h2><p>Your saved policy and pinned suppliers.</p></div></div>
+              <div id="agent-rules"><p class="agent-rule-note">Reading the vault’s rules…</p></div>
+            </section>
           </div>
         </section>
         <section
@@ -444,9 +435,10 @@
         >
           <div class="page-heading">
             <div>
-              <h1 id="ask-dave-title">Ask Dave</h1>
-              <p>Ask about the saved agent vault's payments, blocks and rules. Read-only.</p>
+              <h1 id="ask-dave-title" class="dave-heading"><span class="dave-mark" data-icon="dave"></span>Ask Dave</h1>
+              <p>Understand payments, blocked bills and your spending rules.</p>
             </div>
+            <span class="badge neutral">Read-only · cannot pay</span>
           </div>
           <div id="ask-source" class="ask-source" aria-live="polite">
             Questions read the saved local agent vault. Loading its account…
@@ -456,9 +448,8 @@
               <div class="panel-header">
                 <div>
                   <h2 id="ask-forms-title">Questions</h2>
-                  <p>One answer at a time. Nothing is sent on-chain.</p>
+                  <p>Ask about a bill or your agent.</p>
                 </div>
-                <span class="badge neutral">Read-only</span>
               </div>
               <form id="ask-question-form" class="ask-form">
                 <label for="ask-text">Your question</label
@@ -481,20 +472,13 @@
                   <button
                     type="button"
                     class="chip"
-                    data-example="Why was INV-BEANS-003 blocked?"
-                  >
-                    Why was INV-BEANS-003 blocked?
-                  </button>
-                  <button
-                    type="button"
-                    class="chip"
                     data-example="What are my current rules?"
                   >
                     What are my current rules?
                   </button>
                 </div>
                 <button class="button primary full" type="submit" id="ask-submit">
-                  <span data-icon="info"></span
+                  <span data-icon="dave"></span
                   ><span id="ask-label">Ask</span>
                 </button>
               </form>
@@ -527,7 +511,6 @@
                   <h2 id="ask-answers-title">Answers</h2>
                   <p>Newest first. The source is shown with each answer.</p>
                 </div>
-                <span class="badge neutral">Read-only</span>
               </div>
               <div
                 id="ask-answers"
@@ -537,8 +520,7 @@
             </section>
           </div>
           <p class="ask-footer">
-            Read-only. Ask Dave can't move funds. Account data powered by
-            the selected chain; public account age and activity use Nearblocks.io APIs.
+            Account data comes from the selected chain; public account age and activity use Nearblocks.io APIs.
           </p>
         </section>
         <footer class="footer">

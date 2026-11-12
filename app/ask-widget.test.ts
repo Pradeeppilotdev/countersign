@@ -36,17 +36,19 @@ class Element {
 }
 function setup(t:any){
   const body=new Element('body'), handlers:Record<string,Function>={};
-  const dom={body,activeElement:body,createElement:(tag:string)=>new Element(tag),addEventListener:(name:string,fn:Function)=>handlers[name]=fn};
+  const dom={body,activeElement:body,createElement:(tag:string)=>new Element(tag),createElementNS:(_:string,tag:string)=>new Element(tag),
+    querySelector:(selector:string)=>selector==='[data-view="ask-dave"]'?body.find(n=>n.attributes['data-view']==='ask-dave'):null,addEventListener:(name:string,fn:Function)=>handlers[name]=fn};
   const previous=Object.getOwnPropertyDescriptor(globalThis,'document');
   Object.defineProperty(globalThis,'document',{value:dom,configurable:true});
   t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else delete (globalThis as any).document;});
   const fullInput=new Element('input');body.append(fullInput);
+  const navLink=new Element('a');navLink.setAttribute('data-view','ask-dave');body.append(navLink);
   const widget=createAskWidget({onNavigate:()=>{widget.setOnAskDaveView(true);fullInput.focus();}});
   const panel=widget.panel as Element, button=widget.button as Element;
   const input=panel.find(n=>n.tag==='input')!, form=panel.find(n=>n.tag==='form')!;
   const answers=panel.find(n=>n.className.includes('ask-widget-answers '))!;
   const bill=new Element('button');body.append(bill);
-  return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput};
+  return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput,navLink};
 }
 const reply=(text:string,ok=true)=>({ok,json:async()=>ok?{ok:true,text}:{ok:false,error:text}} as Response);
 
@@ -80,6 +82,14 @@ test('non-modal Escape preserves outside focus, returns inside focus, and naviga
   widget.setOnAskDaveView(false);assert.equal(button.hidden,false);
   widget.open();assert.equal(widget.setOnAskDaveView(true),true);
   assert.equal(panel.hidden,true);
+});
+
+test('closing Dave returns focus to navigation when the mobile launcher and old bill are unavailable',t=>{
+  const {widget,panel,button,bill,navLink,dom}=setup(t);
+  widget.askForBill({id:'INV-1',outcome:'paid'},bill);
+  bill.remove();button.hidden=true;
+  panel.find(n=>n.className.includes('ask-widget-close'))!.event('click');
+  assert.equal(panel.hidden,true);assert.equal(dom.activeElement,navLink);
 });
 
 test('429 is an error card; submitted text remains available to retry and is never HTML',async t=>{

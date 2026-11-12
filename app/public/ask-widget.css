@@ -1,22 +1,18 @@
-/* Floating "Ask Dave" widget: round button + compact panel. */
+/* Desktop launcher; phones use the navigation and each bill's Ask Dave action. */
 .ask-fab {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 40;
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--teal);
-  border-radius: 50%;
+  border-radius: 10px;
   background: var(--teal);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
-  padding: 8px;
-  box-shadow: 0 10px 24px rgba(17, 84, 73, 0.28);
+  padding: 12px 16px;
   transition: background 0.15s;
 }
 .ask-fab:hover {
@@ -24,8 +20,8 @@
 }
 .ask-widget-panel {
   position: fixed;
-  right: 22px;
-  bottom: 90px;
+  left: 240px;
+  bottom: 22px;
   z-index: 40;
   width: 360px;
   max-height: 70vh;
@@ -49,13 +45,19 @@
 }
 .ask-widget-title {
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ask-widget-title .icon {
+  color: var(--teal);
 }
 .ask-widget-close {
-  min-height: 30px;
+  min-height: 44px;
   padding: 5px 9px;
 }
 .ask-widget-hint {
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
   margin: 0;
@@ -105,10 +107,15 @@
   font-size: 11px;
   font-weight: 700;
 }
-@media (max-width: 640px) {
+@media (max-width: 1120px) {
+  .ask-widget-panel { left: 211px; }
+}
+@media (max-width: 900px) {
+  .ask-widget-panel { left: 88px; }
+}
+@media (max-width: 720px) {
   .ask-fab {
-    right: 16px;
-    bottom: 16px;
+    display: none;
   }
   .ask-widget-panel {
     right: 0;
