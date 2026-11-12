@@ -7,6 +7,7 @@
     <title>Countersign · Payment desk</title>
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/agent-payments.css" />
   </head>
   <body>
     <a class="skip-link" href="#workspace">Skip to workspace</a>
@@ -33,6 +34,7 @@
             >Dry run</span
           ></a
         >
+        <a class="nav-item" href="#agent-payments" data-view="agent-payments"><span data-icon="receipt"></span>Agent payments</a>
         <a class="nav-item" href="#ask-dave" data-view="ask-dave"
           ><span data-icon="info"></span>Ask Dave</a
         >
@@ -402,6 +404,36 @@
             </div>
             <div id="history"></div>
           </section>
+        </section>
+        <section id="agent-payments" class="workspace-view" hidden aria-labelledby="agent-payments-title">
+          <div class="page-heading">
+            <div><h1 id="agent-payments-title">Agent payments</h1><p>Signed supplier bills. Your rules. Verified receipts.</p></div>
+            <button id="agent-refresh" class="button secondary"><span data-icon="refresh"></span>Refresh</button>
+          </div>
+          <div class="environment-note"><span data-icon="shield"></span><span id="agent-source">Local agent vault · Loading saved account…</span></div>
+          <div id="agent-feedback" class="feedback-region" role="status" aria-live="polite"></div>
+          <div class="agent-layout">
+            <section class="panel" aria-labelledby="agent-bills-title">
+              <div class="panel-header"><div><h2 id="agent-bills-title">Bills <span id="agent-bill-count" class="count">0</span></h2><p>Request payment under your saved spending rules.</p></div></div>
+              <div id="agent-bills"><p class="history-empty">Reading your inbox…</p></div>
+              <div class="ledger-footer"><span data-icon="lock"></span>Every retry checks the same saved bill.</div>
+            </section>
+            <div class="agent-side">
+              <section class="panel" aria-labelledby="agent-import-title">
+                <div class="panel-header"><div><h2 id="agent-import-title">Import signed bill</h2><p>Choose a supplier’s JSON file or paste it below.</p></div></div>
+                <form id="agent-import-form">
+                  <label for="agent-bill-file">JSON file</label><input id="agent-bill-file" type="file" accept=".json,application/json" />
+                  <label for="agent-bill-json">Signed bill JSON</label><textarea id="agent-bill-json" required maxlength="16384" spellcheck="false" placeholder="Paste the signed invoice JSON"></textarea>
+                  <button type="submit" class="button primary full">Import signed bill</button>
+                  <p class="form-footnote">Importing checks the signature. Payment starts only when you request it.</p>
+                </form>
+              </section>
+              <section class="panel" aria-labelledby="agent-rules-title">
+                <div class="panel-header"><div><h2 id="agent-rules-title">Rules</h2><p>Your saved policy and pinned suppliers.</p></div><span class="badge neutral">Read-only</span></div>
+                <div id="agent-rules"><p class="agent-rule-note">Reading the vault’s rules…</p></div>
+              </section>
+            </div>
+          </div>
         </section>
         <section
           id="ask-dave"

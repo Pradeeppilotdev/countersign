@@ -353,6 +353,29 @@ Expired never-reserved approvals disappear from `policy_usage` immediately at th
 
 `npm run test:policy:recovery` → verify expiry pruning, retained expired reservations, dust rejection, pending-cap exhaustion, bulk recovery, cleanup/reservation races and clean CLI failure reasons on disposable local chains. The signed-invoice integration test also rewrites both the SQLite invoice and commitment, then strips its signature: both attacks are rejected before authorization. The exact 24-hour settlement-aging boundary remains covered by the Rust clock-boundary test; no successful real-chain 24-hour fast-forward is claimed.
 
+## Agent payments in the desk
+
+Run `npm run dev` → open http://127.0.0.1:4317/#agent-payments. The page runs the same agent flow as the CLI on the local agent vault (`work/agent-vault`, or `COUNTERSIGN_AGENT_DIR`). It calls the same functions as `agent:desk import`, `run` and `resume`; it adds no payment logic. All funds are local test NEAR.
+
+Set the vault up once from the terminal. The page cannot create a vault, change rules or pin a supplier key:
+
+```sh
+npm run agent:desk -- init
+npm run agent:desk -- policy 0.5 0.8 120
+npm run agent:desk -- merchant-key local-merchant PUBLIC_KEY_BASE64
+```
+
+- **Import signed bill** → choose a supplier's JSON file or paste it. The signature is checked against the pinned key before anything is saved. A rejected file shows its reason, such as `Invalid merchant signature`. Importing the same file again shows "Already imported" and keeps the one saved record.
+- **Request payment** → see Paid, Blocked or Pending with the recorded reason, such as "Merchant bill already used." or "Rolling daily budget exceeded." Blocked bills move no funds.
+- **Use live AI** is off by default, so the fixture proposer runs and no model is called. Tick it to send that one bill to NEAR AI; this needs `NEAR_AI_API_KEY` and `NEAR_AI_MODEL` and otherwise answers "No model key configured".
+- **Resume** → reconcile a saved proposal using its original attempt. It never calls a model.
+- **Receipt** on a paid bill → the attempt ID and the signed payload hash stored by the vault. The transaction hash is not available for local receipts.
+- **Rules** → read-only: the per-payment cap, the rolling 24-hour budget used, limit and remaining, the policy expiry, whether payments are paused, and the pinned suppliers.
+
+Only one request or resume runs at a time. Each action takes the vault's command lock, so while an `agent:desk` command is running the page reports "Agent vault is in use by another process"; retry when it finishes. Without a vault the page shows "No agent vault yet. Run npm run agent:desk -- init first."
+
+`npm run test:app` → check request validation, the 16 KB limit, the one-at-a-time rule and the missing or locked vault messages with fake dependencies. `npm run test:sandbox` includes `integration/agent-desk-web.test.ts` → on a fresh local vault, a signed bill imported through the route pays once, a forged amount is rejected at import, an identical re-import adds no record or payment, the same supplier bill under a new invoice ID is blocked, an over-budget bill is blocked, and the merchant's on-chain balance rises by exactly one payment.
+
 ## Ask Dave
 
 Dave can write a short conversational reply above the cited facts. Amounts, outcomes and explanations must match the specific selected bill or budget field; unsupported claims or phrasing leave the exact facts visible instead. The reply may greet you and combine supported statements, but it cannot promise a payment will succeed. Set `COUNTERSIGN_ASK_VOICE=off` for facts only.
