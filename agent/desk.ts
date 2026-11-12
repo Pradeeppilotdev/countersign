@@ -2,7 +2,7 @@ import {renewLocalPolicy} from './policy-renewal.ts';
 import {createRequire} from 'node:module';
 import {publicError} from '../app/errors.ts';
 import {createDeskInbox,importDeskInvoice,runDeskInvoice,resumeDeskInvoices,readDeskStatus,readDeskCapacity} from './desk-core.ts';
-import {randomBytes} from 'node:crypto';
+import {setDeskMerchantKey,setDeskPolicy,addDeskWeeklyService} from './desk-setup.ts';
 import {existsSync,readFileSync,statSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -59,16 +59,9 @@ try{
  else if(command==='pause'||command==='unpause'){result=await desk.owner.call(desk.vault,'set_paused',{paused:command==='pause'});}
  else if(command==='rotate-executor'){result=await replaceLocalExecutor(desk,args[0]);}
  else if(command==='merchant-key'||command==='revoke-key'){
-  if(command==='merchant-key'){
-   const key=Buffer.from(args[1],'base64');if(key.length!==32||key.toString('base64')!==args[1])throw Error('Expected a canonical base64 Ed25519 public key');
-   if(!await desk.vault.view('get_invoice_domain',{}))await desk.owner.call(desk.vault,'configure_invoice_auth',{domain:randomBytes(32).toString('hex')});
-  }
-  result=await desk.owner.call(desk.vault,'set_merchant_key',{merchant_id:args[0],public_key:command==='merchant-key'?args[1]:null});
-  result={...result,vault:desk.vault.accountId,domain:await desk.vault.view('get_invoice_domain',{})};
+  result=await setDeskMerchantKey(desk,args[0],command==='merchant-key'?args[1]:null);
  }else if(command==='weekly-service'){
-  const [agreement_id,merchant_id,amount,anchor_ms]=args;
-  if(!validMillis(anchor_ms))throw Error('Enter a UTC timestamp in integer milliseconds.');
-  result=await desk.owner.call(desk.vault,'add_weekly_service',{agreement_id,merchant_id,cap:parseNear(amount),anchor_ms});
+  result=await addDeskWeeklyService(desk,args[0],args[1],args[2],args[3]);
  }else if(command==='revoke-service'){
   result=await desk.owner.call(desk.vault,'revoke_weekly_service',{agreement_id:args[0]});
  }else if(command==='prepare-weekly'){
@@ -92,10 +85,7 @@ try{
   if(statSync(args[0]).size>16384)throw Error('Signed invoice file too large');
   result=await importDeskInvoice(desk,inbox,JSON.parse(readFileSync(args[0],'utf8')));
  }else if(command==='policy'){
-  const per=parseNear(args[0]),daily=parseNear(args[1]),minutes=Number(args[2]);
-  if(!Number.isInteger(minutes)||minutes<1||minutes>1440||BigInt(daily)<BigInt(per))throw Error('Policy needs a positive cap, rolling allowance >= cap, and expiry from 1 to 1440 minutes');
-  await capacity(); // Require the upgraded contract before advertising minimum/capacity controls.
-  result=await desk.owner.call(desk.vault,'set_policy',{merchants:[{id:'local-merchant',payee:desk.merchant.accountId}],per_payment:per,daily_limit:daily,expires_at:String(Date.now()+minutes*60000),min_payment:args[3]===undefined?null:parseNear(args[3])});
+  result=await setDeskPolicy(desk,args[0],args[1],Number(args[2]),args[3]);
  }else if(command==='revoke'){await desk.owner.call(desk.vault,'revoke_policy',{});result={revoked:true};}
  else if(command==='enqueue')result=inbox.enqueue({id:args[0],payee:desk.merchant.accountId,asset:'near',amount:parseNear(args[1])},'local-merchant');
  else if(command==='resume'){

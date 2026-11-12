@@ -1,5 +1,5 @@
 import {hardenSandbox,assertBrowserBlocked} from './sandbox-config.mjs';
-import {SandboxManager} from 'near-workspaces';
+import {SandboxManager,KeyPair} from 'near-workspaces';
 import {spawn,execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,openSync,closeSync,fsyncSync} from 'node:fs';
 import {join} from 'node:path';
@@ -41,6 +41,13 @@ export async function localChain(directory:string){
  await assertBrowserBlocked(rpcAddr);
  if(config.chainId&&config.chainId!==current.chain_id)throw Error('Local chain identity mismatch');
  config.chainId=current.chain_id;saveJson(path,config);
- const manager=new SandboxManager({...config,rpcAddr,rm:false,refDir:null});await manager.init();
+ const manager=new SandboxManager({...config,rpcAddr,rm:false,refDir:null});
+ // Read fresh bytes after a café reset. The SDK's getKeyFromFile uses require(),
+ // which caches validator_key.json from the previous chain at the same path.
+ if(!await manager.getKey(config.rootAccountId)){
+  const validator=JSON.parse(readFileSync(join(config.homeDir,'validator_key.json'),'utf8'));
+  await manager.setKey(config.rootAccountId,KeyPair.fromString(validator.secret_key??validator.private_key));
+ }
+ await manager.init();
  return {rootAccount:manager.root,provider:manager.provider,account:(id:string)=>manager.getAccount(id),tearDown:async()=>{}};
 }

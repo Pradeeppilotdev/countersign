@@ -1,0 +1,17 @@
+#demo-cafe .cafe-strip { padding:20px; margin-bottom:24px; }
+#demo-cafe .cafe-strip ol { display:flex; flex-wrap:wrap; gap:12px 36px; padding-left:20px; margin-top:12px; }
+#demo-cafe .cafe-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:20px 0; }
+#demo-cafe .cafe-live { display:flex; align-items:center; gap:6px; font-size:12px; }
+#demo-cafe .cafe-ledger { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:16px 0; }
+#demo-cafe .cafe-supplier { padding:20px; min-width:0; }
+#demo-cafe .cafe-supplier strong { display:block; font-size:22px; margin:18px 0 6px; }
+#demo-cafe code { display:block; overflow-wrap:anywhere; font-size:11px; margin:8px 0; }
+#demo-cafe details { border-top:1px solid var(--line); padding:12px 0; }
+#demo-cafe .cafe-bill { border-bottom:1px solid var(--line); padding:12px 0; }
+#demo-cafe .cafe-bill span { display:block; margin-top:4px; }
+#demo-cafe h2 { margin-top:24px; }
+#cafe-read-at,#cafe-summary p { color:var(--muted); font-size:13px; margin:8px 0; }
+
+#demo-cafe .cafe-live { white-space:nowrap; }
+#demo-cafe .cafe-live input { width:16px; height:16px; min-height:0; margin:0; padding:0; }
+#demo-cafe .cafe-budget-note { flex-basis:100%; border-left:3px solid var(--line); padding:8px 12px; margin:8px 0; font-size:13px; }

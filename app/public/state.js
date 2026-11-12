@@ -23,6 +23,25 @@ export function parseUnits(value, decimals = 24) {
   if (n <= 0n) throw Error("Enter an amount greater than zero.");
   return n.toString();
 }
+// Display-only: compares the vault's own rolling remaining figure with the
+// smallest bill still waiting (or the policy minimum when none are waiting).
+export function cafeBudgetSpent(spending, bills = [], policy = {}) {
+  const units = (value) =>
+    /^0+(\.0+)?$/.test(value) ? 0n : BigInt(parseUnits(value));
+  try {
+    if (!spending || typeof spending.remaining_near !== "string") return false;
+    const remaining = units(spending.remaining_near);
+    const waiting = bills
+      .filter((b) => b.outcome === "queued" || b.outcome === "proposed")
+      .map((b) => units(b.amount_near));
+    const smallest = waiting.length
+      ? waiting.reduce((a, b) => (a < b ? a : b))
+      : units(policy.min_payment_near ?? "0");
+    return remaining === 0n || remaining < smallest;
+  } catch {
+    return false;
+  }
+}
 export function invoiceState(payment) {
   const expired = payment.expired;
   if (payment.state === "Settled")

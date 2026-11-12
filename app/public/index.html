@@ -8,6 +8,7 @@
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/agent-payments.css" />
+    <link rel="stylesheet" href="/demo-cafe.css" />
     <link rel="stylesheet" href="/ask-widget.css" />
   </head>
   <body>
@@ -24,6 +25,7 @@
         <div>Local workspace<small>NEAR payment assurance</small></div>
       </div>
       <nav class="main-nav" aria-label="Workspace">
+        <a id="demo-nav" class="nav-item" href="#demo" data-view="demo-cafe" hidden><span data-icon="store"></span>Demo café</a>
         <a class="nav-item" href="#agent-payments" data-view="agent-payments" aria-current="page"><span data-icon="receipt"></span>Agent payments</a>
         <a class="nav-item" href="#ask-dave" data-view="ask-dave"
           ><span data-icon="dave"></span>Ask Dave</a
@@ -59,6 +61,13 @@
         >
       </header>
       <div class="content">
+        <section id="demo-cafe" class="workspace-view" hidden aria-labelledby="cafe-title">
+          <div class="page-heading"><div><h1 id="cafe-title">Demo café</h1><p>Three suppliers. Your rules. Every payment accounted for.</p></div></div>
+          <div class="panel cafe-strip"><strong>Try it in 60 seconds</strong><ol><li>Receive today's invoices</li><li>Pay all</li><li><a href="#agent-payments">See what got blocked</a></li><li><button id="cafe-ask" class="button ghost">Ask Dave why</button></li></ol></div>
+          <div id="cafe-feedback" role="status"></div><div id="cafe-summary"></div><div id="cafe-actions" class="cafe-actions"></div><p id="cafe-progress" role="status" aria-live="polite"></p>
+          <h2>Supplier ledger</h2><p id="cafe-read-at"></p><div id="cafe-ledger" class="cafe-ledger"></div>
+          <h2>Today's invoices</h2><div id="cafe-bills"></div><h2>Rejected at intake</h2><div id="cafe-rejected"></div>
+        </section>
         <section
           id="payments"
           class="workspace-view sandbox"
