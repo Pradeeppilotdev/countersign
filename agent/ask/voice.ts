@@ -46,16 +46,17 @@ export function voiceOptions(pack:FactsPack,key:string,text:string):Options{
    // cannot be borrowed, even if both invoices were selected.
    add(`(?:for ${id}, |${id}: )${literal(bill.explanation.meaning)}`,`${bill.id}: ${clean(bill.explanation.meaning)}`);
    add(`(?:for ${id}, |${id}: )${literal(bill.explanation.what_to_do)}`,`For ${bill.id}, ${clean(bill.explanation.what_to_do)}`);
-   const reasons:Record<string,string>={
-    'rolling daily budget exceeded':'paying it would (?:have gone over|go over|exceed|push your last 24 hours of spending over) your (?:rolling )?daily budget',
-    'per-payment cap exceeded':'(?:the (?:bill|amount) (?:was|is) over your per-payment (?:cap|limit)|it exceeded your per-payment (?:cap|limit))',
-    'invalid merchant signature':'the supplier signature was invalid',
-    'merchant bill already used':'this supplier bill was already registered under another invoice (?:ID|number)',
-    'service period already claimed by':'another invoice already claimed (?:this|the same) service week',
+   // [pattern, phrasing example]. The example is listed in reply_examples so the model can see the accepted form.
+   const reasons:Record<string,[string,string]>={
+    'rolling daily budget exceeded':['paying it would (?:have gone over|go over|exceed|push your last 24 hours of spending over) your (?:rolling )?daily budget','paying it would go over your rolling daily budget'],
+    'per-payment cap exceeded':['(?:the (?:bill|amount) (?:was|is) over your per-payment (?:cap|limit)|it exceeded your per-payment (?:cap|limit))','the amount is over your per-payment limit'],
+    'invalid merchant signature':['the supplier signature was invalid','the supplier signature was invalid'],
+    'merchant bill already used':['this supplier bill was already registered under another invoice (?:ID|number)','this supplier bill was already registered under another invoice number'],
+    'service period already claimed by':['another invoice already claimed (?:this|the same) service week','another invoice already claimed this service week'],
    };
-   for(const [reason,pattern] of Object.entries(reasons)){
+   for(const [reason,[pattern,example]] of Object.entries(reasons)){
     if(bill.explanation.meaning===GLOSSARY[reason].meaning)
-     options.patterns.push(`${id} (?:was|is) ${state} because ${pattern}`);
+     add(`${id} (?:was|is) ${state} because ${pattern}`,`${bill.id} was ${bill.outcome} because ${example}`);
    }
   }
  }
@@ -110,12 +111,13 @@ function composed(text:string,patterns:string[]):boolean{
  }
  return from(0);
 }
-export function groundedReply(pack:FactsPack,selected:{key:string;text:string}[],reply:string):boolean{
+// voice: patterns that a code-computed record (help cards, what fits) supplies for itself.
+export function groundedReply(pack:FactsPack,selected:{key:string;text:string;voice?:{patterns:string[]}}[],reply:string):boolean{
  // English is case-insensitive; identifiers are not.
  for(const bill of pack.invoices){
   for(const m of reply.matchAll(new RegExp(`(?<![A-Za-z0-9_.:-])${escape(bill.id)}(?![A-Za-z0-9_-])`,'gi')))
    if(m[0]!==bill.id)return false;
  }
- return composed(reply,[...friendly,...selected.flatMap(e=>voiceOptions(pack,e.key,e.text).patterns)]);
+ return composed(reply,[...friendly,...selected.flatMap(e=>[...voiceOptions(pack,e.key,e.text).patterns,...e.voice?.patterns??[]])]);
 }
 export const conversationalReply=(reply:string)=>composed(reply,friendly);
