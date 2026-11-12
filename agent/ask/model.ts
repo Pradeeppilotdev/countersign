@@ -6,6 +6,9 @@ import {AskError} from './views.ts';
 
 const ENDPOINT='https://cloud-api.near.ai/v1/chat/completions';
 export const MAX_TOKENS=2000; // Reasoning models stall when the budget is small.
+// NEAR AI honours reasoning_effort:'low' (reasoning drops to ~1 token); 'none',
+// enable_thinking and thinking:{type:'disabled'} are ignored. Ask Dave only selects
+// evidence and writes a short reply, so it does not need long reasoning.
 export type ChatMessage={role:'system'|'user';content:string};
 export type Complete=(messages:ChatMessage[])=>Promise<string>;
 
@@ -24,7 +27,7 @@ export function nearChat(config:{apiKey:string;model:string},send:typeof fetch=f
   try{
    response=await send(ENDPOINT,{method:'POST',redirect:'error',signal:AbortSignal.timeout(90_000),
     headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-    body:JSON.stringify({model,stream:false,max_tokens:MAX_TOKENS,temperature:0,messages})});
+    body:JSON.stringify({model,stream:false,max_tokens:MAX_TOKENS,temperature:0,reasoning_effort:'low',messages})});
   }catch{throw new AskError('Ask Dave: the model request failed.');}
   if(!response.ok){await response.body?.cancel();throw new AskError(`Ask Dave: the model request failed (HTTP ${response.status}).`);}
   let body:any;

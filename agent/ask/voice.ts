@@ -121,7 +121,7 @@ function composed(text:string,patterns:string[]):boolean{
 type Bill=FactsPack['invoices'][number];
 const VOCAB=new Set(`a an the this that these those it its it's they them their there there's here here's is are was were be been being has have had do does did
  i i'm i've you you've you're your yours we we've our us me my dave hi hey hello thanks thank sure please yes no of in on at for to from with and but or also as by
- about just only still yet already currently right now today moment total overall altogether all both each other others rest remaining left out bill bills invoice
+ about just only still yet already current currently right now today moment total overall altogether all both each other others rest remaining left out bill bills invoice
  invoices payment payments agent agent's vault vault's inbox supplier suppliers record records recorded show shows found what what's which how want would like let
  one know ask anything else help happy glad summary details check look quick update overview below see breakdown status state outcome outcomes number count once proposal proposals got`.split(/\s+/));
 const BUDGET_VOCAB=new Set('near policy spending per-payment cap limit rolling daily budget used available balance holds hold funds day amount single maximum'.split(' '));

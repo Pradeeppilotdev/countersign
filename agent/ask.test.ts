@@ -211,7 +211,8 @@ test('a question is one tool-free model request with the facts inside a closed d
  const complete=nearChat({apiKey:'test-secret',model:'configured-model'},async(url,options)=>{
   calls++;assert.equal(url,'https://cloud-api.near.ai/v1/chat/completions');assert.equal(options?.redirect,'error');
   const body=JSON.parse(String(options?.body));
-  assert.deepEqual(Object.keys(body).sort(),['max_tokens','messages','model','stream','temperature']); // no tools, no tool_choice
+  assert.deepEqual(Object.keys(body).sort(),['max_tokens','messages','model','reasoning_effort','stream','temperature']); // no tools, no tool_choice
+  assert.equal(body.reasoning_effort,'low');
   assert.ok(body.max_tokens>=1500&&body.max_tokens===MAX_TOKENS);assert.equal(body.model,'configured-model');assert.deepEqual(body.messages,messages);
   assert.ok(!String(options?.body).includes('test-secret'));
   return Response.json({choices:[{finish_reason:'stop',message:{content:select('invoice:INV-BEANS-003')}}]});
@@ -1109,7 +1110,7 @@ test('help: every card names its real agent:desk command, and help never claims 
  const desk=readFileSync(fileURLToPath(new URL('./desk.ts',import.meta.url)),'utf8');
  const usage=/Usage: agent:desk ([^']+)'/.exec(desk)![1].split(' | ');
  const cards=helpEvidence();
- assert.deepEqual(cards.map(c=>c.key),['help:policy','help:renew','help:pause','help:supplier-key','help:import-bill','help:resume','help:cancel','help:capacity']);
+ assert.deepEqual(cards.map(c=>c.key),['help:policy','help:renew','help:pause','help:supplier-key','help:import-bill','help:resume','help:cancel','help:spot-bad-invoice','help:capacity']);
  for(const card of HELP){
   const text=HELP_TEXT(card.topic);
   for(const form of card.usages){
@@ -1155,7 +1156,7 @@ test('voice: claims are verified, not phrasing: counts with owner synonyms, outc
  // The count line answers the owner sense of "pending" even with the voice off.
  assert.ok(verifyAnswer(pack,select('activity')).text.split('\n')[0].endsWith('Waiting to be paid: 12.'));
  for(const text of ['You have 12 bills waiting to be paid.','You have 12 pending invoices.','Hi! 12 bills are still unpaid, 2 were paid and 3 were blocked.',
-  'Of your 17 bills, 12 are waiting.','You have 12 invoices queued and waiting to be paid.','Nothing was cancelled, and 12 invoices are outstanding.','Here\'s a quick summary: 2 paid, 3 rejected and 12 not paid yet.'])
+  'Of your 17 bills, 12 are waiting.','Current outcomes: 12 queued, 2 paid, 3 blocked, with 12 waiting to be paid.','You have 12 invoices queued and waiting to be paid.','Nothing was cancelled, and 12 invoices are outstanding.','Here\'s a quick summary: 2 paid, 3 rejected and 12 not paid yet.'])
   assert.ok(shown(['activity'],text),text);
  for(const text of ['You have 11 waiting.','You have 11 bills waiting to be paid.','2 bills were blocked.','17 bills were paid.','12 bills were paid.',
   'Hey! You have 12 bills waiting, and 5 of them are urgent.','You have 12 bills waiting, so your agent is doing fine.','Nothing was blocked.','You have 12 invoices queued and paid.'])
@@ -1191,4 +1192,18 @@ test('voice: no_record beside real evidence is ignored; small talk is free wordi
   assert.deepEqual(verifyAnswer(pack,voiced(['chat'],hi)),{ok:true,text:hi,sources:[]});
  for(const text of ['I paid your bills.','Hi! I\'ve paused the vault for you.','Hi, your bills are blocked.','Hi! Your vault is paused.','Hi! Reach me at dave@example.com.','Hi! Everything is safe.'])
   assert.equal(verifyAnswer(pack,voiced(['chat'],text)).text,REFUSAL,text);
+});
+
+test('speed: the model sees the 10 most recent invoices plus any named one; answers still use the full pack',async()=>{
+ const extra=(id:string)=>({...cafeInbox()[2],id,state:'queued',error:null,has_proposal:false,attempt_state:null,
+  invoice:{id,payee,asset:'near',amount:near('0.2')},commitment:commitmentOf({id,payee,asset:'near',amount:near('0.2')})});
+ const pack=await cafePack(undefined,cafeView,Array.from({length:12},(_,i)=>extra(`INV-Q-${i+1}`)));
+ const keys=(q:string)=>{const c=buildMessages(pack,q)[1].content;return Object.keys(JSON.parse(c.slice(c.indexOf('\n')+1,c.indexOf('\nVAULT_DATA>>>')))).filter(k=>k.startsWith('invoice:'));};
+ const recent=pack.invoices.slice(-10).map(b=>'invoice:'+b.id);
+ assert.deepEqual(keys('How is my agent doing?'),recent);
+ assert.deepEqual(keys('Why was INV-BEANS-003 blocked?'),['invoice:INV-BEANS-003',...recent]);
+ // An older invoice can still be cited, and the activity report card still lists every bill.
+ assert.ok(verifyAnswer(pack,select('invoice:INV-BEANS-001')).ok);
+ assert.equal(verifyAnswer(pack,select('activity')).text.split('\n').filter(l=>l.startsWith('[')).length,15);
+ assert.ok(keys('how do I know if an invoice is fake?').length===10&&helpEvidence().some(c=>c.key==='help:spot-bad-invoice'));
 });

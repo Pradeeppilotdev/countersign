@@ -15,7 +15,7 @@ const SYSTEM=[
  'Reply with exactly one JSON object: {"facts":["key",...],"reply":"..."}. Copy only listed keys. Use ["no_record"] if the evidence cannot answer.',
  'Use invoice:<id> for a particular bill, weekly for signed service weeks, suppliers for all-time supplier totals, and flags for unusual activity. Use pause for the current payment pause and activity for agent outcomes.',
  'For "how many payments can I make", "can I afford" or "how much more" questions, select fit: code has already done the arithmetic. For how many bills are paid, blocked, pending or waiting, select activity. Never calculate anything yourself.',
- 'For "how do I", "how can I" or "where do I" questions, select the matching help:<topic> card. The cards describe commands; you cannot run them.',
+ 'For "how do I", "how can I" or "where do I" questions, select the matching help:<topic> card. The cards describe commands; you cannot run them. For how to tell whether an invoice is faulty, fake or a scam, select help:spot-bad-invoice.',
  '"reply" is optional: 1 to 3 short, friendly sentences in plain English that answer the owner directly, using ONLY the evidence you selected. Every invoice ID, amount, count, outcome and pause or policy state you mention must match the selected evidence exactly; code checks each one. The selected evidence is shown under your reply, so do not copy it all out.',
  'Keep every amount attached to its exact field or invoice. A total limit is not a remaining budget. For a reason, use the invoice ID and its exact explanation text, e.g. "<ID> was blocked because <meaning>"; a next step may follow in the next sentence. Do not judge whether things are fine or safe, and do not infer that a payment can succeed from an active policy or an unpaused vault. Unsupported wording falls back to the evidence.',
  'Never claim to take an action. You cannot pay, pause, approve, send or cancel anything.',
@@ -93,8 +93,13 @@ function evidenceFor(pack:FactsPack,question=''){
  return facts;
 }
 
+// The model sees the most recent invoices plus any named in the question; code still renders from the full pack.
+export const MODEL_INVOICES=10;
+const named=(question:string)=>new Set(question.match(/[a-zA-Z0-9_.:-]+/g)?.map(t=>t.replace(/[.:]+$/,''))??[]);
 function messagesFor(pack:FactsPack,facts:Map<string,Evidence>,question:string):ChatMessage[]{
- const data=JSON.stringify(Object.fromEntries([...facts].map(([key,{text,ids,voice}])=>[key,{text,ids,reply_examples:[...voiceOptions(pack,key,text).examples,...voice?.examples??[]]}]))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
+ const asked=named(question),recent=new Set(pack.invoices.slice(-MODEL_INVOICES).map(b=>'invoice:'+b.id));
+ const shown=[...facts].filter(([key])=>!key.startsWith('invoice:')||recent.has(key)||asked.has(key.slice(8)));
+ const data=JSON.stringify(Object.fromEntries(shown.map(([key,{text,ids,voice}])=>[key,{text,ids,reply_examples:[...voiceOptions(pack,key,text).examples,...voice?.examples??[]]}]))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
  return [{role:'system',content:SYSTEM},{role:'user',content:`<<<VAULT_DATA\n${data}\nVAULT_DATA>>>\n\nQuestion from the vault owner:\n${question}`}];
 }
 export function buildMessages(pack:FactsPack,question:string){
@@ -189,8 +194,7 @@ function render(pack:FactsPack,facts:Map<string,Evidence>,raw:string,question:st
   selected.push(evidence);
  }
  // A question that names a particular bill must get that bill's own record.
- const tokens=question.match(/[a-zA-Z0-9_.:-]+/g)?.map(t=>t.replace(/[.:]+$/,''))??[];
- for(const token of tokens){
+ for(const token of named(question)){
   if(facts.has('invoice:'+token)&&!keys.includes('invoice:'+token))return fail('The selection omitted the named invoice.');
  }
  const sources=[...new Set(selected.flatMap(e=>e.ids))];
