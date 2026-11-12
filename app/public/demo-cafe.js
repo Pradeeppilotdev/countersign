@@ -8,7 +8,7 @@ export async function enableCafe(){
  $('#demo-nav').hidden=!enabled;return enabled;
 }
 function lock(){root.setAttribute('aria-busy',String(busy));root.querySelectorAll('button,input').forEach(n=>n.disabled=busy);}
-const BUDGET_SPENT="Today's budget is spent: the vault is doing its job. Blocked bills will go through once earlier payments are 24 hours old. Press Reset café to start a fresh day.";
+const BUDGET_SPENT="The daily budget cannot cover another bill. Allowance returns as earlier payments leave the rolling 24-hour window; policy expiry and other bill checks still apply. Press Reset café to start a fresh demo.";
 // The existing Agent payments state already carries the vault's rolling usage.
 async function readSpending(state){
  if(!state.ready)return null;
@@ -49,7 +49,7 @@ function render(state,spending=null){
 }
 export async function refreshCafe(){
  if(!enabled||busy)return;busy=true;lock();
- try{const reply=await api('/api/demo/state');if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));}
+ try{const reply=await api('/api/demo/state');if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,'Ledger refreshed.','success');}
  catch(error){notice(feedback,'Could not read café','danger',error.message);}finally{busy=false;lock();}
 }
 async function mutate(action,body={}){
