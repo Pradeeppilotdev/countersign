@@ -96,9 +96,10 @@ export function applyAsk(card, head, body, data, isAccount = false) {
 // card prepended to container. When the reply carries a source it is shown
 // under the question and reported via onSource. Returns true when the
 // answer is ok.
-export async function runAsk(container, question, { onSource, onFollowUp } = {}) {
+export async function runAsk(container, question, { onSource, onFollowUp, maxCards = Infinity } = {}) {
   const { card, head, body } = askCard(question);
   container.prepend(card);
+  trimCards(container, maxCards);
   setBusy(body);
   try {
     const data = await askDave(question);

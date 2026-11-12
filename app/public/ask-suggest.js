@@ -1,7 +1,7 @@
 // Pure Ask Dave helpers. No DOM and no AI: follow-up chips and bill
 // pre-fill questions are derived from the answer text and bill state only,
 // so they stay unit-testable (see ask-suggest.test.ts).
-const BLOCKED_LINE = /^\[([^\]\n]+)\][^\n:]*: (?:Blocked|Failed)\./;
+const BLOCKED_LINE = /^\[([A-Za-z0-9_.:-]{1,128})\][^\n]*?: (?:Blocked|Failed)\./;
 
 export function suggestFollowUps(question, answerText) {
   const asked = String(question ?? "").trim().toLowerCase();

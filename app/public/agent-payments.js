@@ -54,7 +54,7 @@ function renderBills(){
   }else if(bill.outcome==='pending'||(bill.outcome==='blocked'&&bill.has_proposal)){
    actions.append(button('Resume',()=>mutate('/api/agent/resume',{id:bill.id},'Resuming the saved payment…'),{tone:'secondary'}));
   }
-   actions.append(button('Ask Dave',()=>{if(billAskHandler)billAskHandler(bill);},{tone:'ghost'}));
+   actions.append(button('Ask Dave',event=>{if(billAskHandler)billAskHandler(bill,event.currentTarget);},{tone:'ghost'}));
    card.append(actions);
   if(bill.outcome==='paid'){
    const receipt=el('details','','invoice-meta');receipt.dataset.invoice=bill.id;receipt.open=expanded.has(bill.id);

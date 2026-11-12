@@ -38,6 +38,9 @@
   background: var(--surface);
   box-shadow: 0 18px 44px rgba(24, 52, 64, 0.16);
 }
+.ask-widget-panel > :not(.ask-widget-answers) {
+  flex-shrink: 0;
+}
 .ask-widget-header {
   display: flex;
   align-items: center;
@@ -64,6 +67,7 @@
   overflow-wrap: anywhere;
 }
 .ask-widget-form {
+  padding: 0;
   display: flex;
   gap: 8px;
 }
@@ -82,7 +86,7 @@
 }
 .ask-widget-answers {
   overflow-y: auto;
-  min-height: 44px;
+  min-height: 0;
 }
 .ask-widget-answers .ask-card {
   padding: 14px 14px 12px;

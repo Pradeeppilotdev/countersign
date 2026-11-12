@@ -401,7 +401,9 @@ async function runAskCard(kind, label, payload, button, labelNode, busyText) {
     if (data.ok && data.text != null) {
       setAnswer(head, body, data.text, isAccount);
       if (!isAccount) appendFollowUps(card, label, data, (suggestion) => {
+        if (askBtn.disabled) return;
         askTextInput.value = suggestion;
+        askTextInput.focus();
         askForm.requestSubmit();
       });
     }
@@ -444,9 +446,12 @@ const askWidget = createAskWidget({
   onNavigate: () => {
     history.pushState(null, "", "#ask-dave");
     navigate();
+    askTextInput.focus();
     window.scrollTo({ top: 0, behavior: "instant" });
   },
 });
-askFromBill((bill) => askWidget.askForBill(bill));
-askWidgetView = (view) => askWidget.setOnAskDaveView(view === "ask-dave");
+askFromBill((bill, trigger) => askWidget.askForBill(bill, trigger));
+askWidgetView = (view) => {
+  if (askWidget.setOnAskDaveView(view === "ask-dave")) askTextInput.focus();
+};
 askWidgetView(location.hash === "#ask-dave" ? "ask-dave" : null);

@@ -3,23 +3,26 @@
 // Dave request/answer logic, so it answers exactly what the main view does.
 import { el } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
-import { runAsk, trimCards } from "./ask-shared.js";
+import { runAsk } from "./ask-shared.js";
 import { questionForBill } from "./ask-suggest.js";
 
 const HISTORY = 3,
-  NOTE = "Dave answers about this vault's payments, blocks, rules and account checks. Not dates or anything outside the vault.";
+  NOTE = "Dave answers about the agent vault's payments, blocks, rules and account checks. Not dates or anything outside the vault.";
 
 export function createAskWidget({ onNavigate } = {}) {
   let button, panel, form, input, submitBtn;
-  let submitting = false;
+  let submitting = false, opener = null;
 
   button = el("button", "Ask Dave", "ask-fab");
   button.type = "button";
   button.title = "Ask Dave";
-  button.addEventListener("click", open);
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-controls", "ask-widget-panel");
+  button.setAttribute("aria-haspopup", "dialog");
+  button.addEventListener("click", () => open(undefined, button));
 
   const title = el("h2", "Ask Dave", "ask-widget-title"),
-    closeBtn = el("button", "Close", "ask-widget-close"),
+    closeBtn = el("button", "Close", "button secondary small ask-widget-close"),
     header = el("div", "", "ask-widget-header"),
     hint = el("p", NOTE, "ask-widget-hint"),
     sourceNote = el("p", "", "ask-widget-source"),
@@ -34,8 +37,7 @@ export function createAskWidget({ onNavigate } = {}) {
   list.setAttribute("aria-label", "Recent Ask Dave answers");
   list.setAttribute("aria-live", "polite");
   openLink.href = "#ask-dave";
-  // Navigate exactly like the page's nav links (no scroll jump); close
-  // first so focus returns to the button when the panel hides.
+  // The full view takes focus after navigation; do not focus the hidden opener.
   openLink.addEventListener("click", (event) => {
     event.preventDefault();
     close(false);
@@ -44,6 +46,7 @@ export function createAskWidget({ onNavigate } = {}) {
   panelFoot.append(openLink);
   header.append(title, closeBtn);
   panel = el("div", "", "ask-widget-panel");
+  panel.id = "ask-widget-panel";
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-labelledby", "ask-widget-title");
   panel.hidden = true;
@@ -58,19 +61,24 @@ export function createAskWidget({ onNavigate } = {}) {
   input.placeholder = "Ask about a bill, a block, the rules…";
   input.setAttribute("aria-label", "Ask Dave a question");
   input.autocomplete = "off";
-  submitBtn = el("button", "Ask", "ask-widget-ask");
+  submitBtn = el("button", "Ask", "button primary ask-widget-ask");
   submitBtn.type = "submit";
   form.append(input, submitBtn);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const question = input.value.trim();
     if (!question || submitting) return;
-    ask(question);
+    return ask(question);
   });
   panel.insertBefore(form, listTitle);
-  closeBtn.addEventListener("click", close);
+  closeBtn.addEventListener("click", () => close());
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !panel.hidden) close();
+    if (event.key === "Escape" && !panel.hidden) {
+      // Non-modal: owners can tab back to the desk without losing focus on Esc.
+      const inside = panel.contains(document.activeElement);
+      close(inside);
+      if (inside) event.preventDefault();
+    }
   });
 
   document.body.append(button, panel);
@@ -78,40 +86,47 @@ export function createAskWidget({ onNavigate } = {}) {
   async function ask(question) {
     if (submitting) return;
     submitting = true;
+    // Disabling a focused submit button must not drop keyboard focus to the page.
+    input.focus();
     submitBtn.disabled = true;
     try {
       const ok = await runAsk(list, question, {
+        maxCards: HISTORY,
         onSource: (source) => {
           sourceNote.textContent =
             "Source: " + askSourceLabels(source).question;
           sourceNote.hidden = false;
         },
         onFollowUp: (suggestion) => {
-          if (!submitting) ask(suggestion);
+          if (submitting) return;
+          input.value = suggestion;
+          input.focus();
+          ask(suggestion);
         },
       });
-      if (ok) input.value = "";
+      if (ok && input.value.trim() === question) input.value = "";
     } finally {
       submitting = false;
       submitBtn.disabled = false;
-      trimCards(list, HISTORY);
     }
   }
 
-  async function open(prefilled) {
-    if (!panel.hidden) return;
+  function open(prefilled, trigger = document.activeElement) {
+    opener = trigger;
     panel.hidden = false;
     button.setAttribute("aria-expanded", "true");
-    if (prefilled) input.value = prefilled;
+    if (typeof prefilled === "string") input.value = prefilled;
     input.focus();
-    if (prefilled) ask(prefilled);
   }
 
   function close(refocus = true) {
     if (panel.hidden) return;
     panel.hidden = true;
     button.setAttribute("aria-expanded", "false");
-    if (refocus) button.focus();
+    if (refocus) {
+      const target = opener?.isConnected && opener.getClientRects().length ? opener : button;
+      if (!target.hidden) target.focus();
+    }
   }
 
   return {
@@ -121,11 +136,13 @@ export function createAskWidget({ onNavigate } = {}) {
     close,
     // Called by navigate() so the button stays off the Ask Dave view itself.
     setOnAskDaveView(on) {
+      const moveFocus = on && (panel.contains(document.activeElement) || document.activeElement === button);
       button.hidden = on;
-      if (on) close();
+      if (on) close(false);
+      return moveFocus;
     },
-    askForBill(bill) {
-      open(questionForBill(bill));
+    askForBill(bill, trigger) {
+      open(questionForBill(bill), trigger);
     },
   };
 }

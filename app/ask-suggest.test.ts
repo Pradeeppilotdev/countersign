@@ -42,3 +42,9 @@ test('questionForBill picks the pre-filled question from the bill outcome',()=>{
  assert.equal(questionForBill({id:'INV-P-1',outcome:'pending'}),'What is the status of INV-P-1?');
  assert.equal(questionForBill({id:'INV-C-1',outcome:'cancelled'}),'What is the status of INV-C-1?');
 });
+
+// Real report lines include the supplier and amount before the outcome delimiter.
+test('suggestFollowUps accepts report lines with namespaced supplier IDs and rejects malformed invoice IDs',()=>{
+ assert.deepEqual(suggestFollowUps('Summary', '[INV:3] cafe:beans, 0.5 NEAR: Blocked. Reason recorded: daily budget.'), ['Why was INV:3 blocked?']);
+ assert.deepEqual(suggestFollowUps('Summary', '[<img src=x>] cafe, 0.5 NEAR: Blocked.'), []);
+});
