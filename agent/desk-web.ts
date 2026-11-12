@@ -34,12 +34,20 @@ async function snapshot(directory:string,desk:SandboxDesk,inbox:AgentInbox){
   view:(method,args)=>desk.vault.view(method,args),inbox:readInbox(join(directory,'inbox.db'))});
  return {network:status.network,vault:status.vault,paused:status.controls?.paused??null,
   policy:facts.vault.rules,capacity,spending:facts.totals.per_day,merchants:facts.vault.merchant_keys,
-  bills:facts.invoices.map(b=>({id:b.id,merchant:b.merchant,payee:b.payee,amount_near:b.amount_near,state:b.state,outcome:b.outcome,
-   error:b.error,reason:b.reason,explanation:b.explanation,has_proposal:b.agent.has_proposal,
-   attempt_id:b.chain.payment?.same_invoice?b.chain.payment.attempt_id:null,
-   payload_hash:b.chain.payment?.same_invoice?b.chain.invoice_auth?.payload_hash??null:null,
-   // The CLI transport returns decoded contract results; it does not persist tx hashes.
-   tx_hash:null,network:status.network})),
+  bills:facts.invoices.map(b=>{
+   // Matching transfer terms alone do not identify a merchant-signed bill.
+   // Keep the facts pack's exact signed-receipt attribution at the UI boundary.
+   const paid=b.outcome==='paid'&&b.attribution==='verified';
+   const unverified=b.attribution==='unattributed'||(b.outcome==='paid'&&!paid);
+   return {id:b.id,merchant:b.merchant,payee:b.payee,amount_near:b.amount_near,state:b.state,outcome:unverified?'blocked':b.outcome,
+    error:unverified?b.attribution_reason??'No matching signed receipt confirms this bill was paid.':b.error,
+    reason:unverified?'unattributed_payment':b.reason,explanation:b.explanation,has_proposal:b.agent.has_proposal,
+    payment_confirmed:paid,
+    attempt_id:paid?b.chain.payment!.attempt_id:null,
+    payload_hash:paid?b.chain.invoice_auth.payload_hash:null,
+    // The CLI transport returns decoded contract results; it does not persist tx hashes.
+    tx_hash:null,network:status.network};
+  }),
  };
 }
 export const readAgentState=(directory:string)=>withInbox(directory,(desk,inbox)=>snapshot(directory,desk,inbox));

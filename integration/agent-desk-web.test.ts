@@ -11,7 +11,7 @@ import lockfile from 'proper-lockfile';
 import {createAgentRoute} from '../app/agent-route.ts';
 import {readAgentState,importAgentBill,runAgentBill,resumeAgentBill,agentWebError} from '../agent/desk-web.ts';
 import {publicKeyBase64,signInvoice,signedInvoiceHash} from '../merchant/invoice.ts';
-import {parseNear} from '../app/sandbox.ts';
+import {SandboxDesk,parseNear} from '../app/sandbox.ts';
 
 const exec=promisify(execFile),root=fileURLToPath(new URL('../',import.meta.url));
 test('agent web café pays once, retains identical imports, and blocks a new-ID duplicate and daily overspend',{timeout:180000},async()=>{
@@ -44,6 +44,7 @@ test('agent web café pays once, retains identical imports, and blocks a new-ID 
   assert.equal((await post('import',{invoice:bill})).record.outcome,'queued');
   const paid=await post('run',{id:bill.invoice.id,live:false});
   assert.equal(paid.record.outcome,'paid');assert.equal(paid.record.state,'settled');assert.ok(paid.record.attempt_id);
+  assert.equal(paid.record.payment_confirmed,true);
   assert.equal(paid.record.payload_hash,signedInvoiceHash(bill));assert.equal(await balance()-before,BigInt(parseNear('0.4')));
   const again=await post('import',{invoice:bill});assert.equal(again.already_imported,true);assert.equal(again.state.bills.length,1);
   assert.equal(again.record.attempt_id,paid.record.attempt_id);assert.equal(again.record.outcome,'paid');
@@ -64,4 +65,63 @@ test('agent web café pays once, retains identical imports, and blocks a new-ID 
   const release=await lockfile.lock(directory,{stale:2000,update:1000});
   try{const locked=await route('GET','/api/agent/state',undefined);assert.equal(locked.status,409);assert.equal(locked.body.error,'Agent vault is in use by another process');}finally{await release();}
  }finally{if(chain?.pid)try{process.kill(chain.pid,'SIGTERM');}catch{}}
+});
+
+test('desk receipts reject signed-bill and terms collisions, and missing merchant attribution', {timeout:180000},async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'countersign-desk-receipts-'));
+ const desk=new SandboxDesk(directory,{recoverOnStart:false});
+ const route=createAgentRoute({state:()=>readAgentState(directory),importBill:bill=>importAgentBill(directory,bill),
+  run:(id,live)=>runAgentBill(directory,id,live),resume:id=>resumeAgentBill(directory,id),modelReady:()=>false,error:agentWebError});
+ try{
+  await desk.start();const {vault,owner,executor,merchant}=desk;
+  const now=BigInt((await vault.view('policy_snapshot',{})).now),amount=parseNear('0.04');
+  const pair=generateKeyPairSync('ed25519'),domain='a'.repeat(64);
+  await owner.call(vault,'configure_invoice_auth',{domain});
+  await owner.call(vault,'set_merchant_key',{merchant_id:'supplier',public_key:publicKeyBase64(pair.publicKey)});
+  await owner.call(vault,'set_policy',{merchants:[{id:'supplier',payee:merchant.accountId}],per_payment:amount,daily_limit:parseNear('0.12'),expires_at:String(now+3_600_000n)});
+  const signed=(id:string,bill_id:string,value=amount)=>signInvoice({invoice:{id,payee:merchant.accountId,asset:'near',amount:value},
+   merchant_id:'supplier',bill_id,vault:vault.accountId,domain,key_version:'1',expires_at:String(now+600_000n)},pair.privateKey);
+  const cases=[
+   {original:signed('SAME-TERMS','PAID-BILL'),incoming:signed('SAME-TERMS','ANOTHER-BILL'),error:/signed bill in the inbox is not the one/},
+   {original:signed('OTHER-AMOUNT','ORIGINAL-AMOUNT'),incoming:signed('OTHER-AMOUNT','ORIGINAL-AMOUNT',parseNear('0.03')),error:/different invoice under this invoice number/},
+   {original:signed('NO-SIGNED-RECEIPT','MANUAL-PAYMENT'),incoming:signed('NO-SIGNED-RECEIPT','UNPROVEN-BILL'),error:/no signed supplier receipt/},
+  ];
+  const before=BigInt((await merchant.balance()).total.toString());
+  // Payments made outside this inbox must not become receipts for a later,
+  // different signed bill merely because its ID and payment terms collide.
+  for(const [i,c] of cases.entries()){
+   if(i===2)await owner.call(vault,'authorize',{invoice:c.original.invoice});
+   else await executor.call(vault,'authorize_signed_invoice',{signed:c.original},{gas:'100000000000000'});
+   await executor.call(vault,'reserve',{invoice:c.original.invoice,attempt_id:'paid-'+i},{gas:'100000000000000'});
+   await executor.call(vault,'execute',{invoice_id:c.original.invoice.id,attempt_id:'paid-'+i},{gas:'100000000000000'});
+  }
+  const paidBalance=(await merchant.balance()).total.toString();
+  assert.equal(BigInt(paidBalance)-before,BigInt(amount)*3n);
+  await desk.close();
+  const check=(record:any,pattern:RegExp)=>{
+   assert.equal(record.outcome,'blocked');assert.equal(record.payment_confirmed,false);
+   assert.equal(record.reason,'unattributed_payment');assert.match(record.error,pattern);
+   assert.equal(record.attempt_id,null);assert.equal(record.payload_hash,null);assert.equal(record.tx_hash,null);
+  };
+  for(const c of cases){
+   const imported=await route('POST','/api/agent/import',{invoice:c.incoming});
+   assert.equal(imported.status,200);assert.equal(imported.body.already_imported,false);
+   assert.equal(imported.body.record.state,'queued');check(imported.body.record,c.error);
+   const again=await route('POST','/api/agent/import',{invoice:c.incoming});
+   assert.equal(again.body.already_imported,true);check(again.body.record,c.error);
+   // Reopening the desk and explicitly retrying cannot turn that wrong receipt
+   // into a paid badge, or cause another transfer.
+   const run=await route('POST','/api/agent/run',{id:c.incoming.invoice.id,live:false});
+   assert.equal(run.status,400);assert.equal(run.body.ok,false);
+   const resumed=await route('POST','/api/agent/resume',{id:c.incoming.invoice.id});
+   assert.equal(resumed.status,200);check(resumed.body.record,c.error);
+   const state=await route('GET','/api/agent/state',undefined);
+   check(state.body.state.bills.find((b:any)=>b.id===c.incoming.invoice.id),c.error);
+   assert.equal((await merchant.balance()).total.toString(),paidBalance);
+  }
+  console.log('PASS: two signed-bill collisions and a missing signature receipt stayed Blocked across import, refresh and retry; no borrowed receipt or extra payment.');
+ }finally{
+  await desk.close();
+  try{process.kill(JSON.parse(readFileSync(join(directory,'chain.json'),'utf8')).pid,'SIGTERM');}catch{}
+ }
 });
