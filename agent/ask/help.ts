@@ -58,13 +58,18 @@ function sentences(text:string){return text.split(/(?<=[.])\s+/).map(s=>s.replac
 // ---- What fits ----
 const YOCTO=10n**24n;
 const digits=(v:unknown):v is string=>typeof v==='string'&&/^[0-9]{1,39}$/.test(v);
-// "1 NEAR", "0.2 near", "2N": the first amount the question names, as exact yocto.
-export function amountIn(question:string):bigint|null{
- const m=/(?<![\w.])(\d{1,15}(?:\.\d{1,24})?)\s*(?:near|n)\b/i.exec(question);
- if(!m)return null;
- const [whole,fraction='']=m[1].split('.');
- const value=BigInt(whole)*YOCTO+BigInt(fraction.padEnd(24,'0'));
- return value>0n?value:null;
+type QuestionAmount={kind:'missing'}|{kind:'invalid'}|{kind:'valid';yocto:bigint};
+// Read the first whole numeric token before NEAR/N, including its sign. Detect
+// malformed numbers before validating so they cannot fall back to the cap or
+// be partially read as a smaller, positive amount.
+export function amountIn(question:string):QuestionAmount{
+ const m=/(?<![\w.,+\-−])((?:[+\-−]\s*)*[\d.]\S*?(?:[ \t]+[\d.]\S*?)*?)\s*(?:near|n)\b/i.exec(question);
+ if(!m)return {kind:'missing'};
+ const decimal=/^(?:\+\s*)?(\d{1,15}(?:\.\d{1,24})?|\.\d{1,24})$/.exec(m[1].trim());
+ if(!decimal)return {kind:'invalid'};
+ const [whole,fraction='']=decimal[1].split('.');
+ const yocto=BigInt(whole||'0')*YOCTO+BigInt(fraction.padEnd(24,'0'));
+ return yocto>0n?{kind:'valid',yocto}:{kind:'invalid'};
 }
 const near=(y:bigint)=>formatNear(y)+' NEAR';
 const plural=(n:bigint,one:string,many:string)=>`${n} ${n===1n?one:many}`;
@@ -78,6 +83,12 @@ export function fitEvidence(pack:FactsPack,question:string){
  const none='(?:0|zero|no|none of (?:them|those)) payments? (?:can|could) go through(?: right now)?';
  // A bare yes/none is only offered when it agrees with the computed answer.
  const answer=(fits:boolean)=>fits?add('yes','Yes'):add('(?:none|no)','None');
+ const asked=amountIn(question);
+ if(asked.kind==='invalid'){
+  const message='Please enter a positive NEAR amount, such as 0.1 NEAR, using at most 24 decimal places.';
+  add(escape(message.slice(0,-1)),message.slice(0,-1));
+  return done(message);
+ }
  if(pack.vault.controls?.paused===true){
   answer(false);
   add(`${none},? (?:because |since )?(?:your |the )?(?:vault|payments) (?:is|are) paused`,'No payments can go through right now because payments are paused');
@@ -97,10 +108,10 @@ export function fitEvidence(pack:FactsPack,question:string){
  const per=digits(policy?.per_payment)?BigInt(policy.per_payment):null,limit=digits(policy?.daily_limit)?BigInt(policy.daily_limit):null;
  const usage=digits(snapshot?.usage)?BigInt(snapshot.usage):null,min=digits(snapshot?.min_payment)?BigInt(snapshot.min_payment):null;
  const available=digits(pack.vault.available_yocto)?BigInt(pack.vault.available_yocto as string):null;
- if(rules?.expired!==false||per===null||limit===null||usage===null||available===null)
+ if(rules?.expired!==false||per===null||per<=0n||limit===null||usage===null||available===null)
   return done('Dave cannot work out what fits: the vault did not return its policy, rolling budget and balance.');
- const asked=amountIn(question),size=asked??per,X=escape(near(size));
- const lead=asked===null?`At your full per-payment limit of ${near(per)}: `:'';
+ const size=asked.kind==='valid'?asked.yocto:per,X=escape(near(size));
+ const lead=asked.kind==='missing'?`At your full per-payment limit of ${near(per)}: `:'';
  if(size>per){
   answer(false);
   add(`(?:(?:none|no|zero|0)(?: payments)?(?: can go through)?,? (?:because |since )?)?(?:a |an? )?${X} payment (?:is|would be) over (?:your|the) ${escape(near(per))} per-payment (?:limit|cap)`,`None: a ${near(size)} payment is over your ${near(per)} per-payment limit`);

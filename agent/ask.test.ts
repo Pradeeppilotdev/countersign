@@ -1031,7 +1031,7 @@ const fitView=(over:{now?:string;usage?:string;daily?:string;available?:string;p
 };
 const fitText=async(question:string,over={})=>fitEvidence(await cafePack(undefined,fitView(over) as any),question).text;
 test('fit: expired, over the cap, budget- or balance-limited, cap-size by default, and exact decimals',async()=>{
- assert.deepEqual([amountIn('how many 1 NEAR transactions'),amountIn('can I afford 0.2 near payments?'),amountIn('how many payments?')],[10n**24n,2n*10n**23n,null]);
+ assert.deepEqual([amountIn('how many 1 NEAR transactions'),amountIn('can I afford 0.2 near payments?'),amountIn('how many payments?')],[{kind:'valid',yocto:10n**24n},{kind:'valid',yocto:2n*10n**23n},{kind:'missing'}]);
  // Policy expired: nothing fits, and the renew card is rendered under it by code.
  const expired=await cafePack(undefined,fitView({now:'9000001'}) as any);
  assert.equal(fitEvidence(expired,'how many 1 NEAR transactions can I do').text,'0 payments can go through right now: the spending policy has expired. Renew it first.');
@@ -1046,6 +1046,8 @@ test('fit: expired, over the cap, budget- or balance-limited, cap-size by defaul
  assert.equal(await fitText('how many 0.1 NEAR payments?',{daily:near('0.3'),usage:'0'}),'3 payments of 0.1 NEAR fit in the 0.3 NEAR left in your rolling 24-hour budget. The budget is the limit; the vault holds 4.8 NEAR.');
  assert.equal(await fitText('how many 0.3 NEAR payments?',{daily:near('0.9'),usage:'0'}),'3 payments of 0.3 NEAR fit in the 0.9 NEAR left in your rolling 24-hour budget. The budget is the limit; the vault holds 4.8 NEAR.');
  assert.equal(await fitText('can I do 0.001 NEAR payments'),'None: a 0.001 NEAR payment is under your 0.01 NEAR minimum.');
+ assert.deepEqual(amountIn('Can I afford .000000000000000000000001 NEAR payments?'),{kind:'valid',yocto:1n});
+ assert.deepEqual(amountIn('Can I afford 0.1 NEAR instead of 0.2 NEAR?'),{kind:'valid',yocto:10n**23n});
  assert.equal(await fitText('how many?',{paused:true}),'0 payments can go through right now: payments are paused. Unpause first.');
  // The voice may say what code computed, and nothing else.
  const pack=await cafePack(),q='can I afford 0.1 NEAR payments';
@@ -1062,6 +1064,45 @@ test('fit: expired, over the cap, budget- or balance-limited, cap-size by defaul
  assert.equal(verifyAnswer(pack,JSON.stringify({facts:['fit'],reply:'None — 4 payments of 0.1 NEAR fit.'}),q).text,plain.text);
  for(const reply of ['5 payments of 0.1 NEAR fit.','You can afford about 4 payments.','4 payments of 0.1 NEAR will definitely go through.'])
   assert.equal(verifyAnswer(pack,JSON.stringify({facts:['fit'],reply}),q).text,plain.text,reply);
+});
+
+test('fit: leading decimals use the requested amount and keep a supported conversational reply',async()=>{
+ const pack=await cafePack(undefined,fitView({daily:near('0.3'),usage:'0'}) as any);
+ const plain=verifyAnswer(pack,select('fit'),'can I afford 0.1 NEAR payments?');
+ assert.ok(plain.text.startsWith('3 payments of 0.1 NEAR fit'),plain.text);
+ const spoken='Yes — 3 payments of 0.1 NEAR fit in the 0.3 NEAR left in your rolling 24-hour budget. The budget is the limit; your vault holds 4.8 NEAR.';
+ for(const amount of ['.1 NEAR','.10near','.1N','+.1 NEAR','+ .1 NEAR']){
+  const question=`Can I afford ${amount} payments?`;
+  assert.equal(verifyAnswer(pack,select('fit'),question).text,plain.text,amount);
+  const result=await askQuestion(pack,question,async messages=>{
+   const evidence=JSON.parse(messages[1].content.split('\n')[1]);
+   assert.ok(evidence.fit.text.startsWith('3 payments of 0.1 NEAR fit'));
+   return JSON.stringify({facts:['fit'],reply:spoken});
+  });
+  assert.equal(result.text,spoken+'\n\n'+plain.text,amount);
+  assert.ok(!('reply_dropped' in result),amount);
+ }
+});
+
+test('fit: negative, zero and malformed amounts never become a positive amount or the default cap',async()=>{
+ const pack=await cafePack(),message='Please enter a positive NEAR amount, such as 0.1 NEAR, using at most 24 decimal places.';
+ for(const amount of ['-0.1 NEAR','-.1 NEAR','- .1 NEAR','−0.1 NEAR','− .1 NEAR','--0.1 NEAR','+-0.1 NEAR',
+  '0 NEAR','0.0NEAR','.0 N','-0 NEAR','1,000 NEAR','1 500 NEAR','1_000 NEAR','0x10 NEAR','1e3 NEAR','1e-3 NEAR','1.2.3 NEAR',
+  '0.1234567890123456789012345 NEAR','1234567890123456 NEAR']){
+  const question=`Can I afford ${amount} payments?`;
+  assert.equal(fitEvidence(pack,question).text,message,amount);
+  const plain=verifyAnswer(pack,select('fit'),question);
+  assert.ok(plain.text.startsWith(message+'\nSources:'),amount);
+  const reply=verifyAnswer(pack,JSON.stringify({facts:['fit'],reply:'Yes — 4 payments of 0.1 NEAR fit.'}),question);
+  assert.equal(reply.text,plain.text,amount);
+  assert.ok('reply_dropped' in reply,amount);
+ }
+ // An invalid first amount cannot be skipped in favour of a later valid one.
+ assert.equal(fitEvidence(pack,'Can I afford -0.1 NEAR instead of 0.2 NEAR?').text,message);
+ // The explanation remains conversational when it agrees with the evidence.
+ const question='Can I afford -.1 NEAR payments?';
+ const plain=verifyAnswer(pack,select('fit'),question);
+ assert.equal(verifyAnswer(pack,JSON.stringify({facts:['fit'],reply:message}),question).text,message+'\n\n'+plain.text);
 });
 
 test('help: every card names its real agent:desk command, and help never claims an outcome or amount',async()=>{

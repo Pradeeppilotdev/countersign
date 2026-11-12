@@ -11,7 +11,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 import {parseNear} from '../app/sandbox.ts';
-import {verifyAnswer} from '../agent/ask/answer.ts';
+import {askQuestion,verifyAnswer} from '../agent/ask/answer.ts';
 import {checkInvoice} from '../agent/ask/check.ts';
 import {buildFacts} from '../agent/ask/facts.ts';
 import {openVaultReader} from '../agent/ask/views.ts';
@@ -141,6 +141,21 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
    ['duplicate_bill','INV-BEANS-001-AGAIN','0.4','Merchant bill already used.'],
    ['blocked_attempt','INV-BEANS-003','0.5','Rolling daily budget exceeded.'],
   ]);
+
+  // A fixture model can keep its conversational reply, but capacity comes from
+  // these real local balances. Leading decimals and negative values stay distinct.
+  const spoken='Yes — 3 payments of 0.1 NEAR fit in the 0.3 NEAR left in your rolling 24-hour budget. The budget is the limit; your vault holds 4.5 NEAR.';
+  const fit=await askQuestion(pack,'Can I afford .1 NEAR payments?',async messages=>{
+   const evidence=JSON.parse(messages[1].content.split('\n')[1]);
+   assert.ok(evidence.fit.text.startsWith('3 payments of 0.1 NEAR fit'));
+   return JSON.stringify({facts:['fit'],reply:spoken});
+  });
+  assert.ok(fit.text.startsWith(spoken+'\n\n3 payments of 0.1 NEAR fit'));
+  assert.ok(!('reply_dropped' in fit));
+  const negative=await askQuestion(pack,'Can I afford -.1 NEAR payments?',async()=>JSON.stringify({facts:['fit'],reply:spoken}));
+  assert.ok(negative.text.startsWith('Please enter a positive NEAR amount'));
+  assert.ok('reply_dropped' in negative);
+  assert.deepEqual(await cli('status'),statusBefore);assert.equal(rows(),rowsBefore);
 
   // Unknown flags are refused, and a question without a model key stops before any model request.
   await refused(/Usage: agent:desk ask --facts/,'ask','--pay');
