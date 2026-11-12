@@ -291,18 +291,22 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
 }
 
 // voice: patterns that a code-computed record (help cards, what fits) supplies for itself.
-export function groundedReply(pack:FactsPack,selected:{key:string;text:string;ids?:string[];voice?:{patterns:string[]}}[],reply:string):boolean{
- return groundedWhy(pack,selected,reply)===null;
+export function groundedReply(pack:FactsPack,selected:Selected[],reply:string):boolean{
+ const result=verifiedReply(pack,selected,reply);
+ return !result.dropped.length;
 }
-// null when every claim checks out; otherwise a short reason (developer debug only).
-export function groundedWhy(pack:FactsPack,selected:{key:string;text:string;ids?:string[];voice?:{patterns:string[]}}[],reply:string):string|null{
+type Selected={key:string;text:string;ids?:string[];voice?:{patterns:string[]}};
+// Checks a reply sentence by sentence. kept: the sentences whose every claim checks
+// out, in order; dropped: the others, with why (developer debug only). A sentence
+// that relied on the previous sentence's invoice (a next step) is dropped with it.
+export function verifiedReply(pack:FactsPack,selected:Selected[],reply:string):{kept:string[];dropped:{sentence:string;why:string}[]}{
  // English is case-insensitive; identifiers are not.
  for(const bill of pack.invoices){
   for(const m of reply.matchAll(new RegExp(`(?<![A-Za-z0-9_.:-])${escape(bill.id)}(?![A-Za-z0-9_-])`,'gi')))
-   if(m[0]!==bill.id)return 'invoice ID in the wrong case';
+   if(m[0]!==bill.id)return {kept:[],dropped:[{sentence:reply,why:'invoice ID in the wrong case'}]};
  }
  const patterns=[...friendly,...selected.flatMap(e=>[...voiceOptions(pack,e.key,e.text).patterns,...e.voice?.patterns??[]])];
- if(composed(reply,patterns))return null;
+ if(composed(reply,patterns))return {kept:[reply.trim()],dropped:[]};
  const keys=selected.map(e=>e.key),text=reply.replace(/’/g,"'");
  // Invoices a reply may name: selected invoice records, and invoices listed by a selected record (activity, flags, …).
  const allowed=new Set(pack.invoices.flatMap((b,i)=>keys.includes('invoice:'+b.id)||selected.some(e=>e.ids?.includes(b.id))?[i]:[]));
@@ -310,17 +314,25 @@ export function groundedWhy(pack:FactsPack,selected:{key:string;text:string;ids?
  const commands=cards.flatMap(c=>[...c.usages.map(u=>'npm run agent:desk -- '+u),...c.website?[c.website]:[]]).sort((a,b)=>b.length-a.length);
  const helpWords=new Set(cards.flatMap(c=>[c.text,...c.goals,c.website??'','run use command website cli-only only cli go open to'].join(' ').toLowerCase().match(/[a-z0-9]+(?:[-'][a-z0-9]+)*/g)??[]));
  const spans=glossarySpans(pack,allowed,text);
+ const kept:string[]=[],dropped:{sentence:string;why:string}[]=[];
  let inherited:number[]=[];
  for(const {from,to} of sentencesOf(text,spans)){
-  const sentence=text.slice(from,to);
-   if(composed(sentence,patterns)){
+  // The sentence with its own end punctuation.
+  const sentence=text.slice(from,to),shown=text.slice(from).match(new RegExp(`^${escape(sentence)}[.!?;]*`))![0].trim();
+  if(composed(sentence,patterns)){
    const named=pack.invoices.map((b,i)=>sentence.includes(b.id)?i:-1).filter(i=>i>=0);
    if(named.length)inherited=named;
-   continue;
+   kept.push(shown);continue;
   }
   const result=claimsHold(pack,keys,sentence,spans,from,inherited,{allowed,commands,helpWords});
-  if(!result.ok)return `${result.why}: "${sentence.trim()}"`;
-  inherited=result.ids;
+  if(!result.ok){dropped.push({sentence:sentence.trim(),why:result.why!});inherited=[];continue;}
+  inherited=result.ids;kept.push(shown);
  }
- return null;
+ // Greetings alone are not an answer.
+ if(kept.every(k=>composed(k,friendly)))return {kept:[],dropped:dropped.length?dropped:[{sentence:reply.trim(),why:'only a greeting'}]};
+ return {kept,dropped};
+}
+export function groundedWhy(pack:FactsPack,selected:Selected[],reply:string):string|null{
+ const {dropped}=verifiedReply(pack,selected,reply);
+ return dropped.length?dropped.map(d=>`${d.why}: "${d.sentence}"`).join('; '):null;
 }

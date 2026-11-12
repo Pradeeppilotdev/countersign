@@ -25,6 +25,7 @@ for(const q of questions){
   else if(v.text===REFUSAL){result=v.reply_dropped?'refused (chat reply dropped)':'refused';why=v.reply_dropped??'';shown=v.dropped_reply??'';}
   else if(v.text===NO_RECORD)result='no record';
   else if(v.reply_dropped){result='facts only';why=v.reply_dropped;shown=v.dropped_reply??'';}
+  else if(v.reply_trimmed){result='direct (trimmed)';shown=v.text.split('\n\n')[0];why=v.reply_trimmed;}
   else if(!v.sources.length&&!v.text.includes('\nSources: ')){result='direct';shown=v.text;}       // small talk
   else if(v.text.includes('\n\n')){result='direct';shown=v.text.split('\n\n')[0];}
   else result='facts only';
@@ -37,5 +38,5 @@ console.log('| # | Question | Result | Time | Reply (shown, or dropped) |\n|---|
 rows.forEach((r,i)=>console.log(`| ${i+1} | ${cell(r.q)} | ${r.result} | ${(r.ms/1000).toFixed(1)} s | ${cell(r.shown||r.why)} |`));
 // The raw model selections, so a dropped reply can be re-checked offline without another model call.
 writeFileSync(new URL('../work/ask-battery-last.json',import.meta.url),JSON.stringify(rows.map(r=>({...r,raw:raw[r.q]})),null,1));
-const direct=rows.filter(r=>r.result==='direct').length;
+const direct=rows.filter(r=>r.result.startsWith('direct')).length;
 console.log(`\nAnswered directly: ${direct}/${rows.length}. Median time: ${(rows.map(r=>r.ms).sort((a,b)=>a-b)[Math.floor(rows.length/2)]/1000).toFixed(1)} s.`);

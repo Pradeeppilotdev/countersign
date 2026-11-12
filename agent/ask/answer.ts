@@ -3,7 +3,7 @@
 // unsupported phrasing. The exact evidence and sources are always rendered below.
 import type {FactsPack} from './facts.ts';
 import type {ChatMessage,Complete} from './model.ts';
-import {voiceOptions,groundedWhy} from './voice.ts';
+import {voiceOptions,verifiedReply} from './voice.ts';
 import {fitEvidence,helpEvidence,type Voice} from './help.ts';
 
 export const REFUSAL="I can only answer questions about this vault's payments and rules.";
@@ -28,7 +28,7 @@ const MAX_REPLY=600,MAX_CHAT=300;
 // voice: phrasing a code-computed record supplies for itself. also: how-to cards rendered under it.
 type Evidence={text:string;ids:string[];report?:string[];voice?:Voice;also?:string[]};
 // reply_dropped: why a model reply was discarded (developer aid for COUNTERSIGN_ASK_DEBUG); the owner sees only the facts.
-export type Verdict={ok:true;text:string;sources:string[];reply_dropped?:string;dropped_reply?:string}|{ok:false;text:string;why:string};
+export type Verdict={ok:true;text:string;sources:string[];reply_dropped?:string;dropped_reply?:string;reply_trimmed?:string}|{ok:false;text:string;why:string};
 
 type Bill=FactsPack['invoices'][number];
 const PLAIN:Record<string,string>={queued:'Queued. Not paid yet.',proposed:'Proposed. Not paid yet.',pending:'Pending. Not paid yet.',cancelled:'Cancelled. Not paid.'};
@@ -157,10 +157,12 @@ export function checkChat(reply:string,pack:FactsPack):string|null{
  return null;
 }
 
-export function checkReply(reply:string,pack:FactsPack,keys:string[],selected:Evidence[]):string|null{
- const shape=basicShape(reply,MAX_REPLY);if(shape)return shape;
- const why=groundedWhy(pack,selected.map((e,i)=>({key:keys[i],text:e.text,ids:e.ids,voice:e.voice})),reply);
- return why===null?null:`The reply contains a claim or phrasing that does not match its selected record (${why}).`;
+// The verified sentences of a reply (unverified ones are cut), or why nothing could be kept.
+export function checkReply(reply:string,pack:FactsPack,keys:string[],selected:Evidence[]):{kept:string|null;why:string|null}{
+ const shape=basicShape(reply,MAX_REPLY);if(shape)return {kept:null,why:shape};
+ const {kept,dropped}=verifiedReply(pack,selected.map((e,i)=>({key:keys[i],text:e.text,ids:e.ids,voice:e.voice})),reply);
+ const why=dropped.length?dropped.map(d=>`${d.why}: "${d.sentence}"`).join('; '):null;
+ return kept.length?{kept:kept.join(' '),why}:{kept:null,why:`The reply contains a claim or phrasing that does not match its selected record (${why}).`};
 }
 
 const voiceOn=()=>process.env.COUNTERSIGN_ASK_VOICE!=='off';
@@ -205,8 +207,10 @@ function render(pack:FactsPack,facts:Map<string,Evidence>,raw:string,question:st
  const answer:Verdict={ok:true,text:shown.flatMap(e=>[e.text,...e.report??[]]).join('\n')+'\nSources: '+source,sources};
  if(said===undefined)return answer;
  if(text===null)return dropped('The reply is not text.',answer);
- const why=checkReply(text,pack,keys as string[],selected);
- return why?dropped(why,answer):{...answer,text:text+'\n\n'+answer.text};
+ const {kept,why}=checkReply(text,pack,keys as string[],selected);
+ if(kept===null)return dropped(why!,answer);
+ // Only fully verified sentences are shown; any cut sentence is noted for debug.
+ return {...answer,text:kept+'\n\n'+answer.text,...why?{reply_trimmed:why}:{}};
 }
 
 export function verifyAnswer(pack:FactsPack,raw:string,question=''):Verdict{

@@ -874,8 +874,6 @@ test('voice: reasons stay bound to the named invoice and do not promise future p
   'INV-BEANS-003 was blocked because the supplier signature was invalid.',
   'INV-SIGNATURE-009 was blocked because paying it would exceed your daily budget.',
   'INV-BEANS-003 was blocked because the payee is a scammer.',
-  'INV-BEANS-003 was blocked. Its signature is invalid.',
-  'INV-BEANS-003 was blocked. It can go through once earlier payments are more than 24 hours old.',
   'Payments are not paused, so your agent can pay.',
   'Your spending policy is active, so the next payment will succeed.',
   'Your agent is doing fine: two bills were paid.',
@@ -883,6 +881,12 @@ test('voice: reasons stay bound to the named invoice and do not promise future p
   const verdict=verifyAnswer(pack,voiced(facts,text));
   assert.equal(verdict.text,verifyAnswer(pack,select(...facts)).text,text);
   assert.ok(verdict.ok&&verdict.reply_dropped,text);
+ }
+ // A true sentence beside an unsupported one: only the true sentence is shown; the unsupported one never is.
+ for(const [text,cut] of [['INV-BEANS-003 was blocked. Its signature is invalid.','Its signature'],['INV-BEANS-003 was blocked. It can go through once earlier payments are more than 24 hours old.','go through']]){
+  const verdict=verifyAnswer(pack,voiced(facts,text));
+  assert.equal(verdict.text,'INV-BEANS-003 was blocked.\n\n'+verifyAnswer(pack,select(...facts)).text,text);
+  assert.ok(verdict.ok&&verdict.reply_trimmed?.includes(cut)&&!verdict.text.split('\n\n')[0].includes(cut),text);
  }
  // Activity evidence has counts, not the causes of individual rejections.
  assert.ok(verifyAnswer(pack,voiced(['activity'],good)).text===verifyAnswer(pack,select('activity')).text);
@@ -1240,4 +1244,29 @@ test('voice: battery fixes — supplier amounts, flag phrases and counts, listed
   invoice:{id:'INV-Q-1',payee,asset:'near',amount:near('0.2')},commitment:commitmentOf({id:'INV-Q-1',payee,asset:'near',amount:near('0.2')})}]);
  const q=(t:string)=>{const r=verifyAnswer(queued,voiced(['activity'],t));return r.ok&&!r.reply_dropped;};
  assert.ok(q('You have 1 pending invoice.'));assert.ok(!q('You have 0 pending invoices.'));
+});
+
+test('voice: trimming shows only fully verified sentences, in order, never a greeting alone or an orphaned next step',async()=>{
+ const pack=await cafePack();
+ const facts=['invoice:INV-BEANS-003','activity','pause'];
+ const plain=verifyAnswer(pack,select(...facts)).text;
+ const reply=(text:string)=>verifyAnswer(pack,voiced(facts,text));
+ // The unverified middle sentence is cut; the others keep their order.
+ const mixed=reply('2 bills were paid. Your agent is doing great, so relax. Payments are not paused.');
+ assert.equal(mixed.text,'2 bills were paid. Payments are not paused.\n\n'+plain);
+ assert.ok(mixed.ok&&mixed.reply_trimmed?.includes('doing great')&&!mixed.reply_dropped);
+ // A greeting left on its own is not an answer: the whole reply is dropped.
+ const hi=reply('Hi! INV-BEANS-003 was paid.');
+ assert.equal(hi.text,plain);assert.ok(hi.ok&&hi.reply_dropped);
+ // A next step inherits its invoice only from a kept sentence.
+ const step=GLOSSARY['rolling daily budget exceeded'].what_to_do;
+ const orphan=reply(`INV-BEANS-003 was paid. ${step} Payments are not paused.`);
+ assert.equal(orphan.text,'Payments are not paused.\n\n'+plain);
+ const kept=reply(`INV-BEANS-003 was blocked. ${step}`);
+ assert.equal(kept.text,`INV-BEANS-003 was blocked. ${step}\n\n${plain}`);
+ // Every sentence false: dropped, exactly as before.
+ const none=reply('INV-BEANS-003 was paid. 5 bills were paid.');
+ assert.equal(none.text,plain);assert.ok(none.ok&&none.reply_dropped);
+ // Chat is never trimmed: one unsupported part refuses the whole small-talk reply.
+ assert.equal(verifyAnswer(pack,voiced(['chat'],'Hi! 2 bills went through.')).text,REFUSAL);
 });
