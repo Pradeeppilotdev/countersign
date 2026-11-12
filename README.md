@@ -2,6 +2,8 @@
 
 Countersign pays merchant invoices from a NEAR vault. An agent can request payment for an invoice ID. For a supplier enrolled in weekly billing, even two valid signatures can authorize only one payment for the same service week.
 
+**[Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/)** — explore the weekly crash/retry and a separate public-testnet café run, with original records and explorer receipts. **Recorded demo: no new payments, wallet connections or live AI calls.**
+
 ## Two signed bills, one payment
 
 1. A merchant signs two different invoices for **0.04 NEAR each** under the same weekly agreement. The agent submits both.
@@ -18,7 +20,7 @@ Countersign pays merchant invoices from a NEAR vault. An agent can request payme
 
 ### Try the demo café
 
-Start the local app with `COUNTERSIGN_PORT=4417 npm run dev`, then open
+Complete the [local setup](docs/local-guide.md#quick-start), then start the local app with `COUNTERSIGN_PORT=4417 npm run dev` and open
 [Demo café](http://127.0.0.1:4417/#demo). Leave `COUNTERSIGN_NETWORK` unset (or set it to `local`).
 
 1. **Open the café** to create a separate agent vault, three suppliers with pinned signing keys and payouts, a 0.5 NEAR payment cap, a 1.2 NEAR daily budget (rolling 24 hours), and a weekly Milk Co service. Rules expire after 120 minutes.
@@ -51,7 +53,7 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 
 [Local payment desk, contract and operator guide](docs/local-guide.md)
 
-The desk opens on Agent payments: visit http://127.0.0.1:4317 to import a supplier's signed bill, request payment and read the receipt (needs a local agent vault with a policy and a pinned supplier key). The page calls the same functions as `agent:desk import`, `run` and `resume` and adds no payment logic. The manual payment desk and dry-run 1Click lab are under **Tools**. See [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk).
+The local desk opens on Demo café. Choose **Agent payments**, or visit http://127.0.0.1:4317/#agent-payments, to import a supplier's signed bill, request payment and read the receipt (needs a local agent vault with a policy and a pinned supplier key). The page calls the same functions as `agent:desk import`, `run` and `resume` and adds no payment logic. The manual payment desk and dry-run 1Click lab are under **Tools**. See [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk).
 
 Ask Dave also runs in the desk: open http://127.0.0.1:4317/#ask-dave (needs a local agent vault: npm run agent:desk -- init). Its questions read `work/agent-vault` (or `COUNTERSIGN_AGENT_DIR`), while the manual payment desk uses `work/local-vault` (or `COUNTERSIGN_SANDBOX_DIR`). The page and each answer identify the source account. Standalone account checks show their selected network separately; questions always read the local agent vault.
 

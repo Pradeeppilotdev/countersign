@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:replay": "node --test replay/*.test.mjs",
+    "build:replay": "node scripts/build-replay.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test executor/*.test.ts",
     "test:sandbox": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 integration/*.test.ts",
     "test:oneclick": "node --disable-warning=ExperimentalWarning --test oneclick/*.test.ts",

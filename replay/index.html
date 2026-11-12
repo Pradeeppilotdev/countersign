@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+ <meta name="referrer" content="no-referrer">
+ <title>Countersign · Recorded Demo café</title>
+ <meta name="description" content="Replay Countersign’s verified payment tests. Two signed weekly bills, a worker crash, and retries: 0.04 local test NEAR paid once. Recorded demo. No new payments.">
+ <link rel="icon" href="./assets/logo.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css">
+ <script type="module" src="./app.js"></script>
+</head>
+<body>
+ <a class="skip" href="#replay">Skip to replay</a>
+ <header class="wrap header">
+  <a class="brand" href="./" aria-label="Countersign home"><img src="./assets/logo.svg" width="36" height="36" alt=""><span>Countersign<span class="brand-dot">.</span></span></a>
+  <nav aria-label="Main navigation"><a href="#receipts">Receipts</a><a href="#run-locally">Run locally</a><a href="https://github.com/Pradeeppilotdev/countersign" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav>
+ </header>
+ <main class="wrap">
+  <section class="hero" aria-labelledby="title">
+   <div><p class="eyebrow">DEMO CAFÉ / BUILT ON NEAR</p><h1 id="title">Two signed bills.<br><span>One payment.</span></h1>
+    <p class="intro">An agent retries. A worker crashes. Your supplier still gets paid once. Walk through the recorded evidence.</p></div>
+   <aside class="hero-note"><span class="small-mark" aria-hidden="true">✓</span><p>Your agent proposes.<br>Your vault enforces.</p><a href="#replay">Explore the replay <span aria-hidden="true">↓</span></a></aside>
+  </section>
+  <div class="disclosure"><span class="record-dot" aria-hidden="true"></span><strong>Recorded demo · No new payments</strong><span>Saved results only. No wallet connection or live AI calls.</span></div>
+  <section id="replay" class="replay" aria-labelledby="replay-title">
+   <div class="section-head"><div><p class="eyebrow">01 / WALK THROUGH THE EVIDENCE</p><h2 id="replay-title">Take a seat at the café.</h2></div><span class="tag">Interactive replay</span></div>
+   <div class="scenarios" role="group" aria-label="Choose a recording"><button id="choose-weekly" aria-pressed="true" disabled>Weekly bill <span>Local recording</span></button><button id="choose-cafe" aria-pressed="false" disabled>Café payments <span>Testnet recording</span></button></div>
+   <p id="load-error" role="alert" hidden>Recorded results could not be loaded. <a href="https://github.com/Pradeeppilotdev/countersign/tree/main/docs/attack-results">Read the evidence in the repository ↗</a></p>
+   <noscript><p>This walkthrough needs JavaScript. The <a href="./evidence/weekly.json">recorded weekly results</a> and <a href="./evidence/testnet.json">testnet receipts</a> are available without it.</p></noscript>
+   <div id="loading" role="status">Loading recorded evidence…</div>
+   <div id="replay-content" hidden>
+    <p id="recording-context" class="context"></p>
+    <ol id="steps" class="steps" aria-label="Recording checkpoints"></ol>
+    <div class="replay-grid">
+     <article class="scene" aria-live="polite" aria-atomic="true">
+      <p id="checkpoint" class="eyebrow"></p><h3 id="scene-title"></h3><p id="scene-description" class="scene-description"></p>
+      <div id="bills" class="bills"></div><div id="worker" class="worker"></div>
+      <div class="playback"><button id="previous" class="button secondary">← Previous</button><span id="position"></span><button id="next" class="button primary">Next checkpoint →</button></div>
+     </article>
+     <aside class="receipt-panel" aria-labelledby="receipt-title"><p class="eyebrow">RECORDED OUTCOME</p><h3 id="receipt-title">Merchant received</h3><div class="amount"><span id="received">—</span><span>test NEAR</span></div><p id="amount-context"></p>
+      <dl class="ledger"><div><dt id="ledger-label">Vault available</dt><dd id="available"></dd></div><div><dt>Extra on retry</dt><dd id="retry"></dd></div><div><dt>Evidence source</dt><dd id="network"></dd></div></dl>
+      <details id="receipt-detail"><summary>Inspect recorded receipt</summary><dl id="receipt-fields" class="receipt-fields"></dl></details>
+      <a id="receipt-link" class="text-link" href="./evidence/weekly.json" target="_blank" rel="noopener noreferrer">Open recorded evidence ↗</a>
+      <p class="receipt-foot">Replaying this page never sends a payment.</p>
+     </aside>
+    </div>
+   </div>
+  </section>
+  <section id="receipts" class="evidence-section" aria-labelledby="evidence-title">
+   <div class="section-head"><div><p class="eyebrow">02 / CHECK THE RECORD</p><h2 id="evidence-title">The proof is in the receipts.</h2></div></div>
+   <div class="evidence-grid"><article class="evidence-card"><span class="tag">Local test chain</span><h3>The weekly crash & retry</h3><p>Two signed bills for the same enrolled week. One settled attempt. The worker was killed after settlement, then both bills were retried.</p><p>This recording uses disposable local test NEAR. It has no public explorer transaction.</p><a href="./evidence/weekly.json" target="_blank" rel="noopener noreferrer">Inspect original run JSON ↗</a></article>
+    <article class="evidence-card"><span class="tag">Public NEAR testnet</span><h3>A separate café run</h3><p>Valid payment, tampered payee, duplicate bill, budget rejection, and crash after reservation. These are historical testnet transactions.</p><p id="verification-date"></p><a href="./evidence/testnet.json" target="_blank" rel="noopener noreferrer">Inspect curated testnet receipts ↗</a></article></div>
+   <div id="transactions" class="transactions"></div>
+   <details class="provenance"><summary>Evidence provenance & scope</summary><p>Recorded proposals used fixtures: zero live model calls. This page reads committed public records; it does not connect to a vault, submit transactions, or call an AI model. Supplier signatures authenticate bills; they do not prove service delivery.</p><p id="source-revision"></p><ul id="source-hashes"></ul><a href="./evidence/verification.json">Read the public receipt verification record ↗</a></details>
+  </section>
+  <section id="run-locally" class="run-locally"><div><p class="eyebrow">03 / REPRODUCE IT</p><h2>Run the real test yourself.</h2><p>After the repository’s local setup, reproduce the vault upgrade, weekly bill race, worker crash and retry with disposable test funds.</p></div><div class="command"><code>npm run test:upgrade:weekly</code><a href="https://github.com/Pradeeppilotdev/countersign#quick-start" target="_blank" rel="noopener noreferrer">Open setup instructions ↗</a></div></section>
+ </main>
+ <footer class="wrap footer"><span>Countersign · Payment assurance for agents</span><span>Recorded demo. No new payments.</span><a href="https://github.com/Pradeeppilotdev/countersign" target="_blank" rel="noopener noreferrer">Source & tests ↗</a></footer>
+</body>
+</html>

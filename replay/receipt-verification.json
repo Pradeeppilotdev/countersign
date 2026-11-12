@@ -1,0 +1,56 @@
+{
+  "checked_at": "2026-11-12T18:15:45.408837+00:00",
+  "method": "tx (read-only status lookup)",
+  "endpoint": "https://archival-rpc.testnet.near.org",
+  "network": "testnet",
+  "transactions": [
+    {
+      "case": "paid/outcome",
+      "hash": "C5ok2A2DsLrkoJ7D89dQddmg9Y95qn9w7m78VcE1k5Ag",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "paid/replay",
+      "hash": "GUPKZcQ6cxfDk6qcwxf4V2CZ8CYvAY3QE8XxWAgeoxRa",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "tampered/outcome",
+      "hash": "UMJQ9TZzhuAZbvtYyRjKbSi5HzKhN6gzhMyAuzAHUSD",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "duplicate/outcome",
+      "hash": "JMJyVdSeSyi6kyq48zBcHesF1diquLk7GDrVaQXtVrU",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "over_budget/outcome",
+      "hash": "BD2wAqJz62Yb9ZfGA23KHdQ7pzyoj9749J5hDKWWmWy",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "restart/outcome",
+      "hash": "C1AY2bgfKehYPsKyN6rRSkpwKDjpyE6BkDyd9YFKMswG",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "restart/replay",
+      "hash": "gB6NKpA5yqhBfpAULU8tj17kBFxFqHV64NrggJFv6v1",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    },
+    {
+      "case": "restart/reserve",
+      "hash": "79ZGUuH58FXGrb4ofRghDWZ8dNfdux8a3vjsoDLDbq8d",
+      "status_matches_record": true,
+      "final_execution_status": "FINAL"
+    }
+  ]
+}

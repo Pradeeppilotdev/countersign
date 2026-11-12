@@ -39,6 +39,8 @@ jobs:
         run: |
           npm ci --prefix testnet --ignore-scripts
           npm --prefix testnet test
+      - name: Verify the recorded public demo
+        run: npm run test:replay
       - name: Install the contract toolchain
         run: |
           rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
@@ -67,6 +69,7 @@ jobs:
           path: ${{ runner.temp }}/weekly-demo/countersign-upgrade-retest-*/result.json
           if-no-files-found: error
           retention-days: 14
+
       - name: Test contract authorization rules
         run: cargo test --locked --manifest-path contract/Cargo.toml
       - name: Verify local payments and crash recovery
@@ -85,3 +88,32 @@ jobs:
             work/demo.cast
           if-no-files-found: ignore
           retention-days: 14
+
+  publish-recorded-demo:
+    needs: local-payments
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Build only the recorded demo and public receipts
+        run: npm run build:replay
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: work/replay-site
+      - name: Publish verified recorded demo
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
