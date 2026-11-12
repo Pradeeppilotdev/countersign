@@ -1,3 +1,5 @@
+import {createDemoRoute} from './demo-route.ts';
+import {readCafe,setupCafe,receiveCafe,payCafe,topUpCafe,resetCafe} from '../agent/demo-cafe.ts';
 import {publicError,validateDeskPolicy} from './errors.ts';
 import { SandboxDesk } from './sandbox.ts';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +20,7 @@ const assets: Record<string,[string,string]>={
  '/sandbox.js':['public/sandbox.js','text/javascript'], '/style.css':['public/style.css','text/css'],
  '/components.js':['public/components.js','text/javascript'], '/state.js':['public/state.js','text/javascript'],
  '/agent-payments.js':['public/agent-payments.js','text/javascript'], '/agent-payments.css':['public/agent-payments.css','text/css'],
+ '/demo-cafe.js':['public/demo-cafe.js','text/javascript'], '/demo-cafe.css':['public/demo-cafe.css','text/css'],
  '/ask-source.js':['public/ask-source.js','text/javascript'],
  '/ask-shared.js':['public/ask-shared.js','text/javascript'], '/ask-widget.js':['public/ask-widget.js','text/javascript'], '/ask-suggest.js':['public/ask-suggest.js','text/javascript'],
  '/ask-widget.css':['public/ask-widget.css','text/css'],
@@ -29,12 +32,15 @@ const paymentDir=resolve(process.env.COUNTERSIGN_SANDBOX_DIR ?? process.env.AEGI
 const agentDir=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
 const agentRoute=createAgentRoute({state:()=>readAgentState(agentDir),importBill:invoice=>importAgentBill(agentDir,invoice),
  run:(id,live)=>runAgentBill(agentDir,id,live),resume:id=>resumeAgentBill(agentDir,id),modelReady:liveAgentModelReady,error:agentWebError});
+const demoRoute=createDemoRoute({network:()=>process.env.COUNTERSIGN_NETWORK,state:()=>readCafe(agentDir),setup:()=>setupCafe(agentDir),receive:()=>receiveCafe(agentDir),pay:(live,progress)=>payCafe(agentDir,live,progress),faucet:()=>topUpCafe(agentDir),reset:()=>resetCafe(agentDir),modelReady:liveAgentModelReady});
+let agentMutation=false;
 const source=()=>askSource(agentDir,paymentDir,process.env.COUNTERSIGN_NETWORK);
 const sandbox=new SandboxDesk(paymentDir);
 await sandbox.start();
 const server=createServer(async(req,res)=>{
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Cache-Control','no-store');
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+ let ownsAgentMutation=false;
  const json=(status:number,data:unknown)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
  try {
   if(req.headers.host!==`127.0.0.1:${port}`) return json(403,{error:'Use the local app address.'});
@@ -51,6 +57,10 @@ const server=createServer(async(req,res)=>{
    return res.end(template.replace('<!-- attack-results -->',()=>report));
   }
   if(req.method==='GET' && assets[url.pathname]) {const [file,type]=assets[url.pathname];res.writeHead(200,{'Content-Type':type});return res.end(readFileSync(new URL(file,import.meta.url)));}
+  if(req.method==='GET' && url.pathname==='/api/config')return json(200,{demoEnabled:process.env.COUNTERSIGN_NETWORK===undefined||process.env.COUNTERSIGN_NETWORK==='local'});
+  if(req.method==='GET' && url.pathname.startsWith('/api/demo/')) {
+   const result=await demoRoute(req.method,url.pathname,undefined);return json(result.status,result.body);
+  }
   if(req.method==='GET' && url.pathname.startsWith('/api/agent/')) {
    const result=await agentRoute(req.method,url.pathname,undefined);return json(result.status,result.body);
   }
@@ -64,6 +74,13 @@ const server=createServer(async(req,res)=>{
   let body='';for await(const part of req){body+=part;if(Buffer.byteLength(body)>16384)return json(413,{error:'Request too large.'});}
   const input=JSON.parse(body);
   if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid invoice reference or request.');
+  if(url.pathname.startsWith('/api/agent/')||url.pathname.startsWith('/api/demo/')){
+   if(agentMutation)return json(409,{ok:false,error:'An agent operation is already in progress.'});
+   agentMutation=true;ownsAgentMutation=true;
+  }
+  if(url.pathname.startsWith('/api/demo/')) {
+   const result=await demoRoute(req.method,url.pathname,input,Buffer.byteLength(body));return json(result.status,result.body);
+  }
   if(url.pathname.startsWith('/api/agent/')) {
    const result=await agentRoute(req.method,url.pathname,input,Buffer.byteLength(body));return json(result.status,result.body);
   }
@@ -91,7 +108,7 @@ const server=createServer(async(req,res)=>{
    return json(200,workflow.simulate(input.id,{status:input.status,updatedAt:new Date().toISOString()}));
   }
   return json(404,{error:'Not found'});
- }catch(e){json(400,{error:publicError(e)});}
+ }catch(e){json(400,{ok:false,error:publicError(e)});}finally{if(ownsAgentMutation)agentMutation=false;}
 });
 server.listen(port,'127.0.0.1',()=>console.log(`Countersign: ${origin}`));
 const shutdown=()=>server.close(async()=>{await sandbox.close();workflow.close();process.exit(0);});

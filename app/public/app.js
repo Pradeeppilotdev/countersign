@@ -1,3 +1,4 @@
+import {enableCafe,refreshCafe,setCafeAsk} from './demo-cafe.js';
 import {
   $,
   el,
@@ -22,9 +23,12 @@ import { askCard, setBusy, setAnswer, setCardError, askDave, checkAccount, appen
 import { createAskWidget } from "./ask-widget.js";
 mountIcons();
 let askWidgetView = null;
+const cafeEnabled=await enableCafe();
 function navigate() {
   const view =
-    location.hash === "#payments"
+    cafeEnabled && (location.hash === "#demo" || !location.hash)
+      ? "demo-cafe"
+      : location.hash === "#payments"
       ? "payments"
       : location.hash === "#quote-lab"
       ? "quote-lab"
@@ -40,7 +44,7 @@ function navigate() {
     else node.removeAttribute("aria-current");
   });
   $("#page-label").textContent =
-    view === "agent-payments"
+    view === "demo-cafe" ? "Demo café" : view === "agent-payments"
       ? "Agent payments"
       : view === "payments"
       ? "Manual payment desk"
@@ -48,6 +52,7 @@ function navigate() {
         ? "Ask Dave"
         : "1Click lab";
   document.title = "Countersign · " + $("#page-label").textContent;
+  if (view === "demo-cafe") refreshCafe();
   if (view === "ask-dave") refreshAskSource();
   if (view === "agent-payments") refreshAgentPayments();
   if (askWidgetView) askWidgetView(view);
@@ -56,7 +61,7 @@ window.addEventListener("hashchange", navigate);
 navigate();
 document
   .querySelectorAll(
-    'a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
+    'a[href="#demo"],a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
   )
   .forEach((link) =>
     link.addEventListener("click", (event) => {
@@ -453,6 +458,7 @@ const askWidget = createAskWidget({
     window.scrollTo({ top: 0, behavior: "instant" });
   },
 });
+setCafeAsk(trigger=>askWidget.open("How is my agent doing?",trigger));
 askFromBill((bill, trigger) => askWidget.askForBill(bill, trigger));
 askWidgetView = (view) => {
   if (askWidget.setOnAskDaveView(view === "ask-dave")) askTextInput.focus();
