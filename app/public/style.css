@@ -233,32 +233,48 @@ small {
   width: 14px;
   height: 14px;
 }
+.nav-tools summary {
+  cursor: pointer;
+  list-style: none;
+}
+.nav-tools summary::-webkit-details-marker {
+  display: none;
+}
+.nav-tools[open] > summary .nav-tail {
+  transform: rotate(180deg);
+}
+.nav-tool-links {
+  display: grid;
+  gap: 5px;
+  margin: 5px 0 0 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+.dave-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#ask-dave .page-heading {
+  flex-wrap: wrap;
+}
+.dave-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  flex-shrink: 0;
+}
+.dave-mark .icon {
+  width: 26px;
+  height: 26px;
+}
 .sidebar-bottom {
   margin-top: auto;
   padding-top: 64px;
-}
-.sidebar-note {
-  padding: 18px 13px;
-  background: #eff2e9;
-  border-radius: 10px;
-}
-.sidebar-note > .icon {
-  color: var(--teal);
-  margin-bottom: 12px;
-}
-.sidebar-note h2 {
-  font-size: 12px;
-  letter-spacing: 0;
-}
-.sidebar-note p {
-  font-size: 11px;
-  color: #6a766f;
-  margin: 7px 0 11px;
-}
-.sidebar-note a {
-  font-size: 11px;
-  font-weight: 750;
-  text-decoration: none;
 }
 .local-indicator {
   font-size: 10px;
@@ -1357,6 +1373,11 @@ input[aria-invalid="true"] {
   .nav-item[aria-current="page"] {
     background: #e6f0e9;
   }
+  .nav-tool-links {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
   .brand img {
     width: 38px;
     height: 38px;
@@ -1408,13 +1429,25 @@ input[aria-invalid="true"] {
     display: flex;
     flex-direction: row;
     gap: 7px;
+    flex-wrap: wrap;
+  }
+  .nav-tools[open] {
+    flex-basis: 100%;
+  }
+  .nav-tools > summary {
+    justify-content: flex-start;
+  }
+  .nav-tool-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
   }
   .nav-item {
     font-size: 11px;
     flex: 1;
     gap: 7px;
     padding: 9px 6px;
-    min-height: 39px;
+    min-height: 44px;
   }
   .nav-item .icon {
     width: 16px;
@@ -1422,6 +1455,9 @@ input[aria-invalid="true"] {
   }
   .nav-tail {
     display: none !important;
+  }
+  .nav-tools .nav-tail {
+    display: inline-flex !important;
   }
   #workspace {
     margin: 0;

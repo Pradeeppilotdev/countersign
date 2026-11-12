@@ -36,23 +36,27 @@ class Element {
 }
 function setup(t:any){
   const body=new Element('body'), handlers:Record<string,Function>={};
-  const dom={body,activeElement:body,createElement:(tag:string)=>new Element(tag),addEventListener:(name:string,fn:Function)=>handlers[name]=fn};
+  const dom={body,activeElement:body,createElement:(tag:string)=>new Element(tag),createElementNS:(_:string,tag:string)=>new Element(tag),
+    querySelector:(selector:string)=>selector==='[data-view="ask-dave"]'?body.find(n=>n.attributes['data-view']==='ask-dave'):null,addEventListener:(name:string,fn:Function)=>handlers[name]=fn};
   const previous=Object.getOwnPropertyDescriptor(globalThis,'document');
   Object.defineProperty(globalThis,'document',{value:dom,configurable:true});
   t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else delete (globalThis as any).document;});
   const fullInput=new Element('input');body.append(fullInput);
+  const navLink=new Element('a');navLink.setAttribute('data-view','ask-dave');body.append(navLink);
   const widget=createAskWidget({onNavigate:()=>{widget.setOnAskDaveView(true);fullInput.focus();}});
   const panel=widget.panel as Element, button=widget.button as Element;
   const input=panel.find(n=>n.tag==='input')!, form=panel.find(n=>n.tag==='form')!;
   const answers=panel.find(n=>n.className.includes('ask-widget-answers '))!;
   const bill=new Element('button');body.append(bill);
-  return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput};
+  return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput,navLink};
 }
 const reply=(text:string,ok=true)=>({ok,json:async()=>ok?{ok:true,text}:{ok:false,error:text}} as Response);
 
 test('bubble and bill buttons only open/prefill; an open panel accepts the next bill',async t=>{
   const {widget,panel,button,input,bill,dom}=setup(t);
   const fetch=t.mock.method(globalThis,'fetch',async()=>{throw Error('Opening must not request a model');});
+  assert.equal(button.textContent,'Ask Dave');
+  assert.equal(button.find(n=>n.tag==='svg')?.attributes['aria-hidden'],'true');
   button.event('click');
   assert.equal(panel.hidden,false);assert.equal(input.value,'');assert.equal(dom.activeElement,input);
   assert.equal(button.attributes['aria-controls'],panel.id);assert.equal(button.attributes['aria-expanded'],'true');
@@ -77,9 +81,19 @@ test('non-modal Escape preserves outside focus, returns inside focus, and naviga
   button.event('click');assert.equal(dom.activeElement,input);
   panel.find(n=>n.tag==='a')!.event('click');
   assert.equal(panel.hidden,true);assert.equal(button.hidden,true);assert.equal(dom.activeElement,fullInput);
+  assert.equal(button.parent!.hidden,true);assert.ok(!dom.body.className.includes('has-dave-launcher'));
   widget.setOnAskDaveView(false);assert.equal(button.hidden,false);
+  assert.equal(button.parent!.hidden,false);assert.ok(dom.body.className.includes('has-dave-launcher'));
   widget.open();assert.equal(widget.setOnAskDaveView(true),true);
   assert.equal(panel.hidden,true);
+});
+
+test('closing Dave returns focus to navigation when the mobile launcher and old bill are unavailable',t=>{
+  const {widget,panel,button,bill,navLink,dom}=setup(t);
+  widget.askForBill({id:'INV-1',outcome:'paid'},bill);
+  bill.remove();button.hidden=true;
+  panel.find(n=>n.className.includes('ask-widget-close'))!.event('click');
+  assert.equal(panel.hidden,true);assert.equal(dom.activeElement,navLink);
 });
 
 test('429 is an error card; submitted text remains available to retry and is never HTML',async t=>{

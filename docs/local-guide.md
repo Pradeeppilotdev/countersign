@@ -66,7 +66,7 @@ Recent full runs took about 15–20 minutes on a warm toolchain (longer on a fre
 npm run dev
 ```
 
-Open http://127.0.0.1:4317 and follow [Local payment desk](#local-payment-desk) below.
+Open http://127.0.0.1:4317 → see [Agent payments](#agent-payments-in-the-desk). The manual payment desk and 1Click lab are under **Tools**.
 
 - Use `127.0.0.1`, not `localhost`: `localhost` returns 403.
 - If port 4317 is busy, run `COUNTERSIGN_PORT=4418 npm run dev` and open http://127.0.0.1:4418.
@@ -78,7 +78,7 @@ Open http://127.0.0.1:4317 and follow [Local payment desk](#local-payment-desk) 
 
 ## Local payment desk
 
-Run `npm run dev` → open http://127.0.0.1:4317. On first launch, a fresh local vault receives 5 test NEAR; later launches reconnect to it. Enter an invoice and click **Authorize invoice as sandbox owner** → see Authorized. Click **Reserve funds** → see Reserved and the reduced available budget. Click **Execute sandbox payment** → see Settled and the merchant balance increase. Click **Test duplicate protection** → see the merchant balance stay unchanged.
+Run `npm run dev` → open http://127.0.0.1:4317/#payments, or choose **Tools → Manual payment desk**. On first launch, a fresh local vault receives 5 test NEAR; later launches reconnect to it. Enter an invoice and click **Authorize invoice** → see its approval. Reserve and pay from the invoice list → see Paid and the merchant balance increase. Test duplicate protection → see the merchant balance stay unchanged.
 
 The app uses `work/sandbox-bin/near-sandbox` (2.14.0) and the compiled contract at `contract/target/wasm32-unknown-unknown/release/countersign.wasm`. Its launcher restricts both chain listeners to loopback. The server holds disposable owner/executor keys; this is a local development harness. The app reconnects to the saved chain and vault on restart; state and disposable local keys stay under ignored `work/local-vault/`. The chain runs independently of the app. 1Click remains dry-run only. Run `npm run test:app` for input and initialization checks.
 
@@ -365,12 +365,12 @@ npm run agent:desk -- policy 0.5 0.8 120
 npm run agent:desk -- merchant-key local-merchant PUBLIC_KEY_BASE64
 ```
 
-- **Import signed bill** → choose a supplier's JSON file or paste it. The signature is checked against the pinned key before anything is saved. A rejected file shows its reason, such as `Invalid merchant signature`. Importing the same file again shows "Already imported" and keeps the one saved record.
+- **Import signed bill** → choose a supplier's JSON file, or expand **Paste JSON instead**. The signature is checked against the pinned key before anything is saved. A rejected file shows its reason, such as `Invalid merchant signature`. Importing the same file again shows "Already imported" and keeps the one saved record.
 - **Request payment** → see Paid, Blocked or Pending with the recorded reason, such as "Merchant bill already used." or "Rolling daily budget exceeded." Blocked bills move no funds.
 - **Use live AI** is off by default, so the fixture proposer runs and no model is called. Tick it to send that one bill to NEAR AI; this needs `NEAR_AI_API_KEY` and `NEAR_AI_MODEL` and otherwise answers "No model key configured".
 - **Resume** → reconcile a saved proposal using its original attempt. It never calls a model.
 - **Receipt** on a paid bill → the attempt ID and the signed payload hash stored by the vault. The transaction hash is not available for local receipts.
-- **Rules** → read-only: the per-payment cap, the rolling 24-hour budget used, limit and remaining, the policy expiry, whether payments are paused, and the pinned suppliers.
+- **Spending rules** → see the per-payment cap, rolling 24-hour budget, pause state and pinned suppliers. Expand **Policy details** for the minimum and expiry.
 
 Only one request or resume runs at a time. Each action takes the vault's command lock, so while an `agent:desk` command is running the page reports "Agent vault is in use by another process"; retry when it finishes. Without a vault the page shows "No agent vault yet. Run npm run agent:desk -- init first."
 
