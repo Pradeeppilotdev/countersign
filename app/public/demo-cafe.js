@@ -8,7 +8,7 @@ export async function enableCafe(){
  $('#demo-nav').hidden=!enabled;return enabled;
 }
 function lock(){root.setAttribute('aria-busy',String(busy));root.querySelectorAll('button,input').forEach(n=>n.disabled=busy);}
-const BUDGET_SPENT="The daily budget cannot cover another bill. Allowance returns as earlier payments leave the rolling 24-hour window; policy expiry and other bill checks still apply. Press Reset café to start a fresh demo.";
+const BUDGET_SPENT="Today's budget is spent: the vault is doing its job. Bills blocked by the budget can be resumed once earlier payments are 24 hours old. Press Reset café to start a fresh day.";
 // The existing Agent payments state already carries the vault's rolling usage.
 async function readSpending(state){
  if(!state.ready)return null;
