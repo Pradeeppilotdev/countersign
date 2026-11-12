@@ -1,4 +1,4 @@
-// Ask Dave panel: a docked desktop launcher and contextual bill actions.
+// Ask Dave panel: a corner launcher and contextual bill actions.
 // Opens a compact read-only question panel. Reuses the shared Ask
 // Dave request/answer logic, so it answers exactly what the main view does.
 import { el, icon } from "./components.js";
@@ -14,7 +14,7 @@ export function createAskWidget({ onNavigate } = {}) {
   let submitting = false, opener = null;
 
   button = el("button", "", "ask-fab");
-  button.append(icon("dave"), el("span", "Ask Dave"));
+  button.append(icon("dave"), el("span", "Ask Dave", "sr-only"));
   button.type = "button";
   button.title = "Ask Dave";
   button.setAttribute("aria-expanded", "false");
@@ -83,8 +83,10 @@ export function createAskWidget({ onNavigate } = {}) {
     }
   });
 
-  (document.querySelector('#dave-launcher') ?? document.body).append(button);
-  document.body.append(panel);
+  const dock = el("div", "", "ask-widget-dock");
+  dock.append(button);
+  document.body.append(dock, panel);
+  document.body.classList.add("has-dave-launcher");
 
   async function ask(question) {
     if (submitting) return;
@@ -142,6 +144,8 @@ export function createAskWidget({ onNavigate } = {}) {
     setOnAskDaveView(on) {
       const moveFocus = on && (panel.contains(document.activeElement) || document.activeElement === button);
       button.hidden = on;
+      dock.hidden = on;
+      document.body.classList[on ? "remove" : "add"]("has-dave-launcher");
       if (on) close(false);
       return moveFocus;
     },

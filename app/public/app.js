@@ -63,6 +63,7 @@ document
       event.preventDefault();
       history.pushState(null, "", link.href);
       navigate();
+      $("#desk-scrollport").scrollTo({ top: 0, behavior: "instant" });
       window.scrollTo({ top: 0, behavior: "instant" });
     }),
   );
@@ -448,6 +449,7 @@ const askWidget = createAskWidget({
     history.pushState(null, "", "#ask-dave");
     navigate();
     askTextInput.focus();
+    $("#desk-scrollport").scrollTo({ top: 0, behavior: "instant" });
     window.scrollTo({ top: 0, behavior: "instant" });
   },
 });

@@ -55,6 +55,8 @@ const reply=(text:string,ok=true)=>({ok,json:async()=>ok?{ok:true,text}:{ok:fals
 test('bubble and bill buttons only open/prefill; an open panel accepts the next bill',async t=>{
   const {widget,panel,button,input,bill,dom}=setup(t);
   const fetch=t.mock.method(globalThis,'fetch',async()=>{throw Error('Opening must not request a model');});
+  assert.equal(button.textContent,'Ask Dave');
+  assert.equal(button.find(n=>n.tag==='svg')?.attributes['aria-hidden'],'true');
   button.event('click');
   assert.equal(panel.hidden,false);assert.equal(input.value,'');assert.equal(dom.activeElement,input);
   assert.equal(button.attributes['aria-controls'],panel.id);assert.equal(button.attributes['aria-expanded'],'true');
@@ -79,7 +81,9 @@ test('non-modal Escape preserves outside focus, returns inside focus, and naviga
   button.event('click');assert.equal(dom.activeElement,input);
   panel.find(n=>n.tag==='a')!.event('click');
   assert.equal(panel.hidden,true);assert.equal(button.hidden,true);assert.equal(dom.activeElement,fullInput);
+  assert.equal(button.parent!.hidden,true);assert.ok(!dom.body.className.includes('has-dave-launcher'));
   widget.setOnAskDaveView(false);assert.equal(button.hidden,false);
+  assert.equal(button.parent!.hidden,false);assert.ok(dom.body.className.includes('has-dave-launcher'));
   widget.open();assert.equal(widget.setOnAskDaveView(true),true);
   assert.equal(panel.hidden,true);
 });
