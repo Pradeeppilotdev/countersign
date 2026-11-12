@@ -576,7 +576,7 @@ test('vault-wide statements are rendered from the facts pack and can never come 
 test('"How is my agent doing?" renders a per-invoice report card from code, under the count line',async()=>{
  const pack=await cafePack();
  const lines=verifyAnswer(pack,select('activity')).text.split('\n');
- const count=`The inbox contains 3 bills. The agent recorded proposals for 3. Current outcomes include ${Object.entries(pack.totals.counts).map(([name,count])=>`${count} ${name}`).join(', ')}.`;
+ const count=`The inbox contains 3 bills. The agent recorded proposals for 3. Current outcomes include ${Object.entries(pack.totals.counts).map(([name,count])=>`${count} ${name}`).join(', ')}. Waiting to be paid: 0.`;
  const budget=GLOSSARY['rolling daily budget exceeded'];
  assert.deepEqual(lines,[count,
   '[INV-BEANS-001] local-merchant, 0.1 NEAR: Paid once.',
@@ -1142,4 +1142,53 @@ test('voice: reason clauses are listed as reply_examples, so the model can see t
  assert.equal(verifyAnswer(pack,JSON.stringify({facts:['invoice:INV-BEANS-003'],reply:example+'.'})).text.split('\n\n')[0],example+'.');
  // fit and help carry their own examples too.
  assert.ok(data.fit.reply_examples.length>0);assert.ok(data['help:renew'].reply_examples.some((e:string)=>e.includes('npm run agent:desk -- renew-policy <minutes> <renewal-id>')));
+});
+
+// Claim-based verification: friendly wording is fine; every number, ID, amount, outcome and state is checked.
+test('voice: claims are verified, not phrasing: counts with owner synonyms, outcomes, amounts and reasons',async()=>{
+ const extra=(id:string,state:string,error:string|null=null)=>({...cafeInbox()[2],id,state,error,has_proposal:false,attempt_state:null,
+  invoice:{id,payee,asset:'near',amount:near('0.2')},commitment:commitmentOf({id,payee,asset:'near',amount:near('0.2')})});
+ const rows=[...Array.from({length:12},(_,i)=>extra(`INV-Q-${i+1}`,'queued')),extra('INV-B-1','queued','rolling daily budget exceeded'),extra('INV-B-2','queued','rolling daily budget exceeded')];
+ const pack=await cafePack(undefined,cafeView,rows);
+ assert.deepEqual([pack.invoices.length,pack.totals.counts.queued,pack.totals.counts.paid,pack.totals.counts.blocked],[17,12,2,3]);
+ const shown=(facts:string[],text:string,question='')=>{const r=verifyAnswer(pack,voiced(facts,text),question);return r.ok&&!r.reply_dropped&&r.text.startsWith(text+'\n\n');};
+ // The count line answers the owner sense of "pending" even with the voice off.
+ assert.ok(verifyAnswer(pack,select('activity')).text.split('\n')[0].endsWith('Waiting to be paid: 12.'));
+ for(const text of ['You have 12 bills waiting to be paid.','You have 12 pending invoices.','Hi! 12 bills are still unpaid, 2 were paid and 3 were blocked.',
+  'Of your 17 bills, 12 are waiting.','You have 12 invoices queued and waiting to be paid.','Nothing was cancelled, and 12 invoices are outstanding.','Here\'s a quick summary: 2 paid, 3 rejected and 12 not paid yet.'])
+  assert.ok(shown(['activity'],text),text);
+ for(const text of ['You have 11 waiting.','You have 11 bills waiting to be paid.','2 bills were blocked.','17 bills were paid.','12 bills were paid.',
+  'Hey! You have 12 bills waiting, and 5 of them are urgent.','You have 12 bills waiting, so your agent is doing fine.','Nothing was blocked.','You have 12 invoices queued and paid.'])
+  assert.ok(!shown(['activity'],text),text);
+ assert.ok(!shown(['budget'],'You have 12 bills waiting to be paid.'));            // a count needs the activity record
+ // Outcomes stay bound to their invoice, around any friendly wording.
+ assert.ok(shown(['invoice:INV-BEANS-003'],'Sure! INV-BEANS-003 was blocked.'));
+ assert.ok(shown(['invoice:INV-BEANS-003'],'Quick update: INV-BEANS-003 was blocked, and it was for 0.5 NEAR.'));
+ for(const text of ['Sure! INV-BEANS-003 was paid.','INV-BEANS-003 was not blocked.','Quick update: INV-BEANS-003 was blocked, and it was for 0.4 NEAR.',
+  'INV-BEANS-003 was blocked. INV-BEANS-001 was paid.','INV-BEANS-003 was approved.','Hi! I\'ve sent the payment for INV-BEANS-003.','INV-BEANS-003 was blocked, email help@example.com.'])
+  assert.ok(!shown(['invoice:INV-BEANS-003'],text),text);
+ assert.ok(shown(['invoice:INV-BEANS-003','invoice:INV-BEANS-001'],'INV-BEANS-003 was blocked, but INV-BEANS-001 was paid 0.1 NEAR.'));
+ // "<ID> was blocked because <its exact glossary meaning>", and a next step that inherits that ID.
+ const budget=GLOSSARY['rolling daily budget exceeded'],signature=GLOSSARY['invalid merchant signature'];
+ const lc=(t:string)=>t[0].toLowerCase()+t.slice(1,-1);
+ const because=`INV-BEANS-003 was blocked because ${lc(budget.meaning)}.`;
+ assert.ok(shown(['invoice:INV-BEANS-003'],because,'Why was INV-BEANS-003 blocked?'));
+ assert.ok(shown(['invoice:INV-BEANS-003','flags'],`${because} ${budget.what_to_do}`,'Why was INV-BEANS-003 blocked?'));
+ assert.ok(!shown(['invoice:INV-BEANS-003'],`INV-BEANS-003 was blocked because ${lc(signature.meaning)}.`));         // another reason's text
+ assert.ok(!shown(['invoice:INV-BEANS-003'],budget.what_to_do));                                                   // a next step with no invoice to inherit
+ assert.ok(!shown(['invoice:INV-BEANS-003'],'INV-BEANS-003 was blocked because the supplier is a scammer.'));
+ // Pause and policy state are checked against the vault.
+ assert.ok(shown(['pause','budget'],'Good question! Payments are not paused, and your spending policy is active with 0.4 NEAR left today.'));
+ assert.ok(!shown(['pause','budget'],'Payments are paused, and your spending policy is active.'));
+ assert.ok(!shown(['pause','budget'],'Payments are not paused, and your spending policy has expired.'));
+});
+
+test('voice: no_record beside real evidence is ignored; small talk is free wording without claims',async()=>{
+ const pack=await cafePack();
+ assert.deepEqual(verifyAnswer(pack,select('budget','no_record')),verifyAnswer(pack,select('budget')));
+ assert.equal(verifyAnswer(pack,select('no_record')).text,'No record in this vault answers that question.');
+ for(const hi of ['Hi! How can I help with your vault?','Hello there! What would you like to know about your agent\'s bills?'])
+  assert.deepEqual(verifyAnswer(pack,voiced(['chat'],hi)),{ok:true,text:hi,sources:[]});
+ for(const text of ['I paid your bills.','Hi! I\'ve paused the vault for you.','Hi, your bills are blocked.','Hi! Your vault is paused.','Hi! Reach me at dave@example.com.','Hi! Everything is safe.'])
+  assert.equal(verifyAnswer(pack,voiced(['chat'],text)).text,REFUSAL,text);
 });
