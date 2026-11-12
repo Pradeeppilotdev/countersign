@@ -1207,3 +1207,37 @@ test('speed: the model sees the 10 most recent invoices plus any named one; answ
  assert.equal(verifyAnswer(pack,select('activity')).text.split('\n').filter(l=>l.startsWith('[')).length,15);
  assert.ok(keys('how do I know if an invoice is fake?').length===10&&helpEvidence().some(c=>c.key==='help:spot-bad-invoice'));
 });
+
+test('voice: battery fixes — supplier amounts, flag phrases and counts, listed IDs, help wording, no yes/no, owner "pending"',async()=>{
+ const pack=await cafePack();
+ const shown=(facts:string[],text:string)=>{const r=verifyAnswer(pack,voiced(facts,text));return r.ok&&!r.reply_dropped;};
+ const paid=pack.totals.per_merchant[0].paid_near;
+ assert.ok(shown(['suppliers'],`local-merchant received ${paid} NEAR in verified payments.`));
+ assert.ok(!shown(['suppliers'],'local-merchant received 9 NEAR in verified payments.'));
+ assert.ok(!shown(['budget'],`local-merchant received ${paid} NEAR in verified payments.`));         // supplier totals need the suppliers record
+ // Flag phrases and flag counts are checked against the invoice and the flags record.
+ assert.ok(shown(['flags'],'There is 1 unusual activity flag: INV-BEANS-003 was a blocked attempt.'));
+ assert.ok(!shown(['flags'],'There are 3 unusual activity flags.'));
+ assert.ok(!shown(['activity','flags'],'INV-BEANS-001 was a blocked attempt.'));
+ // IDs listed by a selected record can be named, and their outcomes are still checked.
+ assert.ok(shown(['activity'],'2 bills were paid and 1 was blocked: INV-BEANS-003.'));
+ assert.ok(shown(['activity'],'INV-BEANS-003 was blocked, and INV-BEANS-001 was paid.'));
+ assert.ok(!shown(['activity'],'INV-BEANS-003 was paid.'));
+ assert.ok(!shown(['pause'],'INV-BEANS-003 was blocked.'));
+ // "paying it" reads the same as the glossary's "Paying this".
+ const meaning=GLOSSARY['rolling daily budget exceeded'].meaning.replace('Paying this','paying it').slice(0,-1);
+ assert.ok(shown(['invoice:INV-BEANS-003'],`INV-BEANS-003 was blocked because ${meaning}.`));
+ // Help cards: the card's exact commands and its own words; a command under another task's words is dropped.
+ assert.ok(shown(['help:spot-bad-invoice'],'To spot a fake or faulty invoice, run npm run agent:desk -- ask --check <signed-invoice.json>. On the website, use Agent payments → Import signed bill and Ask Dave → account check.'));
+ assert.ok(shown(['help:pause'],'To pause payments, run npm run agent:desk -- pause (and unpause with npm run agent:desk -- unpause). This is CLI-only.'));
+ assert.ok(!shown(['help:pause'],'To cancel a bill, run npm run agent:desk -- pause.'));
+ assert.ok(!shown(['help:pause'],'To pause payments, run npm run agent:desk -- cancel <id>.'));
+ // A leading yes/no cannot be checked, so it drops the reply.
+ assert.ok(!shown(['suppliers'],`Yes — local-merchant received ${paid} NEAR in verified payments.`));
+ assert.ok(!shown(['pause'],'No, payments are not paused.'));
+ // The owner's "pending" is waiting to be paid; the strict pending outcome count is not accepted as that answer.
+ const queued=await cafePack(undefined,cafeView,[{...cafeInbox()[2],id:'INV-Q-1',state:'queued',error:null,has_proposal:false,attempt_state:null,
+  invoice:{id:'INV-Q-1',payee,asset:'near',amount:near('0.2')},commitment:commitmentOf({id:'INV-Q-1',payee,asset:'near',amount:near('0.2')})}]);
+ const q=(t:string)=>{const r=verifyAnswer(queued,voiced(['activity'],t));return r.ok&&!r.reply_dropped;};
+ assert.ok(q('You have 1 pending invoice.'));assert.ok(!q('You have 0 pending invoices.'));
+});

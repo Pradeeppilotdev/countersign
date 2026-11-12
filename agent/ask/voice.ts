@@ -3,6 +3,7 @@
 // cannot establish which amount, outcome or reason belongs to which subject.
 import type {FactsPack} from './facts.ts';
 import {GLOSSARY} from './glossary.ts';
+import {HELP} from './help.ts';
 
 const escape=(text:string)=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const clean=(text:string)=>text.replace(/’/g,"'").trim().replace(/[.!?]+$/,'');
@@ -120,8 +121,8 @@ function composed(text:string,patterns:string[]):boolean{
 // a promise or an action ("sent", "approved") still drops the reply.
 type Bill=FactsPack['invoices'][number];
 const VOCAB=new Set(`a an the this that these those it its it's they them their there there's here here's is are was were be been being has have had do does did
- i i'm i've you you've you're your yours we we've our us me my dave hi hey hello thanks thank sure please yes no of in on at for to from with and but or also as by
- about just only still yet already current currently right now today moment total overall altogether all both each other others rest remaining left out bill bills invoice
+ i i'm i've you you've you're your yours we we've our us me my dave hi hey hello thanks thank sure please of in on at for to from with and but or also as by
+ about just only still yet already current currently note otherwise holds contains ones received verified unusual activity flag flags flagged right now today moment total overall altogether all both each other others rest remaining left out bill bills invoice
  invoices payment payments agent agent's vault vault's inbox supplier suppliers record records recorded show shows found what what's which how want would like let
  one know ask anything else help happy glad summary details check look quick update overview below see breakdown status state outcome outcomes number count once proposal proposals got`.split(/\s+/));
 const BUDGET_VOCAB=new Set('near policy spending per-payment cap limit rolling daily budget used available balance holds hold funds day amount single maximum'.split(' '));
@@ -139,13 +140,14 @@ const lower=(t:string)=>t.replace(/[’‘]/g,"'").toLowerCase();
 
 // Glossary text for a selected bill, located in the reply (case-insensitive). A
 // reason may span two sentences, so these ranges are never split.
-function glossarySpans(pack:FactsPack,keys:string[],reply:string){
+function glossarySpans(pack:FactsPack,allowed:Set<number>,reply:string){
  const spans:{from:number;to:number;bill:number;kind:'m'|'w'}[]=[],text=lower(reply);
  pack.invoices.forEach((bill,index)=>{
-  if(!bill.explanation||!keys.includes('invoice:'+bill.id))return;
+  if(!bill.explanation||!allowed.has(index))return;
   for(const kind of ['m','w'] as const){
-   const phrase=lower(clean(kind==='m'?bill.explanation.meaning:bill.explanation.what_to_do));
-   for(let at=text.indexOf(phrase);at>=0;at=text.indexOf(phrase,at+1))spans.push({from:at,to:at+phrase.length,bill:index,kind});
+   // "this" and "it" are interchangeable ("paying it would…" = "Paying this would…").
+   const phrase=escape(lower(clean(kind==='m'?bill.explanation.meaning:bill.explanation.what_to_do))).replace(/\b(?:this|it)\b/g,'(?:this|it)');
+   for(const m of text.matchAll(new RegExp(phrase,'g')))spans.push({from:m.index!,to:m.index!+m[0].length,bill:index,kind});
   }
  });
  return spans.sort((a,b)=>a.from-b.from||b.to-a.to).filter((s,i,all)=>!all.slice(0,i).some(o=>s.from<o.to));
@@ -160,33 +162,39 @@ function sentencesOf(reply:string,spans:{from:number;to:number}[]){
  return out.filter(s=>reply.slice(s.from,s.to).trim());
 }
 
-function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:number;to:number;bill:number;kind:'m'|'w'}[],offset:number,inherited:number[]):{ok:boolean;ids:number[]}{
- const fail={ok:false,ids:[] as number[]};
+type Context={allowed:Set<number>;commands:string[];helpWords:Set<string>};
+function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:number;to:number;bill:number;kind:'m'|'w'}[],offset:number,inherited:number[],ctx:Context):{ok:boolean;ids:number[];why?:string}{
+ const no=(why:string)=>({ok:false,ids:[] as number[],why});
  // Placeholders: §iN an invoice, §mN / §wN its glossary meaning / next step.
  let text='',at=0;
  for(const s of spans.filter(s=>s.from>=offset&&s.to<=offset+sentence.length)){text+=sentence.slice(at,s.from-offset)+` §${s.kind}${s.bill} `;at=s.to-offset;}
  text+=sentence.slice(at);
+ // A help card's exact command or website location, as written on the card.
+ text=ctx.commands.reduce((t,c)=>t.split('`'+c+'`').join(' §c ').split(c).join(' §c '),text);
  const ids:number[]=[];
  pack.invoices.forEach((bill,index)=>{
   text=text.replace(new RegExp(`(?<![A-Za-z0-9_.:-])\\[?${escape(bill.id)}\\]?(?![A-Za-z0-9_-])`,'g'),()=>{ids.push(index);return ` §i${index} `;});
  });
- if(/\b[A-Z]{2,}-[A-Z0-9-]*[A-Z0-9]\b/.test(text))return fail;                       // an invoice-like ID that is not in this vault
- if(ids.some(i=>!keys.includes('invoice:'+pack.invoices[i].id)))return fail;          // a real invoice that was not selected
+ if(/\b[A-Z]{2,}-[A-Z0-9-]*[A-Z0-9]\b/.test(text))return no('unknown invoice ID');                       // an invoice-like ID that is not in this vault
+ if(ids.some(i=>!ctx.allowed.has(i)))return no('invoice not in the selected evidence');          // a real invoice that was not selected
  const subjects=ids.length?[...new Set(ids)]:inherited;
  const budget=keys.includes('budget'),balance=keys.includes('balance'),activity=keys.includes('activity');
  text=lower(text)
   .replace(/\b(?:in the |over the )?(?:last |past )?24(?:[- ]hours?|h)\b/g,' ').replace(/\bso far\b/g,' ').replace(/\bin total\b/g,' total ')
   .replace(/\b(?:still |yet )?waiting to be paid\b|\b(?:still |yet )to be paid\b|\bawaiting payment\b/g,' ~waiting ')
   .replace(/\b(?:not (?:yet )?paid(?: yet)?|(?:has|have)(?:n't| not)(?: yet)? been paid(?: yet)?)\b/g,' ~unpaid ');
+ // A flag phrase ("blocked attempt", "duplicate bill") is checked against the invoice it is said about.
+ for(const i of new Set(ids))for(const f of pack.invoices[i].flags)text=text.replace(new RegExp(`\\b${escape(f.replace(/_/g,' '))}\\b`,'g'),` §f${i} `);
+ const suppliers=keys.includes('suppliers')?new Map(pack.totals.per_merchant.map(m=>[lower(m.merchant),m.paid_near])):new Map<string,string>();
  const merchants=new Set(subjects.map(i=>lower(pack.invoices[i].merchant)));
  const day=pack.totals.per_day,rules=pack.vault.rules,c=pack.totals.counts;
  const waiting=c.queued+c.proposed+c.pending;
  const bucket:Record<string,number[]>={paid:[c.paid],blocked:[c.blocked+c.failed,c.blocked],failed:[c.failed],queued:[c.queued],proposed:[c.proposed],
-  pending:[waiting,c.pending],waiting:[waiting],unpaid:[waiting],cancelled:[c.cancelled],refunded:[]};
+  pending:[waiting],waiting:[waiting],unpaid:[waiting],cancelled:[c.cancelled],refunded:[]};
  let sentenceCount:number|null=null;                                // a count earlier in the sentence covers later outcome words
  const clauses=text.split(/[,:—–()]|\s(?:and|but|with|while|plus)\s/);
  for(const clause of clauses){
-  const tokens=clause.match(/§[imw]\d+|\d+(?:\.\d+)?|~\w+|[a-z0-9]+(?:[-'][a-z0-9]+)*/g)??[];
+  const tokens=clause.match(/§c|§[imwf]\d+|\d+(?:\.\d+)?|~\w+|[a-z0-9]+(?:[-'][a-z0-9]+)*/g)??[];
   if(!tokens.length)continue;
   if(new RegExp(`^(?:${friendly.join('|')})$`,'i').test(clause.trim().replace(/[.!?]+$/,'')))continue;
   const used=new Set<number>();
@@ -202,42 +210,47 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
   for(let i=0;i<tokens.length;i++){
    const t=tokens[i];
    if(t.startsWith('§i')){used.add(i);continue;}
+   if(t==='§c'){used.add(i);continue;}
+   if(t.startsWith('§f')){if(!ids.includes(Number(t.slice(2))))return no('flag from another invoice');used.add(i);continue;}
    if(t.startsWith('§m')||t.startsWith('§w')){
-    if(!subjects.includes(Number(t.slice(2))))return fail;           // a reason borrowed from another invoice
+    if(!subjects.includes(Number(t.slice(2))))return no('reason from another invoice');           // a reason borrowed from another invoice
     used.add(i);continue;
    }
    if(t==='because'){
     const next=tokens[i+1];
-    if(!next?.startsWith('§m')||idAt(i)!==Number(next.slice(2)))return fail;
+    if(!next?.startsWith('§m')||idAt(i)!==Number(next.slice(2)))return no('"because" without that invoice\'s own reason');
     used.add(i);continue;
    }
    const value=/^\d+(?:\.\d+)?$/.test(t)?t:null;
    if(value!==null&&tokens[i+1]==='near'){                            // an amount, bound to its invoice or budget field
     used.add(i);used.add(i+1);
     const bill=hasId||ids.length?idAt(i):null;
-    if(bill!==null){if(pack.invoices[bill].amount_near===null||Number(pack.invoices[bill].amount_near)!==Number(value))return fail;continue;}
+    if(bill!==null){if(pack.invoices[bill].amount_near===null||Number(pack.invoices[bill].amount_near)!==Number(value))return no('invoice amount mismatch');continue;}
+    const named=tokens.filter(w=>suppliers.has(w));                  // "Bean-Co received 0.4 NEAR"
+    if(named.length){if(named.some(w=>Number(suppliers.get(w))!==Number(value)))return no('supplier amount mismatch');continue;}
     const near=(words:string[])=>{let best:string|null=null,dist=Infinity;tokens.forEach((w,j)=>{if(words.includes(w)&&Math.abs(j-i)<dist){best=w;dist=Math.abs(j-i);}});return best as string|null;};
     const field=near(['used','remaining','left'])??near(['per-payment','cap','single','available','holds','hold','balance','budget','limit','daily','rolling']);
     const expected=field===null?null:field==='used'?(budget?day.used_near:null):field==='remaining'||field==='left'?(budget?day.remaining_near:null)
      :['per-payment','cap','single'].includes(field)?(budget?rules?.per_payment_near??null:null):['available','holds','hold','balance'].includes(field)?(balance?pack.vault.available_near:null)
      :(budget?day.limit_near:null);
-    if(expected===null||Number(expected)!==Number(value))return fail;
+    if(expected===null||Number(expected)!==Number(value))return no('budget/balance amount mismatch or unselected');
     continue;
    }
    const word=WORD_NUMBERS[t]!==undefined&&!(t==='one'&&['this','that','the','which','each'].includes(tokens[i-1]))?WORD_NUMBERS[t]:null;
    const zero=['no','none','nothing'].includes(t)&&!hasId&&outcomeIdx.length?0:null;
    if(value!==null||word!==null||zero!==null){                        // a count, checked against the activity totals
-    if(value!==null&&value.includes('.'))return fail;
-    if(!activity)return fail;
+    if(value!==null&&value.includes('.'))return no('non-whole count');
     const n=value!==null?Number(value):word??zero!;
     const ofTotal=tokens[i-1]==='of'||(['your','the','all'].includes(tokens[i-1])&&tokens[i-2]==='of')||tokens[i+1]==='total'||tokens[i-1]==='total';
     let allowed:number[];
     if(ofTotal)allowed=[pack.invoices.length];
+    else if(tokens.some(w=>['flags','flagged','unusual'].includes(w))&&keys.includes('flags'))allowed=[pack.invoices.filter(b=>b.flags.length).length,pack.invoices.reduce((n,b)=>n+b.flags.length,0)];
     else if(tokens.includes('proposals')||tokens.includes('proposal'))allowed=[pack.invoices.filter(b=>b.agent.has_proposal).length];
     else if(outcomeIdx.length)allowed=bucket[outcomeNear(i)];
     else if(tokens.some(w=>['bill','bills','invoice','invoices','payment','payments'].includes(w)))allowed=[pack.invoices.length];
-    else return fail;
-    if(!allowed.includes(n))return fail;
+    else return no('count with nothing to count');
+    if(!activity&&!(tokens.some(w=>['flags','flagged','unusual'].includes(w))&&keys.includes('flags')))return no('count without the activity record');
+    if(!allowed.includes(n))return no('count mismatch');
     if(!ofTotal)sentenceCount=n;
     used.add(i);continue;
    }
@@ -248,56 +261,66 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
     if(!hasId&&tokens.some(isCount))continue;                         // the count beside it is checked against this outcome
     if(!hasId&&!negated&&sentenceCount!==null&&bucket[outcome].includes(sentenceCount))continue;  // "12 are queued and waiting"
     const bill=hasId||ids.length?idAt(i):null;
-    if(bill===null||billAllows[outcome](pack.invoices[bill])===negated)return fail;
+    if(bill===null||billAllows[outcome](pack.invoices[bill])===negated)return no('outcome contradicts the invoice');
     continue;
    }
+   if(ctx.helpWords.has(t)&&/^(?:un)?pause$/.test(t)){used.add(i);continue;}  // "to pause payments, run …" on a help card
    if(/^(?:un)?paus(?:e|ed)$/.test(t)){                                // pause state
     const paused=pack.vault.controls?.paused;
-    if(!keys.includes('pause')||typeof paused!=='boolean')return fail;
+    if(!keys.includes('pause')||typeof paused!=='boolean')return no('pause state without the pause record');
     const claim=t==='unpaused'?false:t==='paused'?!negates(tokens[i-1]):tokens.includes('on')?true:tokens.includes('off')?false:null;
-    if(claim===null||claim!==paused)return fail;
+    if(claim===null||claim!==paused)return no('pause state mismatch');
     used.add(i);tokens.forEach((w,j)=>{if(w==='on'||w==='off')used.add(j);});continue;
    }
    if(/^(?:active|inactive|expired?|expires|expiring)$/.test(t)){       // policy state
-    if(!budget||typeof rules?.expired!=='boolean')return fail;
+    if(!budget||typeof rules?.expired!=='boolean')return no('policy state without the budget record');
     const claim=(t!=='active')!==(negates(tokens[i-1])||negates(tokens[i-2]));
-    if(t==='expire'||t==='expires'||t==='expiring'||claim!==rules.expired)return fail;
+    if(t==='expire'||t==='expires'||t==='expiring'||claim!==rules.expired)return no('policy state mismatch');
     used.add(i);continue;
    }
   }
   for(let i=0;i<tokens.length;i++){
    if(used.has(i))continue;
    const t=tokens[i];
-   if(VOCAB.has(t)||merchants.has(t)||negates(t)&&tokens.slice(i+1).some(w=>OUTCOME_TOKEN[w]||/^(?:un)?paus|^(?:active|expired)$/.test(w)))continue;
+   if(VOCAB.has(t)||merchants.has(t)||suppliers.has(t)||ctx.helpWords.has(t)||negates(t)&&tokens.slice(i+1).some(w=>OUTCOME_TOKEN[w]||/^(?:un)?paus|^(?:active|expired)$/.test(w)))continue;
    if((budget||balance)&&BUDGET_VOCAB.has(t))continue;
-   return fail;
+   return no('unsupported word');
   }
  }
  return {ok:true,ids:ids.length?[...new Set(ids)]:inherited};
 }
 
 // voice: patterns that a code-computed record (help cards, what fits) supplies for itself.
-export function groundedReply(pack:FactsPack,selected:{key:string;text:string;voice?:{patterns:string[]}}[],reply:string):boolean{
+export function groundedReply(pack:FactsPack,selected:{key:string;text:string;ids?:string[];voice?:{patterns:string[]}}[],reply:string):boolean{
+ return groundedWhy(pack,selected,reply)===null;
+}
+// null when every claim checks out; otherwise a short reason (developer debug only).
+export function groundedWhy(pack:FactsPack,selected:{key:string;text:string;ids?:string[];voice?:{patterns:string[]}}[],reply:string):string|null{
  // English is case-insensitive; identifiers are not.
  for(const bill of pack.invoices){
   for(const m of reply.matchAll(new RegExp(`(?<![A-Za-z0-9_.:-])${escape(bill.id)}(?![A-Za-z0-9_-])`,'gi')))
-   if(m[0]!==bill.id)return false;
+   if(m[0]!==bill.id)return 'invoice ID in the wrong case';
  }
  const patterns=[...friendly,...selected.flatMap(e=>[...voiceOptions(pack,e.key,e.text).patterns,...e.voice?.patterns??[]])];
- if(composed(reply,patterns))return true;
+ if(composed(reply,patterns))return null;
  const keys=selected.map(e=>e.key),text=reply.replace(/’/g,"'");
- const spans=glossarySpans(pack,keys,text);
+ // Invoices a reply may name: selected invoice records, and invoices listed by a selected record (activity, flags, …).
+ const allowed=new Set(pack.invoices.flatMap((b,i)=>keys.includes('invoice:'+b.id)||selected.some(e=>e.ids?.includes(b.id))?[i]:[]));
+ const cards=HELP.filter(c=>keys.includes('help:'+c.topic));
+ const commands=cards.flatMap(c=>[...c.usages.map(u=>'npm run agent:desk -- '+u),...c.website?[c.website]:[]]).sort((a,b)=>b.length-a.length);
+ const helpWords=new Set(cards.flatMap(c=>[c.text,...c.goals,c.website??'','run use command website cli-only only cli go open to'].join(' ').toLowerCase().match(/[a-z0-9]+(?:[-'][a-z0-9]+)*/g)??[]));
+ const spans=glossarySpans(pack,allowed,text);
  let inherited:number[]=[];
  for(const {from,to} of sentencesOf(text,spans)){
   const sentence=text.slice(from,to);
-  if(composed(sentence,patterns)){
+   if(composed(sentence,patterns)){
    const named=pack.invoices.map((b,i)=>sentence.includes(b.id)?i:-1).filter(i=>i>=0);
    if(named.length)inherited=named;
    continue;
   }
-  const result=claimsHold(pack,keys,sentence,spans,from,inherited);
-  if(!result.ok)return false;
+  const result=claimsHold(pack,keys,sentence,spans,from,inherited,{allowed,commands,helpWords});
+  if(!result.ok)return `${result.why}: "${sentence.trim()}"`;
   inherited=result.ids;
  }
- return true;
+ return null;
 }
