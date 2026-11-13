@@ -7,6 +7,8 @@ import {askQuestion,REFUSAL} from '../agent/ask/answer.ts';
 import {collectFacts} from '../agent/ask/facts.ts';
 import {modelConfig,nearChat} from '../agent/ask/model.ts';
 
+if(process.env.ASK_BATTERY!=='1')throw new Error('Set ASK_BATTERY=1 to run the live Ask Dave battery.');
+
 const root=fileURLToPath(new URL('..',import.meta.url));
 const directory=process.env.COUNTERSIGN_AGENT_DIR??root+'work/agent-vault/';
 const {questions}=JSON.parse(readFileSync(new URL('../agent/ask/battery.json',import.meta.url),'utf8')) as {questions:string[]};

@@ -183,6 +183,13 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
   .replace(/\b(?:in the |over the )?(?:last |past )?24(?:[- ]hours?|h)\b/g,' ').replace(/\bso far\b/g,' ').replace(/\bin total\b/g,' total ')
   .replace(/\b(?:still |yet )?waiting to be paid\b|\b(?:still |yet )to be paid\b|\bawaiting payment\b/g,' ~waiting ')
   .replace(/\b(?:not (?:yet )?paid(?: yet)?|(?:has|have)(?:n't| not)(?: yet)? been paid(?: yet)?)\b/g,' ~unpaid ');
+ // Outcomes following a list of IDs apply to every subject in that list.
+ // This also covers lists split into separate parser clauses by punctuation.
+ const outcomes=[...text.matchAll(/\b(?:paid|settled|blocked|rejected|failed|queued|proposed|pending|waiting|unpaid|cancelled|canceled|refunded)\b/g)];
+ const lastIdAt=Math.max(...[...text.matchAll(/§i\d+/g)].map(m=>m.index));
+ if(new Set(ids).size>1&&outcomes.length&&outcomes.every(m=>m.index>lastIdAt)){
+  if(outcomes.some(m=>ids.some(i=>!billAllows[OUTCOME_TOKEN[m[0]]](pack.invoices[i]))))return no('shared outcome contradicts an invoice');
+ }
  // A flag phrase ("blocked attempt", "duplicate bill") is checked against the invoice it is said about.
  for(const i of new Set(ids))for(const f of pack.invoices[i].flags)text=text.replace(new RegExp(`\\b${escape(f.replace(/_/g,' '))}\\b`,'g'),` §f${i} `);
  const suppliers=keys.includes('suppliers')?new Map(pack.totals.per_merchant.map(m=>[lower(m.merchant),m.paid_near])):new Map<string,string>();
@@ -204,6 +211,7 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
    return ids.length?ids[ids.length-1]:null;
   };
   const hasId=tokens.some(t=>t.startsWith('§i'));
+  const negatedBefore=(i:number)=>tokens.slice(0,i).some(negates);
   const outcomeIdx=tokens.map((t,i)=>OUTCOME_TOKEN[t]?i:-1).filter(i=>i>=0);
   const outcomeNear=(i:number)=>{const after=outcomeIdx.find(j=>j>i);return OUTCOME_TOKEN[tokens[after??outcomeIdx.filter(j=>j<i).pop()!]];};
   const isCount=(w:string,j:number)=>/^\d+$/.test(w)&&tokens[j+1]!=='near'||WORD_NUMBERS[w]!==undefined&&!(w==='one'&&['this','that','the','which','each'].includes(tokens[j-1]))||['no','none','nothing'].includes(w);
@@ -268,13 +276,14 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
    if(/^(?:un)?paus(?:e|ed)$/.test(t)){                                // pause state
     const paused=pack.vault.controls?.paused;
     if(!keys.includes('pause')||typeof paused!=='boolean')return no('pause state without the pause record');
-    const claim=t==='unpaused'?false:t==='paused'?!negates(tokens[i-1]):tokens.includes('on')?true:tokens.includes('off')?false:null;
+    const negated=negatedBefore(i);
+    const claim=t==='unpaused'?false:t==='paused'?!negated:tokens.includes('on')?!negated:tokens.includes('off')?negated:negated?false:null;
     if(claim===null||claim!==paused)return no('pause state mismatch');
     used.add(i);tokens.forEach((w,j)=>{if(w==='on'||w==='off')used.add(j);});continue;
    }
    if(/^(?:active|inactive|expired?|expires|expiring)$/.test(t)){       // policy state
     if(!budget||typeof rules?.expired!=='boolean')return no('policy state without the budget record');
-    const claim=(t!=='active')!==(negates(tokens[i-1])||negates(tokens[i-2]));
+    const claim=(t!=='active')!==negatedBefore(i);
     if(t==='expire'||t==='expires'||t==='expiring'||claim!==rules.expired)return no('policy state mismatch');
     used.add(i);continue;
    }

@@ -1206,6 +1206,7 @@ test('speed: the model sees the 10 most recent invoices plus any named one; answ
  const recent=pack.invoices.slice(-10).map(b=>'invoice:'+b.id);
  assert.deepEqual(keys('How is my agent doing?'),recent);
  assert.deepEqual(keys('Why was INV-BEANS-003 blocked?'),['invoice:INV-BEANS-003',...recent]);
+ assert.deepEqual(keys('Why was inv-beans-003 blocked?'),['invoice:INV-BEANS-003',...recent]);
  // An older invoice can still be cited, and the activity report card still lists every bill.
  assert.ok(verifyAnswer(pack,select('invoice:INV-BEANS-001')).ok);
  assert.equal(verifyAnswer(pack,select('activity')).text.split('\n').filter(l=>l.startsWith('[')).length,15);
@@ -1269,4 +1270,46 @@ test('voice: trimming shows only fully verified sentences, in order, never a gre
  assert.equal(none.text,plain);assert.ok(none.ok&&none.reply_dropped);
  // Chat is never trimmed: one unsupported part refuses the whole small-talk reply.
  assert.equal(verifyAnswer(pack,voiced(['chat'],'Hi! 2 bills went through.')).text,REFUSAL);
+});
+
+test('review regressions: false multi-subject outcomes and action claims are dropped',async()=>{
+ const pack=await cafePack();
+ const cases:[string[],string][]=[
+  [['activity'],'INV-BEANS-003 and INV-CUPS-004 were paid.'],
+  [['activity'],'INV-BEANS-003, INV-CUPS-004 were paid.'],
+  [['activity'],'INV-BEANS-003 — INV-CUPS-004 were paid.'],
+  [['activity'],'INV-BEANS-003 and INV-BEANS-001 were paid.'],
+  [['activity'],'INV-BEANS-003 and INV-CUPS-004 were paid and settled.'],
+  ...(['I did it.','I did that.','Did it.','I already did.','I did it for you.'] as const).map(text=>[['activity'],text] as [string[],string]),
+ ];
+ for(const [facts,text] of cases){
+  const result=verifyAnswer(pack,voiced(facts,text));
+  assert.equal(result.text,verifyAnswer(pack,select(...facts)).text,text);
+  assert.ok(result.reply_dropped,text);
+ }
+ assert.equal(verifyAnswer(pack,voiced(['activity'],'INV-CUPS-004 and INV-BEANS-001 were paid.')).reply_dropped,undefined);
+});
+
+test('review regressions: clause-leading pause and policy negation matches the actual state',async()=>{
+ const active=await cafePack(),paused=structuredClone(active),expired=structuredClone(active);
+ paused.vault.controls!.paused=true;
+ expired.vault.rules!.expired=true;
+ for(const text of ['Nothing is paused.','No pause is on.','Nothing was paused.']){
+  const result=verifyAnswer(paused,voiced(['pause'],text));
+  assert.equal(result.text,verifyAnswer(paused,select('pause')).text,text);
+  assert.ok(result.reply_dropped,text);
+ }
+ const wrong=verifyAnswer(active,voiced(['budget'],'No policy is active.'));
+ assert.equal(wrong.text,verifyAnswer(active,select('budget')).text);
+ assert.ok(wrong.reply_dropped);
+ for(const [pack,facts,text] of [[active,['pause'],'Payments are not paused.'],[active,['pause'],'There is no pause.'],[expired,['budget'],'No policy is active.'],[active,['budget'],'Your spending policy is active.']] as const)
+  assert.equal(verifyAnswer(pack,voiced([...facts],text)).reply_dropped,undefined,text);
+});
+
+test('review regressions: chat contains no unchecked action, outcome, link or assessment',async()=>{
+ const pack=await cafePack();
+ for(const text of ['I did it.','I did that.','Did it.','I already did.','I did it for you.','Your payment went through.','It went through.',
+  'Go to example.com now.','Visit example.com for details.','The vault is dangerous.','That is concerning.','One of your bills looks off.'])
+  assert.equal(verifyAnswer(pack,voiced(['chat'],text)).text,REFUSAL,text);
+ assert.equal(verifyAnswer(pack,voiced(['chat'],'Hi! How can I help with your vault today?')).text,'Hi! How can I help with your vault today?');
 });

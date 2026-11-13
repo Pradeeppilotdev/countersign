@@ -96,10 +96,10 @@ function evidenceFor(pack:FactsPack,question=''){
 
 // The model sees the most recent invoices plus any named in the question; code still renders from the full pack.
 export const MODEL_INVOICES=10;
-const named=(question:string)=>new Set(question.match(/[a-zA-Z0-9_.:-]+/g)?.map(t=>t.replace(/[.:]+$/,''))??[]);
+const named=(question:string)=>new Set(question.match(/[a-zA-Z0-9_.:-]+/g)?.map(t=>t.replace(/[.:]+$/,'').toLowerCase())??[]);
 function messagesFor(pack:FactsPack,facts:Map<string,Evidence>,question:string):ChatMessage[]{
  const asked=named(question),recent=new Set(pack.invoices.slice(-MODEL_INVOICES).map(b=>'invoice:'+b.id));
- const shown=[...facts].filter(([key])=>!key.startsWith('invoice:')||recent.has(key)||asked.has(key.slice(8)));
+ const shown=[...facts].filter(([key])=>!key.startsWith('invoice:')||recent.has(key)||asked.has(key.slice(8).toLowerCase()));
  const data=JSON.stringify(Object.fromEntries(shown.map(([key,{text,ids,voice}])=>[key,{text,ids,reply_examples:[...voiceOptions(pack,key,text).examples,...voice?.examples??[]]}]))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
  return [{role:'system',content:SYSTEM},{role:'user',content:`<<<VAULT_DATA\n${data}\nVAULT_DATA>>>\n\nQuestion from the vault owner:\n${question}`}];
 }
@@ -117,6 +117,7 @@ const PAUSE_WORD=/\b(?:un)?paus(?:e|ed|es|ing)\b/i;
 const POLICY_WORD=/\b(?:expired?|expires|expiring|active|inactive)\b/i;
 // The model cannot act, so a reply that says it did, will or can is never true.
 const ACTION=[
+ /\bI\s+(?:already\s+)?did\b/i,/\bDid\s+(?:it|that|this|them)\b/i,
  /\bI(?:\s*'(?:ve|ll|m|d)|\s+(?:have|will|am|would|can|could|just|already|went ahead and))*\s+(?:(?:going|able)\s+to\s+)?(?:paid|pay|paying|paused|pause|pausing|unpaused|unpause|approved|approve|sent|send|cancel+ed|cancel|released|release|renewed|renew|revoked|revoke|blocked|block|transferred|transfer|retried|retry|resumed|resume|moved|move|changed|change|set|raised|raise|updated|update|fixed|fix|done|handled|processed|process|unblocked|unblock)\b/i,
  /\blet me\b(?!\s+know\b)/i,/\bI(?:'m|\s+am)\s+on\s+it\b|\b(?:done that|taken care of)\b/i, // Historical approvals/sends still need a complete, grounded clause.
 ];
@@ -140,17 +141,17 @@ function basicShape(reply:string,max:number){
  if(!reply.trim())return 'The reply is empty.';
  if(reply.length>max)return `The reply is over ${max} characters.`;
  if((reply.match(/\n/g)??[]).length>2)return 'The reply has too many line breaks.';
- if(/\]\s*\(|https?:|:\/\/|\bwww\.|@/i.test(reply))return 'The reply contains a link, URL or @.';
+ if(/\]\s*\(|https?:|:\/\/|\bwww\.|@|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|ai|app|dev|xyz|test|near)\b/i.test(reply))return 'The reply contains a link, URL or @.';
  if(ACTION.some(r=>r.test(reply)))return 'The reply claims an action.';
  return null;
 }
 
-const ASSESSMENT=/\b(?:fine|safe|safety|secure|risks?|risky|scam\w*|fraud\w*|healthy|suspicious|trust\w*|everything|nothing|problems?|issues?|wrong|budget|balance|limit|cap|funds|spending|policy|rules?)\b/i;
+const ASSESSMENT=/\b(?:fine|safe|safety|secure|risks?|risky|scam\w*|fraud\w*|healthy|suspicious|dangerous|scary|concerning|alarming|looks off|trust\w*|everything|nothing|problems?|issues?|wrong|budget|balance|limit|cap|funds|spending|policy|rules?)\b/i;
 export function checkChat(reply:string,pack:FactsPack):string|null{
  const shape=basicShape(reply,MAX_CHAT);if(shape)return shape;
  if(/\d/.test(reply)||numbersIn(reply).length)return 'A chat reply may not contain numbers.';
  if(idsIn(reply,pack).length)return 'A chat reply may not name an invoice.';
- if(new RegExp(OUTCOME_WORD.source,'i').test(reply))return 'A chat reply may not state an outcome.';
+ if(new RegExp(OUTCOME_WORD.source,'i').test(reply)||/\b(?:went through|went|through|cleared)\b/i.test(reply))return 'A chat reply may not state an outcome.';
  if(PAUSE_WORD.test(reply)||POLICY_WORD.test(reply))return 'A chat reply may not describe the vault.';
  // Small talk carries no claims. Any wording is fine, but not an assessment of the vault, its suppliers or its risks.
  if(ASSESSMENT.test(reply))return 'A chat reply may not assess the vault.';
@@ -198,7 +199,8 @@ function render(pack:FactsPack,facts:Map<string,Evidence>,raw:string,question:st
  }
  // A question that names a particular bill must get that bill's own record.
  for(const token of named(question)){
-  if(facts.has('invoice:'+token)&&!keys.includes('invoice:'+token))return fail('The selection omitted the named invoice.');
+  const matched=[...facts.keys()].find(key=>key.startsWith('invoice:')&&key.slice(8).toLowerCase()===token);
+  if(matched&&!keys.includes(matched))return fail('The selection omitted the named invoice.');
  }
  const sources=[...new Set(selected.flatMap(e=>e.ids))];
  const source=[`${pack.source.vault} at block ${pack.source.block_height}`,...sources].join(', ');
