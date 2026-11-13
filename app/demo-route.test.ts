@@ -97,13 +97,20 @@ test('set-rules takes three strings, checks them exactly, and passes yoctoNEAR a
  assert.equal((await f.route('POST','/api/demo/renew-rules',{})).status,200);
 });
 
-test('retry takes exactly one invoice reference',async()=>{
- const f=fixture('local');
+test('retry takes exactly one café mailbox invoice reference',async()=>{
+ const id='INV-PASTRY-02-abc', outside='INV-OUTSIDE-01-abc';
+ const retries:string[]=[],op=async()=>({});
+ const route=createDemoRoute({network:()=>'local',state:async()=>({ready:true,mail:{invoices:[{id}]}}),
+  setup:op,receive:op,pay:op,faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,
+  retry:async bill=>{retries.push(bill);return {};},reset:op,modelReady:()=>false});
  for(const body of [{},{id:''},{id:5},{id:'a b'},{id:'INV-1',live:false},{id:'x'.repeat(129)}])
-  assert.equal((await f.route('POST','/api/demo/retry',body)).status,400,JSON.stringify(body));
- assert.equal(f.calls(),0);
- assert.equal((await f.route('POST','/api/demo/retry',{id:'INV-PASTRY-02-abc'})).status,200);
- assert.deepEqual(f.retries,['INV-PASTRY-02-abc']);
+  assert.equal((await route('POST','/api/demo/retry',body)).status,400,JSON.stringify(body));
+ const refused=await route('POST','/api/demo/retry',{id:outside});
+ assert.equal(refused.status,400);
+ assert.equal(refused.body.error,"That bill isn't in today's café mailbox.");
+ assert.deepEqual(retries,[]);
+ assert.equal((await route('POST','/api/demo/retry',{id})).status,200);
+ assert.deepEqual(retries,[id]);
 });
 test('progress reports finished results as a copy, in processing order',async()=>{
  let release!:()=>void;const hold=new Promise<void>(r=>release=r);

@@ -184,9 +184,10 @@ export async function payCafeBill(directory:string,id:string){
 export async function payCafe(directory:string,live:boolean,progress:CafeProgress){
  requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
  const state=await readAgentState(directory);
+ const mailbox=new Set(config(directory).mail?.invoices.map(invoice=>invoice.id)??[]);
  // Invoice references establish a stable queue independent of shuffled delivery.
  // There is no outcome classification here: every queued bill goes through run.
- const queue=state.bills.filter(b=>['queued','proposed'].includes(b.outcome)).sort((a,b)=>a.id.localeCompare(b.id));
+ const queue=state.bills.filter(b=>mailbox.has(b.id)&&['queued','proposed'].includes(b.outcome)).sort((a,b)=>a.id.localeCompare(b.id));
  // Round-robin deliveries: first bill from each supplier, then subsequent bills.
  queue.sort((a,b)=>{const order=(id:string)=>Number(id.match(/-(\d\d)-/)?.[1]??0);return order(a.id)-order(b.id);});
  const vaultBefore=await beginCafeRun(directory,queue.map(b=>b.id));
@@ -268,7 +269,8 @@ export async function renewRulesCafe(directory:string){
 export const BUDGET_STOP=/rolling daily budget exceeded/i;
 export const budgetRetryable=(bill:{outcome?:string;error?:string|null;has_proposal?:boolean})=>bill.outcome==='blocked'&&bill.has_proposal===true&&BUDGET_STOP.test(bill.error??'');
 export async function retryCafeBill(directory:string,id:string){
- requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
+ requireLocalDemo();const cafe=config(directory);if(!cafe.ready)throw new DeskWebError('Open the café first.');
+ if(!cafe.mail?.invoices.some(invoice=>invoice.id===id))throw new DeskWebError("That bill isn't in today's café mailbox.");
  const bill=(await readAgentState(directory)).bills.find(b=>b.id===id);
  if(!bill)throw new DeskWebError('Unknown invoice.');
  if(!budgetRetryable(bill))throw new DeskWebError('Only bills stopped by the daily budget can be tried again.');

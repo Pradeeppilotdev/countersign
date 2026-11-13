@@ -1,10 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,existsSync,writeFileSync} from 'node:fs';
+import {createPrivateKey,randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setupCafe,receiveCafe,payCafe,payCafeBill,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe,retryCafeBill} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
+import {signInvoice} from '../merchant/invoice.ts';
+import {importAgentBill,runAgentBill} from '../agent/desk-web.ts';
 import {lookalike} from '../agent/ask/check.ts';
 import {createDemoRoute} from '../app/demo-route.ts';
 
@@ -30,6 +33,16 @@ test('pay-one settles only its chosen café bill once on chain',{timeout:240000}
  assert.equal(JSON.parse(readFileSync(join(directory,'cafe.json'),'utf8')).day_vault_start,received.available);
  for(const supplier of after.suppliers.filter((supplier:any)=>supplier.id!=='Bean-Co'))assert.equal(supplier.received,'0');
  assert.equal((await route('POST','/api/demo/pay-one',{id})).status,400);
+ // Import a valid signed bill into the shared agent inbox, outside the café mailbox.
+ const bean=JSON.parse(readFileSync(join(directory,'cafe.json'),'utf8')).suppliers.find((s:any)=>s.id==='Bean-Co');
+ const outsideId='INV-OUTSIDE-'+randomUUID().slice(0,8);
+ const outside=signInvoice({invoice:{id:outsideId,payee:bean.payee,asset:'near',amount:parseNear('0.4')},
+  merchant_id:bean.id,bill_id:'outside-'+randomUUID().slice(0,8),vault:after.vault,domain:bean.domain,
+  key_version:bean.version,expires_at:String(Date.now()+3600000)},createPrivateKey(bean.privateKey));
+ await importAgentBill(directory,outside);
+ const imported:any=await state();
+ assert.equal(imported.bills.find((bill:any)=>bill.id===outsideId).outcome,'queued');
+ assert.ok(!imported.mail.invoices.some((invoice:any)=>invoice.id===outsideId));
  const again:any=await state();
  assert.deepEqual(again.suppliers.map((supplier:any)=>supplier.received),after.suppliers.map((supplier:any)=>supplier.received));
  assert.equal(again.day_vault_start,received.available);
@@ -39,6 +52,17 @@ test('pay-one settles only its chosen café bill once on chain',{timeout:240000}
  assert.equal(all.run.vault_before,after.available);
  assert.ok(all.suppliers.every((supplier:any)=>supplier.received===parseNear('0.4')));
  assert.equal(BigInt(received.available)-BigInt(all.available),BigInt(parseNear('1.2')));
+ assert.equal(all.bills.find((bill:any)=>bill.id===outsideId).outcome,'queued');
+ assert.ok(!all.run.order.includes(outsideId));
+ assert.equal(all.suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,after.suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,
+  'outside bill must leave its supplier on-chain balance unchanged');
+ const stopped=await runAgentBill(directory,outsideId,false);
+ assert.equal(stopped.record.outcome,'blocked');
+ assert.match(stopped.record.error??'',/rolling daily budget exceeded/i);
+ await assert.rejects(()=>retryCafeBill(directory,outsideId),/That bill isn't in today's café mailbox/);
+ assert.equal((await route('POST','/api/demo/retry',{id:outsideId})).status,400);
+ assert.equal((await state() as any).suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,
+  after.suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received);
  }finally{if(existsSync(directory))await backupCafe(directory);}
 });
 

@@ -32,6 +32,10 @@ export function createDemoRoute(deps:{network:()=>string|undefined;state:()=>Pro
   if(busy)return fail(409,'A café operation is already in progress.');
   busy=true;
   try{
+   if(action==='retry'){
+    const id=(input as {id:string}).id, before=await deps.state() as {ready?:boolean;mail?:{invoices?:{id:string}[]}};
+    if(!before.ready||!before.mail?.invoices?.some(invoice=>invoice.id===id))return fail(400,"That bill isn't in today's café mailbox.");
+   }
    if(action==='pay-one'){
     const id=(input as {id:string}).id, before=await deps.state() as {ready?:boolean;available?:string;mail?:{invoices?:{id:string}[]};bills?:{id:string;outcome:string}[]};
     if(!before.ready||!before.mail?.invoices?.some(invoice=>invoice.id===id))return fail(400,'Unknown café invoice.');
