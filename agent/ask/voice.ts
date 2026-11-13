@@ -190,6 +190,10 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
  if(new Set(ids).size>1&&outcomes.length&&outcomes.every(m=>m.index>lastIdAt)){
   if(outcomes.some(m=>ids.some(i=>!billAllows[OUTCOME_TOKEN[m[0]]](pack.invoices[i]))))return no('shared outcome contradicts an invoice');
  }
+ const amounts=[...text.matchAll(/\b\d+(?:\.\d+)?\s+near\b/g)];
+ if(new Set(ids).size>1&&amounts.length&&amounts.every(m=>m.index>lastIdAt)&&outcomes.every(m=>m.index>lastIdAt)){
+  if(amounts.some(m=>ids.some(i=>pack.invoices[i].amount_near===null||Number(pack.invoices[i].amount_near)!==Number(m[0].split(/\s+/)[0]))))return no('shared amount contradicts an invoice');
+ }
  // A flag phrase ("blocked attempt", "duplicate bill") is checked against the invoice it is said about.
  for(const i of new Set(ids))for(const f of pack.invoices[i].flags)text=text.replace(new RegExp(`\\b${escape(f.replace(/_/g,' '))}\\b`,'g'),` §f${i} `);
  const suppliers=keys.includes('suppliers')?new Map(pack.totals.per_merchant.map(m=>[lower(m.merchant),m.paid_near])):new Map<string,string>();

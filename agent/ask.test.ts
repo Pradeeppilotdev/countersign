@@ -1406,3 +1406,21 @@ test('review regressions: chat contains no unchecked action, outcome, link or as
   assert.equal(verifyAnswer(pack,voiced(['chat'],text)).text,REFUSAL,text);
  assert.equal(verifyAnswer(pack,voiced(['chat'],'Hi! How can I help with your vault today?')).text,'Hi! How can I help with your vault today?');
 });
+
+test('review follow-up: a shared amount must match every named invoice',async()=>{
+ const pack=await cafePack();
+ for(const text of ['INV-BEANS-003 and INV-BEANS-001 were 0.1 NEAR.','INV-BEANS-003, INV-CUPS-004 were 0.1 NEAR.']){
+  const result=verifyAnswer(pack,voiced(['activity'],text));
+  assert.equal(result.text,verifyAnswer(pack,select('activity')).text,text);
+  assert.ok(result.reply_dropped,text);
+ }
+ const good='INV-CUPS-004 and INV-BEANS-001 were 0.1 NEAR.';
+ assert.equal(verifyAnswer(pack,voiced(['activity'],good)).reply_dropped,undefined);
+});
+
+test('review follow-up: chat rejects payment actions and approval claims',async()=>{
+ const pack=await cafePack();
+ for(const text of ['Your payment was sent.','Your bill is approved.','The money was transferred.'])
+  assert.equal(verifyAnswer(pack,voiced(['chat'],text)).text,REFUSAL,text);
+ assert.equal(verifyAnswer(pack,voiced(['chat'],'Hi! How can I help with your vault today?')).text,'Hi! How can I help with your vault today?');
+});

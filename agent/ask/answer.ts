@@ -154,7 +154,7 @@ export function checkChat(reply:string,pack:FactsPack):string|null{
  const shape=basicShape(reply,MAX_CHAT);if(shape)return shape;
  if(/\d/.test(reply)||numbersIn(reply).length)return 'A chat reply may not contain numbers.';
  if(idsIn(reply,pack).length)return 'A chat reply may not name an invoice.';
- if(new RegExp(OUTCOME_WORD.source,'i').test(reply)||/\b(?:went through|went|through|cleared)\b/i.test(reply))return 'A chat reply may not state an outcome.';
+ if(new RegExp(OUTCOME_WORD.source,'i').test(reply)||/\b(?:went through|went|through|cleared|sent|send|sending|approv(?:e|ed|al)|authoriz(?:e|ed|ation)|transfer(?:red)?|processed|released|submitted)\b/i.test(reply))return 'A chat reply may not state an outcome or action.';
  if(PAUSE_WORD.test(reply)||POLICY_WORD.test(reply))return 'A chat reply may not describe the vault.';
  // Small talk carries no claims. Any wording is fine, but not an assessment of the vault, its suppliers or its risks.
  if(ASSESSMENT.test(reply))return 'A chat reply may not assess the vault.';
