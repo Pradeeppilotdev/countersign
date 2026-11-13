@@ -14,8 +14,30 @@ type Supplier={id:string;name:string;payee:string;baseline:string;privateKey:str
 // Display copy of each delivered invoice, for the demo mailbox only. It is never read
 // by import or payment code; the vault still decides from the signed invoice itself.
 type MailInvoice={id:string;merchant:string;supplier:string;payee:string;amount:string;expires_at:string;week:number|null};
+type BankEntry={at:string;kind:'faucet'|'deposit';amount:string};
 type Cafe={suppliers:Supplier[];scam:{payee:string;baseline:string};rejected:({id:string;reason:string}&Partial<MailInvoice>)[];ready:boolean;
- mail?:{issued_at:string;invoices:MailInvoice[]}};
+ mail?:{issued_at:string;invoices:MailInvoice[]};bank?:BankEntry[]};
+const YOCTO=10n**24n;
+export const WALLET_FAUCET=5n*YOCTO,GAS_RESERVE=YOCTO/2n;
+export const RESERVE_MESSAGE='Keep 0.5 NEAR in your wallet for fees.';
+// Demo deposit amounts: positive NEAR with up to 24 decimals, exact in yoctoNEAR.
+export function parseDemoAmount(value:unknown){
+ if(typeof value!=='string'||!/^\d{1,9}(\.\d{1,24})?$/.test(value))throw new DeskWebError('Enter an amount in NEAR, like 2 or 0.25 (up to 24 decimals).');
+ const [whole,fraction='']=value.split('.');const amount=BigInt(whole)*YOCTO+BigInt(fraction.padEnd(24,'0'));
+ if(amount<=0n)throw new DeskWebError('Enter an amount greater than 0.');
+ return amount;
+}
+const walletOf=async(desk:SandboxDesk)=>BigInt((await desk.owner.balance()).available.toString());
+// NEAR refunds unused gas to the signer a few blocks after a call. Wait until the
+// owner's balance stops moving so the wallet shown (and any delta) is settled.
+async function settleWallet(desk:SandboxDesk){
+ let last=await walletOf(desk),steady=0;
+ for(let i=0;i<20&&steady<2;i++){
+  await new Promise(r=>setTimeout(r,700));
+  const next=await walletOf(desk);steady=next===last?steady+1:0;last=next;
+ }
+ return last;
+}
 const WEEK_MS=7*24*60*60*1000;
 export function requireLocalDemo(network=process.env.COUNTERSIGN_NETWORK){
  if(network!==undefined&&network!=='local')throw new DeskWebError('Demo café is available only on the local sandbox.');
@@ -47,6 +69,7 @@ export async function setupCafe(directory:string){
   await setDeskPolicy(desk,'0.5','1.2',120,undefined,cafe.suppliers.map(s=>({id:s.id,payee:s.payee})));
   const now=String((await desk.vault.view('policy_snapshot',{})).now);
   await addDeskWeeklyService(desk,'weekly-milk','Milk-Co','0.5',now);
+  await settleWallet(desk);
   cafe.ready=true;save();
  });
  return readCafe(directory);
@@ -73,7 +96,8 @@ export async function readCafe(directory:string){
   }
   const scamReceived=(BigInt((await desk.worker.account(cafe.scam.payee).balance()).total.toString())-BigInt(cafe.scam.baseline)).toString();
   return {ready:true,network:'LOCAL_SANDBOX',vault:state.vault,available:await desk.vault.view('available_balance',{}),policy:state.policy,
-   suppliers,scam:{payee:cafe.scam.payee,received:scamReceived},rejected:cafe.rejected,mail:cafe.mail??null,bills:state.bills,read_at:new Date().toISOString()};
+   suppliers,scam:{payee:cafe.scam.payee,received:scamReceived},rejected:cafe.rejected,mail:cafe.mail??null,bank:cafe.bank??[],
+   wallet_yocto:(await walletOf(desk)).toString(),bills:state.bills,read_at:new Date().toISOString()};
  });
 }
 export async function receiveCafe(directory:string){
@@ -131,9 +155,35 @@ export async function payCafe(directory:string,live:boolean,progress:CafeProgres
 }
 export async function topUpCafe(directory:string){
  requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
- await withDesk(directory,async desk=>{await desk.worker.rootAccount.transfer(desk.owner,parseNear('5'));await desk.owner.call(desk.vault,'fund',{}, {attachedDeposit:parseNear('5')});});
+ await withDesk(directory,async desk=>{await desk.worker.rootAccount.transfer(desk.owner,parseNear('5'));await desk.owner.call(desk.vault,'fund',{}, {attachedDeposit:parseNear('5')});await settleWallet(desk);});
  return readCafe(directory);
 }
+function logBank(directory:string,kind:BankEntry['kind'],amount:bigint){
+ const cafe=config(directory);cafe.bank=[...(cafe.bank??[]),{at:new Date().toISOString(),kind,amount:amount.toString()}];
+ saveJson(join(directory,'cafe.json'),cafe);
+}
+// First half of the old faucet: 5 test NEAR from the sandbox root to Dave's wallet.
+export async function walletFaucetCafe(directory:string){
+ requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
+ await withDesk(directory,async desk=>{await desk.worker.rootAccount.transfer(desk.owner,WALLET_FAUCET.toString());await settleWallet(desk);});
+ logBank(directory,'faucet',WALLET_FAUCET);
+ return readCafe(directory);
+}
+// Second half of the old faucet, with Dave's chosen amount: the owner's existing `fund`.
+export async function depositCafe(directory:string,value:unknown){
+ requireLocalDemo();const amount=typeof value==='bigint'?value:parseDemoAmount(value);
+ if(amount<=0n)throw new DeskWebError('Enter an amount greater than 0.');
+ if(!config(directory).ready)throw new DeskWebError('Open the café first.');
+ await withDesk(directory,async desk=>{
+  const wallet=await walletOf(desk),limit=wallet>GAS_RESERVE?wallet-GAS_RESERVE:0n;
+  if(amount>limit)throw new DeskWebError(`You can deposit up to ${formatYocto(limit)} NEAR. ${RESERVE_MESSAGE}`);
+  await desk.owner.call(desk.vault,'fund',{},{attachedDeposit:amount.toString()});
+  await settleWallet(desk);
+ });
+ logBank(directory,'deposit',amount);
+ return readCafe(directory);
+}
+const formatYocto=(v:bigint)=>{const whole=v/YOCTO,fraction=(v%YOCTO).toString().padStart(24,'0').replace(/0+$/,'');return fraction?`${whole}.${fraction}`:String(whole);};
 export async function backupCafe(directory:string){
  requireLocalDemo();
  if(!existsSync(directory))return null;

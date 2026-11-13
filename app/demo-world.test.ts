@@ -38,7 +38,8 @@ const STATE={ready:true,vault:'cafe.test.near',available:near('4.2'),policy:{per
  ],
  suppliers:[{id:'Bean-Co',name:'Bean Co',payee:'beans.test.near',received:near('0.4'),paid_count:1,receipts:[{invoice_id:BEANS1.id,amount:near('0.4'),attempt_id:'7',payload_hash:'ab'.repeat(32),state:'Settled'}]},
   {id:'Milk-Co',name:'Milk Co',payee:'milk.test.near',received:'0',paid_count:0,receipts:[]}],
- scam:{payee:'bean5.test.near',received:'0'},read_at:new Date().toISOString()};
+ scam:{payee:'bean5.test.near',received:'0'},read_at:new Date().toISOString(),
+ wallet_yocto:'7499876543210987654321098',bank:[{at:new Date().toISOString(),kind:'faucet',amount:near('5')},{at:new Date().toISOString(),kind:'deposit',amount:near('2')}]};
 
 function fakeDocument(t:any){
  const nodes=new Map<string,Element>();
@@ -156,4 +157,38 @@ test('handing the pile to the agent runs the existing Pay all and leaves no succ
  assert.deepEqual(posts,['/api/demo/pay-all']);
  assert.equal(get('#cafe-feedback').textContent,'');
  assert.equal(get('#cafe-feedback').children.length,0);
+});
+
+test('the bank shows Dave\'s wallet and the vault apart, in the top bar too, with today\'s history', async t => {
+ const {get}=await loadCafe(t,'bank');
+ assert.equal(get('#dw-wallet').textContent,'7.4998 NEAR');
+ assert.equal(get('#dw-bank-wallet').textContent,'7.4998 NEAR');
+ assert.equal(get('#dw-bank-wallet').attributes.title,'7.499876543210987654321098 NEAR');
+ assert.equal(get('#dw-vault').textContent,'4.2 NEAR');
+ assert.equal(get('#dw-bank-vault').textContent,'4.2 NEAR');
+ assert.equal(get('#cafe-wallet-actions').textContent,'Get 5 test NEAR');
+ assert.match(get('#dw-bank-history').textContent,/Deposited into the vault2 NEAR.*Got test NEAR into Dave's wallet5 NEAR/);
+ for(const id of ['#cafe-summary','#cafe-wallet-actions','#cafe-actions','#cafe-pay-actions','#cafe-end-actions'])
+  assert.ok(!get(id).textContent.includes('Top up vault'),'the old one-click top-up is not shown: '+id);
+});
+
+test('deposit amounts are checked in exact BigInt maths before anything is sent', async t => {
+ const posts:string[]=[];
+ const {get,ui}=await loadCafe(t,'deposit',posts);
+ const wallet='5000000000000000000000000';
+ assert.equal(ui.depositProblem('4.5',wallet),null);
+ assert.equal(ui.depositProblem('0.000000000000000000000001',wallet),null);
+ assert.match(ui.depositProblem('4.500000000000000000000001',wallet),/^You can deposit up to 4\.5 NEAR\. Keep 0\.5 NEAR in your wallet for fees\.$/);
+ for(const bad of ['0','0.000','-1','abc','1.','1e2','1.0000000000000000000000001',''])assert.ok(ui.depositProblem(bad,wallet),bad);
+ assert.match(ui.depositProblem('1','400000000000000000000000'),/up to 0 NEAR/);
+ // Over the limit in the form: inline error, no request.
+ get('#dw-deposit-amount').value='99';
+ await get('#dw-deposit').handlers.submit({preventDefault(){}});
+ assert.match(get('#dw-deposit-error').textContent,/Keep 0\.5 NEAR in your wallet for fees\./);
+ assert.deepEqual(posts,[]);
+ get('#dw-deposit-amount').value='2';
+ await get('#dw-deposit').handlers.submit({preventDefault(){}});
+ assert.equal(get('#dw-deposit-error').textContent,'');
+ assert.deepEqual(posts,['/api/demo/deposit']);
+ assert.equal(get('#dw-deposit-amount').value,'');
 });

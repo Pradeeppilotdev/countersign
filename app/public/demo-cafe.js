@@ -38,6 +38,22 @@ export function decision(state,invoice){
  return {outcome:bill.outcome,reason:bill.explanation?.meaning??bill.error??null,bill};
 }
 const DECIDED=['paid','blocked','failed','rejected'];
+const YOCTO=10n**24n,GAS_RESERVE=YOCTO/2n,RESERVE_MESSAGE='Keep 0.5 NEAR in your wallet for fees.';
+// Display only: whole NEAR plus up to 4 decimals, truncated. Exact value in the title.
+export function shortNear(yocto){
+ const v=BigInt(yocto),fraction=(v%YOCTO).toString().padStart(24,'0').slice(0,4).replace(/0+$/,'');
+ return (fraction?`${v/YOCTO}.${fraction}`:String(v/YOCTO))+' NEAR';
+}
+// Same rules as the server, in exact BigInt maths; returns an error message or null.
+export function depositProblem(value,walletYocto){
+ let amount;
+ try{amount=BigInt(parseUnits(String(value).trim(),24));}catch{return 'Enter an amount in NEAR, like 2 or 0.25 (up to 24 decimals).';}
+ if(amount<=0n)return 'Enter an amount greater than 0.';
+ const wallet=BigInt(walletYocto??0),limit=wallet>GAS_RESERVE?wallet-GAS_RESERVE:0n;
+ if(amount>limit)return `You can deposit up to ${formatUnits(limit.toString())} NEAR. ${RESERVE_MESSAGE}`;
+ return null;
+}
+function balance(node,yocto){node.textContent=yocto==null?'—':shortNear(yocto);if(yocto!=null)node.setAttribute('title',formatUnits(yocto)+' NEAR');}
 let current=null;
 function invoiceFor(id,fallback){return mailbox(current).find(i=>i.id===id)??fallback;}
 function nameButton(invoice,label){
@@ -81,20 +97,31 @@ function renderMailbox(state,list){
 }
 function render(state,spending=null){
  current=state;
- const ids=['#cafe-summary','#cafe-actions','#cafe-ledger','#cafe-bills','#cafe-rules','#cafe-bank-actions','#cafe-post-actions','#cafe-pay-actions','#cafe-end-actions','#cafe-queue','#cafe-results','#dw-invoice','#dw-invoice-actions'];
- const [summary,actions,ledger,bills,rules,bank,post,pay,end,queue,results]=ids.map(id=>$(id));
+ const ids=['#cafe-summary','#cafe-actions','#cafe-ledger','#cafe-bills','#cafe-rules','#cafe-post-actions','#cafe-pay-actions','#cafe-end-actions','#cafe-queue','#cafe-results','#dw-invoice','#dw-invoice-actions'];
+ const [summary,actions,ledger,bills,rules,post,pay,end,queue,results]=ids.map(id=>$(id));
  for(const id of ids)$(id).replaceChildren();
  $('#cafe-read-at').textContent='';
  if(!state.ready){
-  $('#dw-vault').textContent='—';
+  for(const id of ['#dw-vault','#dw-wallet','#dw-bank-vault','#dw-bank-wallet'])$(id).textContent='—';
+  $('#cafe-wallet-actions').replaceChildren();$('#dw-bank-history').replaceChildren();
   actions.append(el('p',state.existing?'An agent vault exists. Reset backs it up before opening a fresh café.':'Open a café with three suppliers and 5 test NEAR.','dw-muted'));
   actions.append(button(state.existing?'Reset café':'Open the café',()=>mutate(state.existing?'reset':'setup'),{tone:'primary'}));
   return;
  }
- $('#dw-vault').textContent=formatUnits(state.available)+' NEAR';
- // 01 The bank
- summary.append(fact('Vault','Local sandbox · '+state.vault),fact('Balance',formatUnits(state.available)+' test NEAR available'));
- bank.append(button('Top up vault (+5 test NEAR)',()=>mutate('faucet'),{tone:'primary'}));
+ // 01 The bank: Dave's wallet and the vault, kept apart.
+ const wallet=state.wallet_yocto??null;
+ balance($('#dw-vault'),state.available);balance($('#dw-bank-vault'),state.available);
+ balance($('#dw-wallet'),wallet);balance($('#dw-bank-wallet'),wallet);
+ summary.append(fact('Vault account','Local sandbox · '+state.vault+' · '+formatUnits(state.available)+' test NEAR available'));
+ const walletActions=$('#cafe-wallet-actions');walletActions.replaceChildren(button('Get 5 test NEAR',()=>mutate('wallet-faucet'),{tone:'primary'}));
+ const history=$('#dw-bank-history');history.replaceChildren();
+ for(const entry of [...(state.bank??[])].reverse()){
+  const item=el('div','','dw-row dw-history');
+  item.append(el('span',new Date(entry.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),'dw-mono dw-muted'),
+   el('span',entry.kind==='faucet'?"Got test NEAR into Dave's wallet":'Deposited into the vault'),el('strong',formatUnits(entry.amount)+' NEAR','dw-mono'));
+  history.append(item);
+ }
+ if(!state.bank?.length)history.append(el('p','Nothing yet today.','dw-muted'));
  // 02 Your rules (read only)
  rules.append(fact('Per payment',state.policy.per_payment_near+' NEAR'),fact('Daily budget',state.policy.rolling_24h_limit_near+' NEAR · rolling 24 hours'),
   fact('Expires',new Date(state.policy.expires_at).toLocaleTimeString()),
@@ -154,19 +181,32 @@ export async function refreshCafe(){
  try{const reply=await api('/api/demo/state');if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,'');}
  catch(error){notice(feedback,'Could not read café','danger',error.message);}finally{busy=false;lock();}
 }
-async function mutate(action,body={}){
- if(!enabled||busy)return;busy=true;lock();notice(feedback,action==='pay-all'?'Paying queued invoices…':'Updating café…','busy');
+async function mutate(action,body={},inline=null){
+ if(!enabled||busy)return false;busy=true;lock();notice(feedback,action==='pay-all'?'Paying queued invoices…':'Updating café…','busy');
  let polling=false;
  const timer=action==='pay-all'?setInterval(async()=>{
   if(polling)return;polling=true;
   try{const reply=await api('/api/demo/progress');if(reply.ok&&reply.progress.running)$('#cafe-progress').textContent=`${reply.progress.completed} / ${reply.progress.total} processed · ${reply.progress.current??'Starting'}`;}catch{}finally{polling=false;}
  },1200):null;
- try{const reply=await api('/api/demo/'+action,body);if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,'');}
- catch(error){notice(feedback,'Café operation could not finish','danger',error.message);}
+ try{const reply=await api('/api/demo/'+action,body);if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,'');return true;}
+ catch(error){
+  // Form errors stay next to the field; everything else uses the status line.
+  if(inline){notice(feedback,'');inline.textContent=error.message;}
+  else notice(feedback,'Café operation could not finish','danger',error.message);
+  return false;
+ }
  finally{clearInterval(timer);$('#cafe-progress').textContent='';busy=false;lock();}
 }
 $('#cafe-ask').addEventListener('click',event=>ask?.(event.currentTarget));
 $('#dw-viewer-close').addEventListener('click',()=>closeViewer());
+$('#dw-deposit').addEventListener('submit',async event=>{
+ event.preventDefault?.();if(busy)return;
+ const input=$('#dw-deposit-amount'),error=$('#dw-deposit-error'),value=String(input.value??'').trim();
+ const problem=depositProblem(value,current?.wallet_yocto);
+ error.textContent=problem??'';
+ if(problem)return;
+ if(await mutate('deposit',{amount:value},error))input.value='';
+});
 $('#dw-viewer').addEventListener('click',event=>{if(event.target===$('#dw-viewer'))closeViewer();});
 root.addEventListener('keydown',event=>{
  if($('#dw-viewer').hidden)return;

@@ -242,3 +242,37 @@ body.demo-world #demo-cafe .dw-viewer-head h2 { font-size: 15px; }
   body.demo-world .dw-mail-title { font-size: 24px; }
   body.demo-world .dw-viewer { padding: 16px 8px; }
 }
+
+/* Step 3: The bank */
+body.demo-world .dw-bank { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 0.45fr) minmax(0, 1fr); align-items: stretch; border-top: 1px solid var(--dw-line); border-bottom: 1px solid var(--dw-line); margin-top: 8px; }
+body.demo-world .dw-bank-card { padding: 28px 28px 24px; min-width: 0; }
+body.demo-world .dw-bank-card:last-child { border-left: 1px solid var(--dw-line); }
+body.demo-world .dw-bank-value { display: block; font-family: var(--dw-mono); font-size: 44px; font-weight: 700; line-height: 1.1; margin: 10px 0 6px; overflow-wrap: anywhere; }
+body.demo-world .dw-bank-rule {
+  margin: 0; padding: 28px 20px; display: flex; align-items: center; text-align: center; justify-content: center;
+  border-left: 1px solid var(--dw-line); color: var(--dw-text); font-size: 15px; font-weight: 700; line-height: 1.4;
+}
+body.demo-world #demo-cafe .dw-deposit { margin: 18px 0 0; padding: 0; }
+body.demo-world .dw-deposit-row { display: flex; gap: 8px; margin-top: 6px; }
+body.demo-world #demo-cafe .dw-deposit input {
+  flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 0; border: 1px solid var(--dw-line);
+  background: var(--dw-bg); color: var(--dw-text); font-family: var(--dw-mono); font-size: 15px;
+}
+body.demo-world #demo-cafe .dw-deposit input:focus-visible { border-color: var(--dw-green); }
+body.demo-world #demo-cafe .dw-deposit .button { min-height: 40px; }
+body.demo-world .dw-field-error { color: var(--dw-red); font-size: 13px; margin: 8px 0 0; }
+body.demo-world .dw-field-error:empty { display: none; }
+body.demo-world .dw-bank-facts { margin-top: 24px; }
+body.demo-world .dw-history-title { margin-top: 28px; margin-bottom: 8px; }
+body.demo-world .dw-history { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; }
+body.demo-world .dw-history .dw-muted { margin: 0; }
+
+@media (max-width: 900px) {
+  body.demo-world .dw-bank { grid-template-columns: minmax(0, 1fr); }
+  body.demo-world .dw-bank-card { padding: 22px 0; }
+  body.demo-world .dw-bank-card:last-child,
+  body.demo-world .dw-bank-rule { border-left: 0; border-top: 1px solid var(--dw-line); }
+  body.demo-world .dw-bank-rule { padding: 18px 0; justify-content: flex-start; text-align: left; }
+  body.demo-world .dw-bank-value { font-size: 34px; }
+  body.demo-world .dw-history { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; }
+}

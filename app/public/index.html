@@ -84,9 +84,32 @@
             <div id="cafe-actions" class="cafe-actions"></div>
             <section class="dw-chapter" id="dw-chapter-bank" data-chapter="bank" aria-labelledby="dw-bank-title" hidden>
               <p class="dw-kicker">01 · The bank</p>
-              <h2 id="dw-bank-title">The vault holds Dave's money</h2>
-              <div id="cafe-summary" class="dw-rows"></div>
-              <div id="cafe-bank-actions" class="cafe-actions"></div>
+              <h2 id="dw-bank-title">Two places Dave's money lives</h2>
+              <div class="dw-bank">
+                <article class="dw-bank-card" aria-labelledby="dw-wallet-title">
+                  <p class="dw-label" id="dw-wallet-title">Dave's wallet</p>
+                  <strong id="dw-bank-wallet" class="dw-bank-value">—</strong>
+                  <p class="dw-muted">Dave's own account. Only Dave can spend from it.</p>
+                  <div id="cafe-wallet-actions" class="cafe-actions"></div>
+                </article>
+                <p class="dw-bank-rule">Your agent can only pay from the vault. Money in your wallet is safe from it.</p>
+                <article class="dw-bank-card" aria-labelledby="dw-vaultcard-title">
+                  <p class="dw-label" id="dw-vaultcard-title">The vault</p>
+                  <strong id="dw-bank-vault" class="dw-bank-value dw-green">—</strong>
+                  <p class="dw-muted">What the agent may spend from, under your rules.</p>
+                  <form id="dw-deposit" class="dw-deposit" novalidate>
+                    <label for="dw-deposit-amount" class="dw-label">Amount (NEAR)</label>
+                    <div class="dw-deposit-row">
+                      <input id="dw-deposit-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="2" aria-describedby="dw-deposit-error" />
+                      <button id="dw-deposit-submit" class="button primary small" type="submit">Deposit into vault</button>
+                    </div>
+                    <p id="dw-deposit-error" class="dw-field-error" role="alert"></p>
+                  </form>
+                </article>
+              </div>
+              <div id="cafe-summary" class="dw-rows dw-bank-facts"></div>
+              <p class="dw-label dw-history-title">Today at the bank</p>
+              <div id="dw-bank-history" class="dw-rows"></div>
             </section>
             <section class="dw-chapter" id="dw-chapter-rules" data-chapter="rules" aria-labelledby="dw-rules-title" hidden>
               <p class="dw-kicker">02 · Your rules</p>

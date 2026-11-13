@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,existsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe} from '../agent/demo-cafe.ts';
+import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
 import {lookalike} from '../agent/ask/check.ts';
 
@@ -13,6 +13,26 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
  try{
   const opened:any=await setupCafe(directory);assert.equal(opened.suppliers.length,3);
   assert.ok(opened.suppliers.every((s:any)=>s.received==='0'));
+  // The bank: wallet faucet adds exactly 5 NEAR to the owner; a deposit moves exactly its amount.
+  const funded5:any=await walletFaucetCafe(directory);
+  assert.equal(BigInt(funded5.wallet_yocto)-BigInt(opened.wallet_yocto),BigInt(parseNear('5')));
+  assert.equal(funded5.available,opened.available);
+  const deposited:any=await depositCafe(directory,'2');
+  assert.equal(BigInt(deposited.available)-BigInt(funded5.available),BigInt(parseNear('2')));
+  const fees=BigInt(funded5.wallet_yocto)-BigInt(deposited.wallet_yocto)-BigInt(parseNear('2'));
+  assert.ok(fees>0n&&fees<BigInt(parseNear('0.01')),'wallet pays the amount plus small gas fees: '+fees);
+  const limit=BigInt(deposited.wallet_yocto)-BigInt(parseNear('0.5'));
+  const over=(limit+1n).toString(),whole=over.slice(0,-24)||'0',frac=over.slice(-24).padStart(24,'0');
+  await assert.rejects(()=>depositCafe(directory,`${whole}.${frac}`),new RegExp(RESERVE_MESSAGE.replace(/\./g,'\\.')));
+  await assert.rejects(()=>depositCafe(directory,'0'),/greater than 0/);
+  const unchanged:any=await readCafe(directory);
+  assert.equal(unchanged.available,deposited.available);
+  assert.deepEqual(unchanged.bank.map((e:any)=>[e.kind,e.amount]),[['faucet',parseNear('5')],['deposit',parseNear('2')]]);
+  const previous=process.env.COUNTERSIGN_NETWORK;process.env.COUNTERSIGN_NETWORK='testnet';
+  try{
+   await assert.rejects(()=>walletFaucetCafe(directory),/only on the local sandbox/);
+   await assert.rejects(()=>depositCafe(directory,'1'),/only on the local sandbox/);
+  }finally{if(previous===undefined)delete process.env.COUNTERSIGN_NETWORK;else process.env.COUNTERSIGN_NETWORK=previous;}
   const received:any=await receiveCafe(directory);
   assert.equal(received.bills.length,6);assert.equal(received.rejected.length,1);
   assert.match(received.rejected[0].reason,/Invalid merchant signature/);
