@@ -262,6 +262,11 @@ body.demo-world #demo-cafe .dw-deposit input:focus-visible { border-color: var(-
 body.demo-world #demo-cafe .dw-deposit .button { min-height: 40px; }
 body.demo-world .dw-field-error { color: var(--dw-red); font-size: 13px; margin: 8px 0 0; }
 body.demo-world .dw-field-error:empty { display: none; }
+body.demo-world #dw-chapter-pay[data-queue-empty="true"] > .dw-queue-col { display: none; }
+@media (min-width: 901px) {
+  body.demo-world #dw-chapter-pay[data-queue-empty="true"] { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); }
+  body.demo-world #dw-chapter-pay[data-queue-empty="true"] > .dw-main { padding-left: 0; border-left: 0; }
+}
 body.demo-world .dw-bank-facts { margin-top: 24px; }
 body.demo-world .dw-history-title { margin-top: 28px; margin-bottom: 8px; }
 body.demo-world .dw-history { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; }

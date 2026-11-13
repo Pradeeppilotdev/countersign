@@ -9,7 +9,7 @@ export async function enableCafe(){
  $('#demo-nav').hidden=!enabled;return enabled;
 }
 function lock(){root.setAttribute('aria-busy',String(busy));root.querySelectorAll('button,input').forEach(n=>{if(n.id!=='dw-viewer-close')n.disabled=busy;});}
-const BUDGET_SPENT="Today's budget is spent: the vault is doing its job. Bills blocked by the budget can be resumed once earlier payments are 24 hours old, or raise the daily budget in Your rules and press Try again. Policy and invoice expiry still apply. Press Start a new day to reset the café.";
+const BUDGET_SPENT="Today's budget is spent. Raise it in Your rules and choose Try again, or wait for earlier spending to leave the 24-hour window. Topping up adds balance, not budget. Expired bills stay blocked.";
 // The existing Agent payments state already carries the vault's rolling usage.
 async function readSpending(state){
  if(!state.ready)return null;
@@ -147,7 +147,7 @@ function render(state,spending=null){
  pay.append(button('Pay all',()=>mutate('pay-all',{live:$('#cafe-live').checked===true}),{tone:'primary'}));
  const live=el('input');live.type='checkbox';live.id='cafe-live';const label=el('label','','cafe-live');label.append(live,el('span','Use live AI'));pay.append(label);
  // Sits with the payment results, beside Pay all.
- if(spent){const note=el('p',BUDGET_SPENT+' Topping up adds balance; it does not raise the daily budget (rolling 24 hours).','cafe-budget-note');note.setAttribute('role','status');pay.append(note);}
+ if(spent){const note=el('p',BUDGET_SPENT,'cafe-budget-note');note.setAttribute('role','status');pay.append(note);}
  const ordered=resultOrder(state,list),counts={paid:0,stopped:0,rejected:0};
  for(const invoice of ordered){
   const result=decision(state,invoice);
@@ -158,7 +158,7 @@ function render(state,spending=null){
   }
   count(counts,result.outcome);results.append(resultRow(invoice,result));
  }
- if(!queue.children?.length)queue.append(el('p','Nothing waiting.','dw-muted'));
+ finishQueue(queue);
  if(!results.children?.length)results.append(el('p','No payments yet. Press Pay all.','dw-muted'));
  showCounter(counts,state.run?.vault_before??null,state.available);
  // 05 End of day
@@ -167,6 +167,11 @@ function render(state,spending=null){
   button('Start a new day',()=>mutate('reset'),{tone:'secondary'}),button('Refresh ledger',()=>refreshCafe(),{tone:'ghost'}));
 }
 const BUDGET_STOP=/rolling daily budget exceeded/i;
+function finishQueue(queue){
+ const empty=!queue.children?.length;
+ $('#dw-chapter-pay').setAttribute('data-queue-empty',String(empty));
+ if(empty)queue.append(el('p','Nothing waiting.','dw-muted'));
+}
 // Only a bill the vault stopped for the daily budget, with its saved proposal, can be tried again.
 export const canRetry=bill=>bill?.outcome==='blocked'&&bill.has_proposal===true&&BUDGET_STOP.test(bill.error??'');
 // Processing order: refused at intake first, then the latest run's order, then the rest as delivered.
@@ -217,7 +222,7 @@ export function renderRun(progress){
   if(done.has(id)||id===progress.current||!byId.has(id))continue;
   const invoice=byId.get(id);queue.append(row(invoice.supplier+' · '+shortBill(invoice.id),formatUnits(invoice.amount)+' NEAR','queued'));
  }
- if(!queue.children?.length)queue.append(el('p','Nothing waiting.','dw-muted'));
+ finishQueue(queue);
  const before=progress.vault_before??null;
  showCounter(counts,before,before==null?null:(BigInt(before)-paid).toString());
 }
