@@ -2,15 +2,15 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createDemoRoute} from './demo-route.ts';
 import {DeskWebError} from '../agent/desk-web.ts';
-const actions=['state','progress','setup','receive','pay-all','faucet','wallet-faucet','deposit','set-rules','renew-rules','reset'];
+const actions=['state','progress','setup','receive','pay-all','faucet','wallet-faucet','deposit','set-rules','renew-rules','retry','reset'];
 const RULES={per_bill:'0.5',daily_budget:'2',hours:'3'};
-const bodyFor=(action:string)=>action==='pay-all'?{live:false}:action==='deposit'?{amount:'1'}:action==='set-rules'?RULES:{};
+const bodyFor=(action:string)=>action==='pay-all'?{live:false}:action==='deposit'?{amount:'1'}:action==='set-rules'?RULES:action==='retry'?{id:'INV-PASTRY-02-abc'}:{};
 function fixture(network?:string){
  let calls=0;
  const op=async()=>{calls++;return {ready:true};};
- const deposits:bigint[]=[],rules:any[]=[];
+ const deposits:bigint[]=[],rules:any[]=[],retries:string[]=[];
  return {route:createDemoRoute({network:()=>network,state:op,setup:op,receive:op,pay:op,faucet:op,walletFaucet:op,deposit:async(amount:bigint)=>{deposits.push(amount);return op();},
-  setRules:async(r:any)=>{rules.push(r);return op();},renewRules:op,reset:op,modelReady:()=>false}),calls:()=>calls,deposits,rules};
+  setRules:async(r:any)=>{rules.push(r);return op();},renewRules:op,retry:async(id:string)=>{retries.push(id);return op();},reset:op,modelReady:()=>false}),calls:()=>calls,deposits,rules,retries};
 }
 test('all demo routes refuse every non-local selector before invoking operations',async()=>{
  for(const network of ['mainnet','testnet','sandbox','','remote']){
@@ -33,13 +33,14 @@ test('demo mutation bodies and model choice are strictly validated',async()=>{
 test('demo rejects concurrent operations but exposes progress',async()=>{
  let finish!:()=>void;const pending=new Promise<void>(resolve=>finish=resolve);
  const op=async()=>{};
- const route=createDemoRoute({network:()=>undefined,state:op,setup:op,receive:op,pay:async(_,progress)=>{progress.running=true;await pending;},faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,reset:op,modelReady:()=>false});
+ const route=createDemoRoute({network:()=>undefined,state:op,setup:op,receive:op,pay:async(_,progress)=>{progress.running=true;await pending;},faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,retry:op,reset:op,modelReady:()=>false});
  const run=route('POST','/api/demo/pay-all',{live:false});
  assert.equal((await route('POST','/api/demo/reset',{})).status,409);
  assert.equal((await route('POST','/api/demo/wallet-faucet',{})).status,409);
  assert.equal((await route('POST','/api/demo/deposit',{amount:'1'})).status,409);
  assert.equal((await route('POST','/api/demo/set-rules',RULES)).status,409);
  assert.equal((await route('POST','/api/demo/renew-rules',{})).status,409);
+ assert.equal((await route('POST','/api/demo/retry',{id:'INV-1'})).status,409);
  assert.equal((await route('GET','/api/demo/progress',undefined)).body.progress?.running,true);
  finish();await run;
 });
@@ -61,7 +62,7 @@ test('deposit takes exactly one amount string and passes exact yoctoNEAR; bad am
 });
 test('a deposit over the wallet minus the gas reserve comes back as a 400 with the reason',async()=>{
  const op=async()=>({ready:true});
- const route=createDemoRoute({network:()=>'local',state:op,setup:op,receive:op,pay:op,faucet:op,walletFaucet:op,setRules:op,renewRules:op,
+ const route=createDemoRoute({network:()=>'local',state:op,setup:op,receive:op,pay:op,faucet:op,walletFaucet:op,setRules:op,renewRules:op,retry:op,
   deposit:async()=>{throw new DeskWebError('You can deposit up to 4.5 NEAR. Keep 0.5 NEAR in your wallet for fees.');},reset:op,modelReady:()=>false});
  const reply=await route('POST','/api/demo/deposit',{amount:'5'});
  assert.equal(reply.status,400);
@@ -94,4 +95,25 @@ test('set-rules takes three strings, checks them exactly, and passes yoctoNEAR a
  assert.equal((await f.route('POST','/api/demo/set-rules',{per_bill:'0.000000000000000000000001',daily_budget:'5',hours:'24'})).status,200);
  assert.deepEqual(f.rules,[{per:5n*10n**23n,daily:2n*10n**24n,hours:3},{per:1n,daily:5n*10n**24n,hours:24}]);
  assert.equal((await f.route('POST','/api/demo/renew-rules',{})).status,200);
+});
+
+test('retry takes exactly one invoice reference',async()=>{
+ const f=fixture('local');
+ for(const body of [{},{id:''},{id:5},{id:'a b'},{id:'INV-1',live:false},{id:'x'.repeat(129)}])
+  assert.equal((await f.route('POST','/api/demo/retry',body)).status,400,JSON.stringify(body));
+ assert.equal(f.calls(),0);
+ assert.equal((await f.route('POST','/api/demo/retry',{id:'INV-PASTRY-02-abc'})).status,200);
+ assert.deepEqual(f.retries,['INV-PASTRY-02-abc']);
+});
+test('progress reports finished results as a copy, in processing order',async()=>{
+ let release!:()=>void;const hold=new Promise<void>(r=>release=r);
+ const op=async()=>({});
+ const route=createDemoRoute({network:()=>'local',state:op,setup:op,receive:op,faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,retry:op,reset:op,modelReady:()=>false,
+  pay:async(_,progress)=>{Object.assign(progress,{running:true,order:['B','A'],results:[{id:'B',outcome:'paid',error:null,explanation:null}],current:'A',vault_before:'5'});await hold;}});
+ const run=route('POST','/api/demo/pay-all',{live:false});
+ const reply=(await route('GET','/api/demo/progress',undefined)).body.progress;
+ assert.deepEqual([reply.order,reply.results.map((r:any)=>r.id),reply.current,reply.vault_before],[['B','A'],['B'],'A','5']);
+ reply.results.push({id:'X'});
+ assert.equal((await route('GET','/api/demo/progress',undefined)).body.progress.results.length,1,'callers cannot change live progress');
+ release();await run;
 });

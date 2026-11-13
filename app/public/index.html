@@ -175,6 +175,10 @@
               <div class="dw-col dw-main">
                 <p class="dw-kicker">04 · Agent pays</p>
                 <h2 id="dw-pay-title">The agent pays, the vault decides</h2>
+                <div class="dw-counter" aria-live="polite">
+                  <p id="dw-run-counts" class="dw-counter-counts"></p>
+                  <p id="dw-run-vault" class="dw-counter-vault dw-mono"></p>
+                </div>
                 <div id="cafe-pay-actions" class="cafe-actions"></div>
                 <p id="cafe-progress" role="status" aria-live="polite"></p>
                 <button id="cafe-ask" class="button ghost small" type="button">Ask Dave how it went</button>
@@ -186,9 +190,19 @@
             </section>
             <section class="dw-chapter" id="dw-chapter-end" data-chapter="end" aria-labelledby="dw-end-title" hidden>
               <p class="dw-kicker">05 · End of day</p>
-              <h2 id="dw-end-title">Supplier ledger</h2>
-              <p id="cafe-read-at" class="dw-muted"></p>
-              <div id="cafe-ledger" class="cafe-ledger"></div>
+              <h2 id="dw-end-title">How today went</h2>
+              <div id="dw-end-stats" class="dw-stats"></div>
+              <div class="dw-end">
+                <div class="dw-end-col">
+                  <p class="dw-label">Who got paid</p>
+                  <p id="cafe-read-at" class="dw-muted"></p>
+                  <div id="cafe-ledger" class="dw-rows dw-ledger"></div>
+                </div>
+                <div class="dw-end-col">
+                  <p class="dw-label">What was stopped and why</p>
+                  <div id="dw-end-stopped" class="dw-rows"></div>
+                </div>
+              </div>
               <div id="cafe-end-actions" class="cafe-actions"></div>
             </section>
           </div>

@@ -139,7 +139,7 @@ test('the invoice viewer opens from results and from ledger receipts, and closes
  get('#demo-cafe').handlers.keydown({key:'Escape',preventDefault(){}});
  assert.equal(viewer.hidden,true);
  assert.equal(doc.activeElement,fromResults,'focus returns to the opener');
- assert.ok(all(get('#cafe-ledger')).some(n=>n.tag==='h3'&&n.textContent==='bean5.test.near · not a supplier'));
+ assert.match(get('#cafe-ledger').textContent,/bean5\.test\.near0 NEAR received · not a supplier/);
  assert.ok(!get('#cafe-ledger').textContent.includes('Scam payee'));
  const fromLedger=byText(get('#cafe-ledger'),'BEANS-01 · 0.4 NEAR')!;
  fromLedger.click();
@@ -232,4 +232,70 @@ test('expired rules show the banner, and renew keeps the same limits', async t =
  assert.equal(get('#dw-hours').value,'2');
  await get('#dw-rules-renew').handlers.click({});
  assert.deepEqual(posts,['/api/demo/renew-rules']);
+});
+
+const withState=(t:any,patch:any)=>{const saved={...STATE};Object.assign(STATE,patch);t.after(()=>{for(const k of Object.keys(patch))delete (STATE as any)[k];Object.assign(STATE,saved);});};
+const rowTitles=(node:Element)=>node.children.map(r=>r.children[0]?.textContent);
+
+test('during Pay all, results fill in one at a time in processing order with a live counter', async t => {
+ const {get,ui}=await loadCafe(t,'live-run');
+ const base={running:true,order:[MILK1.id,BEANS1.id,PASTRY2.id],vault_before:near('5'),total:3};
+ ui.renderRun({...base,results:[],current:MILK1.id,completed:0});
+ assert.deepEqual(rowTitles(get('#cafe-results')),['Bean Co · BEANS-03REJECTED','Milk Co · MILK-01Checking…']);
+ assert.deepEqual(get('#cafe-queue').children.map(r=>r.children[0].textContent),['Bean Co · BEANS-01QUEUED','Pastry Co · PASTRY-02QUEUED']);
+ assert.equal(get('#dw-run-counts').textContent,'0 paid · 0 stopped · 1 rejected');
+ assert.equal(get('#dw-run-vault').textContent,'Vault 5 → 5 NEAR');
+ ui.renderRun({...base,current:BEANS1.id,completed:1,results:[{id:MILK1.id,outcome:'blocked',error:'Service period already claimed',explanation:{meaning:'Another invoice already used this service week.'}}]});
+ assert.deepEqual(rowTitles(get('#cafe-results')),['Bean Co · BEANS-03REJECTED','Milk Co · MILK-01STOPPED','Bean Co · BEANS-01Checking…']);
+ ui.renderRun({...base,current:PASTRY2.id,completed:2,results:[{id:MILK1.id,outcome:'blocked',error:'x',explanation:null},{id:BEANS1.id,outcome:'paid',error:null,explanation:null}]});
+ assert.deepEqual(rowTitles(get('#cafe-results')),['Bean Co · BEANS-03REJECTED','Milk Co · MILK-01STOPPED','Bean Co · BEANS-01PAID','Pastry Co · PASTRY-02Checking…']);
+ assert.equal(get('#dw-run-counts').textContent,'1 paid · 1 stopped · 1 rejected');
+ assert.equal(get('#dw-run-vault').textContent,'Vault 5 → 4.6 NEAR');
+ assert.equal(get('#cafe-queue').textContent,'Nothing waiting.');
+ assert.ok(!all(get('#cafe-results')).some(n=>n.tag==='button'&&/Try again|Ask Dave/.test(n.textContent)),'no actions mid-run');
+});
+
+test('after the run, results keep processing order, the counter matches, and only budget stops offer Try again', async t => {
+ const posts:string[]=[];
+ withState(t,{run:{order:[PASTRY2.id,MILK1.id,BEANS1.id],vault_before:near('5')},day_vault_start:near('5'),available:near('4.6'),
+  bills:[
+   {id:BEANS1.id,merchant:'Bean-Co',payee:'beans.test.near',amount_near:'0.4',outcome:'paid',error:null,explanation:null,has_proposal:true},
+   {id:MILK1.id,merchant:'Milk-Co',payee:'milk.test.near',amount_near:'0.4',outcome:'blocked',error:'Service period already claimed by [INV-MILK-02-abc12345].',explanation:{meaning:'Another invoice already used this service week.'},has_proposal:true},
+   {id:PASTRY2.id,merchant:'Pastry-Co',payee:'pastry.test.near',amount_near:'0.5',outcome:'blocked',error:'Rolling daily budget exceeded.',explanation:{meaning:'Paying this would take the last 24 hours of spending over your daily budget.'},has_proposal:true},
+  ]});
+ const {get,ui}=await loadCafe(t,'after-run',posts);
+ assert.deepEqual(rowTitles(get('#cafe-results')),['Bean Co · BEANS-03REJECTED','Pastry Co · PASTRY-02STOPPED','Milk Co · MILK-01STOPPED','Bean Co · BEANS-01PAID']);
+ assert.equal(get('#dw-run-counts').textContent,'1 paid · 2 stopped · 1 rejected');
+ assert.equal(get('#dw-run-vault').textContent,'Vault 5 → 4.6 NEAR');
+ const rows=get('#cafe-results').children,retry=(r:Element)=>byText(r,'Try again');
+ assert.ok(retry(rows[1]),'budget-stopped row offers Try again');
+ assert.equal(retry(rows[0]),undefined);assert.equal(retry(rows[2]),undefined);assert.equal(retry(rows[3]),undefined);
+ assert.equal(ui.canRetry({outcome:'blocked',error:'Rolling daily budget exceeded.',has_proposal:false}),false);
+ await retry(rows[1])!.click();
+ assert.deepEqual(posts,['/api/demo/retry']);
+});
+
+test('End of day totals match the ledger and list what was stopped and why', async t => {
+ withState(t,{day_vault_start:near('5'),available:near('4.2'),
+  suppliers:[{id:'Bean-Co',name:'Bean Co',payee:'beans.test.near',received:near('0.4'),paid_count:1,receipts:[{invoice_id:BEANS1.id,amount:near('0.4'),attempt_id:'7',payload_hash:'ab'.repeat(32),state:'Settled'}]},
+   {id:'Milk-Co',name:'Milk Co',payee:'milk.test.near',received:near('0.4'),paid_count:1,receipts:[{invoice_id:MILK1.id,amount:near('0.4'),attempt_id:'8',payload_hash:'cd'.repeat(32),state:'Settled'}]},
+   {id:'Pastry-Co',name:'Pastry Co',payee:'pastry.test.near',received:'0',paid_count:0,receipts:[]}],
+  bills:[
+   {id:BEANS1.id,merchant:'Bean-Co',payee:'beans.test.near',amount_near:'0.4',outcome:'paid',error:null,explanation:null},
+   {id:MILK1.id,merchant:'Milk-Co',payee:'milk.test.near',amount_near:'0.4',outcome:'paid',error:null,explanation:null},
+   {id:PASTRY2.id,merchant:'Pastry-Co',payee:'pastry.test.near',amount_near:'0.5',outcome:'blocked',error:'Rolling daily budget exceeded.',explanation:{meaning:'Over the daily budget.'},has_proposal:true},
+  ]});
+ const {get,ui,asked}=await loadCafe(t,'end-of-day');
+ const totals=ui.endTotals(STATE,ui.resultOrder(STATE,STATE.mail.invoices));
+ const ledgerSum=STATE.suppliers.reduce((s:bigint,x:any)=>s+BigInt(x.received),0n).toString();
+ assert.deepEqual(totals,{paid:ledgerSum,suppliers:2,stopped:1,rejected:1,vault_start:near('5'),vault_now:near('4.2')});
+ assert.deepEqual(get('#dw-end-stats').children.map(c=>c.textContent),['Paid 0.8 NEARto 2 suppliers','Stopped 1bill','Rejected 1at intake','Vault: 5 → 4.2 NEARsince the first run today']);
+ assert.match(get('#cafe-ledger').textContent,/Bean Co0\.4 NEAR1 bill paid · beans\.test\.nearBEANS-01 · 0\.4 NEAR/);
+ assert.ok(byText(get('#cafe-ledger'),'MILK-01 · 0.4 NEAR'),'each paid invoice opens the viewer');
+ assert.deepEqual(rowTitles(get('#dw-end-stopped')),['Bean Co · BEANS-03REJECTED','Pastry Co · PASTRY-02STOPPED']);
+ assert.match(get('#dw-end-stopped').textContent,/The signature doesn't match.*Over the daily budget\./s);
+ assert.equal(byText(get('#dw-end-stopped'),'Try again'),undefined);
+ byText(get('#cafe-end-actions'),'Ask Dave how today went')!.click();
+ assert.deepEqual(asked,['How is my agent doing?']);
+ assert.ok(byText(get('#cafe-end-actions'),'Start a new day'));
 });

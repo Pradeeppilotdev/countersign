@@ -9,7 +9,7 @@ export async function enableCafe(){
  $('#demo-nav').hidden=!enabled;return enabled;
 }
 function lock(){root.setAttribute('aria-busy',String(busy));root.querySelectorAll('button,input').forEach(n=>{if(n.id!=='dw-viewer-close')n.disabled=busy;});}
-const BUDGET_SPENT="Today's budget is spent: the vault is doing its job. Bills blocked by the budget can be resumed once earlier payments are 24 hours old. Policy and invoice expiry still apply. Press Start a new day to reset the café.";
+const BUDGET_SPENT="Today's budget is spent: the vault is doing its job. Bills blocked by the budget can be resumed once earlier payments are 24 hours old, or raise the daily budget in Your rules and press Try again. Policy and invoice expiry still apply. Press Start a new day to reset the café.";
 // The existing Agent payments state already carries the vault's rolling usage.
 async function readSpending(state){
  if(!state.ready)return null;
@@ -139,42 +139,113 @@ function render(state,spending=null){
  const live=el('input');live.type='checkbox';live.id='cafe-live';const label=el('label','','cafe-live');label.append(live,el('span','Use live AI'));pay.append(label);
  // Sits with the payment results, beside Pay all.
  if(spent){const note=el('p',BUDGET_SPENT+' Topping up adds balance; it does not raise the daily budget (rolling 24 hours).','cafe-budget-note');note.setAttribute('role','status');pay.append(note);}
- let decided=0;
- for(const invoice of list){
-  const result=decision(state,invoice),title=invoice.supplier+' · '+shortBill(invoice.id);
-  if(!DECIDED.includes(result.outcome)){queue.append(row(title,formatUnits(invoice.amount)+' NEAR',result.outcome));continue;}
-  decided++;
-  const item=el('div','','dw-row dw-result'),head=el('div','','dw-row-head');
-  head.append(nameButton(invoice,title),tag(result.outcome));item.append(head);
-  if(result.outcome!=='paid'){
-   if(result.reason)item.append(el('p',result.reason,'dw-reason'));
-   const why=result.outcome==='rejected'
-    ?event=>ask?.(event.currentTarget,`Why was the ${invoice.supplier} invoice ${shortBill(invoice.id)} rejected?`)
-    :event=>askBill?.(result.bill,event.currentTarget);
-   item.append(button('Ask Dave why',why,{tone:'ghost'}));
-  }
-  results.append(item);
+ const ordered=resultOrder(state,list),counts={paid:0,stopped:0,rejected:0};
+ for(const invoice of ordered){
+  const result=decision(state,invoice);
+  if(!DECIDED.includes(result.outcome)){queue.append(row(invoice.supplier+' · '+shortBill(invoice.id),formatUnits(invoice.amount)+' NEAR',result.outcome));continue;}
+  count(counts,result.outcome);results.append(resultRow(invoice,result));
  }
  if(!queue.children?.length)queue.append(el('p','Nothing waiting.','dw-muted'));
- if(!decided)results.append(el('p','No payments yet. Press Pay all.','dw-muted'));
+ if(!results.children?.length)results.append(el('p','No payments yet. Press Pay all.','dw-muted'));
+ showCounter(counts,state.run?.vault_before??null,state.available);
  // 05 End of day
+ renderEnd(state,ordered);
+ end.append(button('Ask Dave how today went',event=>ask?.(event.currentTarget),{tone:'primary'}),
+  button('Start a new day',()=>mutate('reset'),{tone:'secondary'}),button('Refresh ledger',()=>refreshCafe(),{tone:'ghost'}));
+}
+const BUDGET_STOP=/rolling daily budget exceeded/i;
+// Only a bill the vault stopped for the daily budget, with its saved proposal, can be tried again.
+export const canRetry=bill=>bill?.outcome==='blocked'&&bill.has_proposal===true&&BUDGET_STOP.test(bill.error??'');
+// Processing order: refused at intake first, then the latest run's order, then the rest as delivered.
+export function resultOrder(state,list){
+ const byId=new Map(list.map(i=>[i.id,i])),seen=new Set(),out=[];
+ const add=invoice=>{if(invoice&&!seen.has(invoice.id)){seen.add(invoice.id);out.push(invoice);}};
+ for(const invoice of list)if(decision(state,invoice).outcome==='rejected')add(invoice);
+ for(const id of state.run?.order??[])add(byId.get(id));
+ for(const invoice of list)add(invoice);
+ return out;
+}
+function count(counts,outcome){if(outcome==='paid')counts.paid++;else if(outcome==='rejected')counts.rejected++;else if(DECIDED.includes(outcome))counts.stopped++;}
+export function counterText(counts){return `${counts.paid} paid · ${counts.stopped} stopped · ${counts.rejected} rejected`;}
+function showCounter(counts,before,now){
+ const any=counts.paid+counts.stopped+counts.rejected>0;
+ $('#dw-run-counts').textContent=any?counterText(counts):'';
+ $('#dw-run-vault').textContent=any&&before!=null&&now!=null?`Vault ${formatUnits(before)} → ${formatUnits(now)} NEAR`:'';
+}
+// One result row. checking: the bill the agent is on right now. live: during a run (no actions yet).
+function resultRow(invoice,result,{checking=false,live=false}={}){
+ const title=invoice.supplier+' · '+shortBill(invoice.id),item=el('div','','dw-row dw-result'),head=el('div','','dw-row-head');
+ head.append(nameButton(invoice,title),checking?el('span','Checking…','dw-tag neutral dw-checking'):tag(result.outcome));item.append(head);
+ if(checking||result.outcome==='paid')return item;
+ if(result.reason)item.append(el('p',result.reason,'dw-reason'));
+ if(live)return item;
+ const actions=el('div','','dw-row-actions');
+ if(canRetry(result.bill))actions.append(button('Try again',()=>mutate('retry',{id:invoice.id}),{tone:'secondary'}));
+ const why=result.outcome==='rejected'
+  ?event=>ask?.(event.currentTarget,`Why was the ${invoice.supplier} invoice ${shortBill(invoice.id)} rejected?`)
+  :event=>askBill?.(result.bill,event.currentTarget);
+ actions.append(button('Ask Dave why',why,{tone:'ghost'}));item.append(actions);
+ return item;
+}
+// Live run: rows change only when the server reports a finished bill.
+export function renderRun(progress){
+ if(!current||!progress?.order)return;
+ const list=mailbox(current),byId=new Map(list.map(i=>[i.id,i])),results=$('#cafe-results'),queue=$('#cafe-queue');
+ results.replaceChildren();queue.replaceChildren();
+ const counts={paid:0,stopped:0,rejected:0},done=new Set();let paid=0n;
+ for(const invoice of list){const result=decision(current,invoice);if(result.outcome==='rejected'){count(counts,'rejected');results.append(resultRow(invoice,result,{live:true}));}}
+ for(const finished of progress.results??[]){
+  const invoice=byId.get(finished.id);if(!invoice)continue;done.add(finished.id);
+  count(counts,finished.outcome);if(finished.outcome==='paid')paid+=BigInt(invoice.amount);
+  results.append(resultRow(invoice,{outcome:finished.outcome,reason:finished.explanation?.meaning??finished.error??null},{live:true}));
+ }
+ if(progress.current&&!done.has(progress.current)&&byId.has(progress.current))results.append(resultRow(byId.get(progress.current),null,{checking:true}));
+ for(const id of progress.order){
+  if(done.has(id)||id===progress.current||!byId.has(id))continue;
+  const invoice=byId.get(id);queue.append(row(invoice.supplier+' · '+shortBill(invoice.id),formatUnits(invoice.amount)+' NEAR','queued'));
+ }
+ if(!queue.children?.length)queue.append(el('p','Nothing waiting.','dw-muted'));
+ const before=progress.vault_before??null;
+ showCounter(counts,before,before==null?null:(BigInt(before)-paid).toString());
+}
+// End of day totals come from the on-chain ledger and the vault's own outcomes.
+export function endTotals(state,ordered){
+ const paidTo=(state.suppliers??[]).filter(s=>BigInt(s.received)>0n);
+ const total=paidTo.reduce((sum,s)=>sum+BigInt(s.received),0n),counts={paid:0,stopped:0,rejected:0};
+ for(const invoice of ordered)count(counts,decision(state,invoice).outcome);
+ return {paid:total.toString(),suppliers:paidTo.length,stopped:counts.stopped,rejected:counts.rejected,vault_start:state.day_vault_start??state.available,vault_now:state.available};
+}
+function renderEnd(state,ordered){
+ const totals=endTotals(state,ordered),stats=$('#dw-end-stats'),ledger=$('#cafe-ledger'),stopped=$('#dw-end-stopped');
+ stats.replaceChildren();stopped.replaceChildren();
+ const stat=(value,label)=>{const item=el('div','','dw-stat');item.append(el('strong',value,'dw-mono'),el('span',label,'dw-muted'));stats.append(item);};
+ stat(`Paid ${formatUnits(totals.paid)} NEAR`,`to ${totals.suppliers} ${totals.suppliers===1?'supplier':'suppliers'}`);
+ stat(`Stopped ${totals.stopped}`,totals.stopped===1?'bill':'bills');
+ stat(`Rejected ${totals.rejected}`,'at intake');
+ stat(`Vault: ${formatUnits(totals.vault_start)} → ${formatUnits(totals.vault_now)} NEAR`,'since the first run today');
  for(const supplier of state.suppliers){
-  const card=el('article','','cafe-supplier');
-  card.append(el('h3',supplier.name),el('code',supplier.payee),el('strong',formatUnits(supplier.received)+' NEAR received','dw-mono'),el('p',supplier.paid_count+(supplier.paid_count===1?' bill paid':' bills paid'),'dw-muted'));
-  if(!supplier.receipts.length)card.append(el('p','No paid invoices yet.','dw-muted'));
+  const item=el('div','','dw-row dw-ledger-row'),head=el('div','','dw-row-head');
+  head.append(el('strong',supplier.name),el('strong',formatUnits(supplier.received)+' NEAR','dw-mono dw-green'));
+  item.append(head,el('p',supplier.paid_count+(supplier.paid_count===1?' bill paid':' bills paid')+' · '+supplier.payee,'dw-muted'));
+  const links=el('div','','dw-ledger-links');
   for(const receipt of supplier.receipts){
    const invoice=invoiceFor(receipt.invoice_id,{id:receipt.invoice_id,merchant:supplier.id,supplier:supplier.name,payee:supplier.payee,amount:receipt.amount,expires_at:null,week:null});
-   const line=el('div','','dw-receipt');line.append(nameButton(invoice,shortBill(receipt.invoice_id)+' · '+formatUnits(receipt.amount)+' NEAR'));
-   const detail=el('details');detail.append(el('summary','Proof'),el('code','Invoice: '+receipt.invoice_id),
-    el('code','State: '+receipt.state),el('code','Attempt ID: '+receipt.attempt_id),el('code','Signed payload hash: '+receipt.payload_hash));
-   line.append(detail);card.append(line);
+   links.append(nameButton(invoice,shortBill(receipt.invoice_id)+' · '+formatUnits(receipt.amount)+' NEAR'));
   }
-  ledger.append(card);
+  if(supplier.receipts.length)item.append(links);
+  ledger.append(item);
  }
- const scam=el('article','','cafe-supplier');scam.append(el('h3',state.scam.payee+' · not a supplier'),el('code',state.scam.payee),el('strong',formatUnits(state.scam.received)+' NEAR received','dw-mono'),el('p','Live balance change since café setup.','dw-muted'));ledger.append(scam);
+ const scam=el('div','','dw-row dw-ledger-row'),scamHead=el('div','','dw-row-head');
+ scamHead.append(el('strong',state.scam.payee,'dw-mono'),el('strong',formatUnits(state.scam.received)+' NEAR received · not a supplier','dw-mono'));
+ scam.append(scamHead);ledger.append(scam);
  $('#cafe-read-at').textContent='Live chain read · '+new Date(state.read_at).toLocaleTimeString()+'. Received totals exclude initial account funding.';
- end.append(button('Refresh ledger',()=>refreshCafe(),{tone:'secondary'}),button('Start a new day',()=>mutate('reset'),{tone:'secondary'}));
+ for(const invoice of ordered){
+  const result=decision(state,invoice);
+  if(['blocked','failed','rejected'].includes(result.outcome))stopped.append(resultRow(invoice,{...result,bill:result.bill?{...result.bill,has_proposal:false}:null}));
+ }
+ if(!stopped.children?.length)stopped.append(el('p','Nothing was stopped today.','dw-muted'));
 }
+
 const MAX_RULE_HOURS=24,MAX_RULE_YOCTO=5n*YOCTO;
 // Same messages as the server's parseDemoRules, in exact BigInt maths.
 export function rulesProblem(values,minimumNear=null){
@@ -222,8 +293,11 @@ async function mutate(action,body={},inline=null){
  let polling=false;
  const timer=action==='pay-all'?setInterval(async()=>{
   if(polling)return;polling=true;
-  try{const reply=await api('/api/demo/progress');if(reply.ok&&reply.progress.running)$('#cafe-progress').textContent=`${reply.progress.completed} / ${reply.progress.total} processed · ${reply.progress.current??'Starting'}`;}catch{}finally{polling=false;}
- },1200):null;
+  try{
+   const reply=await api('/api/demo/progress');
+   if(reply.ok&&reply.progress.running){$('#cafe-progress').textContent=`${reply.progress.completed} / ${reply.progress.total} processed`;renderRun(reply.progress);}
+  }catch{}finally{polling=false;}
+ },700):null;
  try{const reply=await api('/api/demo/'+action,body);if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,'');return true;}
  catch(error){
   // Form errors stay next to the field; everything else uses the status line.

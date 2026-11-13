@@ -17,7 +17,9 @@ type Supplier={id:string;name:string;payee:string;baseline:string;privateKey:str
 type MailInvoice={id:string;merchant:string;supplier:string;payee:string;amount:string;expires_at:string;week:number|null};
 type BankEntry={at:string;kind:'faucet'|'deposit';amount:string};
 type Cafe={suppliers:Supplier[];scam:{payee:string;baseline:string};rejected:({id:string;reason:string}&Partial<MailInvoice>)[];ready:boolean;
- mail?:{issued_at:string;invoices:MailInvoice[]};bank?:BankEntry[]};
+ mail?:{issued_at:string;invoices:MailInvoice[]};bank?:BankEntry[];
+ // The latest payment run (processing order) and the vault when the day's first run began.
+ run?:{order:string[];vault_before:string};day_vault_start?:string};
 const YOCTO=10n**24n;
 export const WALLET_FAUCET=5n*YOCTO,GAS_RESERVE=YOCTO/2n;
 export const RESERVE_MESSAGE='Keep 0.5 NEAR in your wallet for fees.';
@@ -116,6 +118,7 @@ export async function readCafe(directory:string){
   const scamReceived=(BigInt((await desk.worker.account(cafe.scam.payee).balance()).total.toString())-BigInt(cafe.scam.baseline)).toString();
   return {ready:true,network:'LOCAL_SANDBOX',vault:state.vault,available:await desk.vault.view('available_balance',{}),policy:state.policy,
    suppliers,scam:{payee:cafe.scam.payee,received:scamReceived},rejected:cafe.rejected,mail:cafe.mail??null,bank:cafe.bank??[],
+   run:cafe.run??null,day_vault_start:cafe.day_vault_start??null,
    wallet_yocto:(await walletOf(desk)).toString(),bills:state.bills,read_at:new Date().toISOString()};
  });
 }
@@ -154,7 +157,9 @@ export async function receiveCafe(directory:string){
  });
  return readCafe(directory);
 }
-export type CafeProgress={running:boolean;completed:number;total:number;current:string|null};
+// results: each bill's real outcome, appended the moment its run finishes, in processing order.
+export type CafeResult={id:string;outcome:string;error:string|null;explanation:{meaning:string}|null};
+export type CafeProgress={running:boolean;completed:number;total:number;current:string|null;order?:string[];results?:CafeResult[];vault_before?:string|null};
 export async function payCafe(directory:string,live:boolean,progress:CafeProgress){
  requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
  const state=await readAgentState(directory);
@@ -163,9 +168,16 @@ export async function payCafe(directory:string,live:boolean,progress:CafeProgres
  const queue=state.bills.filter(b=>['queued','proposed'].includes(b.outcome)).sort((a,b)=>a.id.localeCompare(b.id));
  // Round-robin deliveries: first bill from each supplier, then subsequent bills.
  queue.sort((a,b)=>{const order=(id:string)=>Number(id.match(/-(\d\d)-/)?.[1]??0);return order(a.id)-order(b.id);});
- Object.assign(progress,{running:true,completed:0,total:queue.length,current:null});
+ const vaultBefore=String(await withDesk(directory,desk=>desk.vault.view('available_balance',{})));
+ {const cafe=config(directory);cafe.run={order:queue.map(b=>b.id),vault_before:vaultBefore};cafe.day_vault_start??=vaultBefore;saveJson(join(directory,'cafe.json'),cafe);}
+ Object.assign(progress,{running:true,completed:0,total:queue.length,current:null,order:queue.map(b=>b.id),results:[],vault_before:vaultBefore});
  try{
-  for(const bill of queue){progress.current=bill.id;await runAgentBill(directory,bill.id,live);progress.completed++;}
+  for(const bill of queue){
+   progress.current=bill.id;
+   const {record}=await runAgentBill(directory,bill.id,live);
+   progress.results!.push({id:record.id,outcome:record.outcome,error:record.error??null,explanation:record.explanation?{meaning:record.explanation.meaning}:null});
+   progress.completed++;
+  }
   // Reconcile only genuinely pending saved transfers; no new proposal is made.
   const after=await readAgentState(directory);
   for(const bill of after.bills.filter(b=>b.outcome==='pending'))await resumeAgentBill(directory,bill.id);
@@ -229,6 +241,18 @@ export async function renewRulesCafe(directory:string){
   }
   await settleWallet(desk);
  });
+ return readCafe(directory);
+}
+// "Try again" for a bill the vault stopped only because of the daily budget:
+// the existing resume path re-requests the saved proposal (no model call).
+export const BUDGET_STOP=/rolling daily budget exceeded/i;
+export const budgetRetryable=(bill:{outcome?:string;error?:string|null;has_proposal?:boolean})=>bill.outcome==='blocked'&&bill.has_proposal===true&&BUDGET_STOP.test(bill.error??'');
+export async function retryCafeBill(directory:string,id:string){
+ requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
+ const bill=(await readAgentState(directory)).bills.find(b=>b.id===id);
+ if(!bill)throw new DeskWebError('Unknown invoice.');
+ if(!budgetRetryable(bill))throw new DeskWebError('Only bills stopped by the daily budget can be tried again.');
+ await resumeAgentBill(directory,id);
  return readCafe(directory);
 }
 export async function backupCafe(directory:string){

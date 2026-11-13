@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,existsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe} from '../agent/demo-cafe.ts';
+import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe,retryCafeBill} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
 import {lookalike} from '../agent/ask/check.ts';
 
@@ -65,7 +65,9 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
   assert.equal(received.mail.invoices.find((i:any)=>i.id===received.rejected[0].id).payee,received.scam.payee);
   assert.deepEqual(received.mail.invoices.filter((i:any)=>i.merchant==='Milk-Co').map((i:any)=>i.week),[1,1]);
   assert.ok(received.mail.invoices.filter((i:any)=>i.merchant!=='Milk-Co').every((i:any)=>i.week===null));
-  const paid:any=await payCafe(directory,false,{running:false,completed:0,total:0,current:null});
+  const progress:any={running:false,completed:0,total:0,current:null};
+  const vaultBeforeRun=received.available;
+  const paid:any=await payCafe(directory,false,progress);
   assert.equal(paid.scam.received,'0');
   for(const supplier of paid.suppliers){
    assert.equal(supplier.received,parseNear('0.4'));assert.equal(supplier.paid_count,1);
@@ -78,6 +80,29 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
   const again:any=await payCafe(directory,false,{running:false,completed:0,total:0,current:null});
   assert.deepEqual(again.suppliers,paid.suppliers);
   const funded:any=await topUpCafe(directory);assert.equal(BigInt(funded.available)-BigInt(paid.available),BigInt(parseNear('5')));
+  // Progress reports each bill's real outcome as it finishes, in processing order.
+  assert.equal(progress.results.length,6);
+  assert.deepEqual(progress.results.map((r:any)=>r.id),progress.order);
+  assert.deepEqual(paid.run.order,progress.order);
+  for(const result of progress.results)assert.equal(result.outcome,paid.bills.find((b:any)=>b.id===result.id).outcome,result.id);
+  assert.equal(progress.vault_before,vaultBeforeRun);assert.equal(paid.day_vault_start,vaultBeforeRun);
+  // Try again: only budget stops; still stopped under the old budget; paid once after raising it, never twice.
+  const pastry2=funded.bills.find((b:any)=>b.id.startsWith('INV-PASTRY-02')),beans2=funded.bills.find((b:any)=>b.id.startsWith('INV-BEANS-02'));
+  const pastryReceived=(state:any)=>state.suppliers.find((s:any)=>s.id==='Pastry-Co');
+  assert.equal(pastry2.has_proposal,true);
+  await assert.rejects(()=>retryCafeBill(directory,beans2.id),/Only bills stopped by the daily budget/);
+  await assert.rejects(()=>retryCafeBill(directory,funded.rejected[0].id),/Unknown invoice/);
+  const still:any=await retryCafeBill(directory,pastry2.id);
+  assert.equal(still.bills.find((b:any)=>b.id===pastry2.id).outcome,'blocked');
+  assert.equal(pastryReceived(still).received,parseNear('0.4'));
+  await setRulesCafe(directory,{per_bill:'0.5',daily_budget:'2',hours:'1'});
+  const retried:any=await retryCafeBill(directory,pastry2.id);
+  assert.equal(retried.bills.find((b:any)=>b.id===pastry2.id).outcome,'paid');
+  assert.equal(pastryReceived(retried).received,parseNear('0.9'));assert.equal(pastryReceived(retried).paid_count,2);
+  assert.equal(BigInt(funded.available)-BigInt(retried.available),BigInt(parseNear('0.5')));
+  await assert.rejects(()=>retryCafeBill(directory,pastry2.id),/Only bills stopped by the daily budget/);
+  const settled:any=await readCafe(directory);
+  assert.equal(pastryReceived(settled).received,parseNear('0.9'));assert.equal(settled.available,retried.available);
   const next:any=await receiveCafe(directory);assert.equal(next.bills.length,12);assert.equal(next.rejected.length,2);
   const original=readFileSync(join(directory,'cafe.json'),'utf8');
   writeFileSync(join(directory,'keep-me.txt'),'preserve this');
