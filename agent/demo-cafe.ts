@@ -199,9 +199,9 @@ export async function payCafe(directory:string,live:boolean,progress:CafeProgres
    progress.results!.push({id:record.id,outcome:record.outcome,error:record.error??null,explanation:record.explanation?{meaning:record.explanation.meaning}:null});
    progress.completed++;
   }
-  // Reconcile only genuinely pending saved transfers; no new proposal is made.
+  // Recover only this mailbox's pending bills, leaving other agent work untouched.
   const after=await readAgentState(directory);
-  for(const bill of after.bills.filter(b=>b.outcome==='pending'))await resumeAgentBill(directory,bill.id);
+  for(const bill of after.bills.filter(b=>mailbox.has(b.id)&&b.outcome==='pending'))await resumeAgentBill(directory,bill.id);
  }finally{progress.running=false;progress.current=null;}
  return readCafe(directory);
 }

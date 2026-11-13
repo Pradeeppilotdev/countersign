@@ -5,9 +5,10 @@ import {createPrivateKey,randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setupCafe,receiveCafe,payCafe,payCafeBill,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe,retryCafeBill} from '../agent/demo-cafe.ts';
-import {parseNear} from '../app/sandbox.ts';
+import {SandboxDesk,parseNear} from '../app/sandbox.ts';
 import {signInvoice} from '../merchant/invoice.ts';
-import {importAgentBill,runAgentBill} from '../agent/desk-web.ts';
+import {importAgentBill,runAgentBill,resumeAgentBill} from '../agent/desk-web.ts';
+import {createDeskInbox} from '../agent/desk-core.ts';
 import {lookalike} from '../agent/ask/check.ts';
 import {createDemoRoute} from '../app/demo-route.ts';
 
@@ -63,6 +64,32 @@ test('pay-one settles only its chosen café bill once on chain',{timeout:240000}
  assert.equal((await route('POST','/api/demo/retry',{id:outsideId})).status,400);
  assert.equal((await state() as any).suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,
   after.suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received);
+ // A worker can stop after persisting its proposal and authorizing an outside
+ // bill. Café Pay all must not resume that bill through its recovery pass either.
+ await setRulesCafe(directory,{per_bill:'0.5',daily_budget:'2',hours:'1'});
+ const pendingId='INV-OUTSIDE-PENDING-'+randomUUID().slice(0,8);
+ const pending=signInvoice({...outside,invoice:{...outside.invoice,id:pendingId,amount:parseNear('0.1')},
+  bill_id:'pending-'+randomUUID().slice(0,8)},createPrivateKey(bean.privateKey));
+ await importAgentBill(directory,pending);
+ const desk=new SandboxDesk(directory,{recoverOnStart:false});
+ try{
+  await desk.start();
+  const inbox=createDeskInbox(desk,directory);
+  try{
+   await inbox.propose(pendingId,async()=>({name:'request_payment',arguments:{invoice_id:pendingId}}));
+   await desk.executor.call(desk.vault,'authorize_signed_invoice',{signed:pending},{gas:'100000000000000'});
+  }finally{inbox.close();}
+ }finally{await desk.close();}
+ const beforeRecovery:any=await state();
+ assert.equal(beforeRecovery.bills.find((bill:any)=>bill.id===pendingId).outcome,'pending');
+ const recovered:any=await payCafe(directory,false,{running:false,completed:0,total:0,current:null});
+ assert.equal(recovered.bills.find((bill:any)=>bill.id===pendingId).outcome,'pending');
+ assert.equal(recovered.available,beforeRecovery.available);
+ assert.deepEqual(recovered.suppliers,beforeRecovery.suppliers,'café recovery must not pay an outside bill');
+ // The same saved bill remains payable when explicitly resumed in Agent payments.
+ const explicit=await resumeAgentBill(directory,pendingId);
+ assert.equal(explicit.record.outcome,'paid');
+ assert.equal((await state() as any).suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,parseNear('0.5'));
  }finally{if(existsSync(directory))await backupCafe(directory);}
 });
 
