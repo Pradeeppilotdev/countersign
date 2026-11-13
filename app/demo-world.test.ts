@@ -99,18 +99,20 @@ test('the mailbox lists every delivered invoice the same way, including the one 
  assert.equal(new Set(items.map(shape)).size,1,'no tell-tale markup in the mailbox');
  assert.match(items[0].textContent,/Bean CoBEANS-03Due .*0\.4 NEAR/);
  assert.equal(items[0].attributes['aria-pressed'],'true','the first invoice is open by default');
- // The rejected one is open, with exactly the same document and buttons as a good one.
+ // The rejected one keeps the same document, but its action reflects its status.
  assert.match(get('#dw-invoice').textContent,/BEANS-03.*bean5\.test\.near/s);
- const badDoc=shape(get('#dw-invoice')),badActions=shape(get('#dw-invoice-actions'));
- assert.equal(get('#dw-invoice-actions').textContent,'Hand all 4 to my agent →Ask Dave: would you pay this account?');
+ const badDoc=shape(get('#dw-invoice'));
+ assert.equal(get('#dw-invoice-actions').textContent,'Hand all 4 to my agent →Status: REJECTEDAsk Dave: would you pay this account?');
  byText(get('#dw-invoice-actions'),'Ask Dave: would you pay this account?')!.click();
  get('#cafe-bills').children[1].click();
  assert.equal(get('#cafe-bills').children[1].attributes['aria-pressed'],'true');
  assert.match(get('#dw-invoice').textContent,/BEANS-01.*beans\.test\.near/s);
  assert.equal(shape(get('#dw-invoice')),badDoc);
- assert.equal(shape(get('#dw-invoice-actions')),badActions);
- assert.equal(get('#dw-invoice-actions').textContent,'Hand all 4 to my agent →Ask Dave: would you pay this account?');
+ assert.equal(get('#dw-invoice-actions').textContent,'Hand all 4 to my agent →Status: PAIDAsk Dave: would you pay this account?');
  byText(get('#dw-invoice-actions'),'Ask Dave: would you pay this account?')!.click();
+ get('#cafe-bills').children[3].click();
+ assert.ok(byText(get('#dw-invoice-actions'),'Pay this invoice'));
+ assert.ok(byText(get('#cafe-queue'),'Pay'));
  // The account check runs on the Pay to account written on each invoice.
  assert.deepEqual(asked,['account:bean5.test.near','account:beans.test.near']);
 });

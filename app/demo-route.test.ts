@@ -2,9 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createDemoRoute} from './demo-route.ts';
 import {DeskWebError} from '../agent/desk-web.ts';
-const actions=['state','progress','setup','receive','pay-all','faucet','wallet-faucet','deposit','set-rules','renew-rules','retry','reset'];
+const actions=['state','progress','setup','receive','pay-all','pay-one','faucet','wallet-faucet','deposit','set-rules','renew-rules','retry','reset'];
 const RULES={per_bill:'0.5',daily_budget:'2',hours:'3'};
-const bodyFor=(action:string)=>action==='pay-all'?{live:false}:action==='deposit'?{amount:'1'}:action==='set-rules'?RULES:action==='retry'?{id:'INV-PASTRY-02-abc'}:{};
+const bodyFor=(action:string)=>action==='pay-all'?{live:false}:action==='pay-one'?{id:'INV-BEANS-01-abc'}:action==='deposit'?{amount:'1'}:action==='set-rules'?RULES:action==='retry'?{id:'INV-PASTRY-02-abc'}:{};
 function fixture(network?:string){
  let calls=0;
  const op=async()=>{calls++;return {ready:true};};
@@ -116,4 +116,24 @@ test('progress reports finished results as a copy, in processing order',async()=
  reply.results.push({id:'X'});
  assert.equal((await route('GET','/api/demo/progress',undefined)).body.progress.results.length,1,'callers cannot change live progress');
  release();await run;
+});
+
+test('pay-one accepts only a queued mailbox ID, refuses repeats, and holds the busy guard',async()=>{
+ const id='INV-BEANS-01-abc', other='INV-MILK-01-abc';
+ let outcome='queued', release!:()=>void;
+ const pending=new Promise<void>(r=>release=r);
+ const state=async()=>({ready:true,available:'5',mail:{invoices:[{id},{id:other}]},bills:[{id,outcome},{id:other,outcome:'queued'}]});
+ const op=async()=>({});let calls=0;
+ const route=createDemoRoute({network:()=>'local',state,setup:op,receive:op,pay:op,payOne:async bill=>{
+  calls++;assert.equal(bill,id);await pending;outcome='paid';return {record:{id,outcome:'paid'},state:await state()};
+ },faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,retry:op,reset:op,modelReady:()=>false});
+ assert.equal((await route('POST','/api/demo/pay-one',{id:'INV-UNKNOWN'})).status,400);
+ assert.equal((await route('POST','/api/demo/pay-one',{id,live:false})).status,400);
+ const run=route('POST','/api/demo/pay-one',{id});
+ await Promise.resolve();
+ assert.equal((await route('POST','/api/demo/pay-one',{id:other})).status,409);
+ assert.equal((await route('GET','/api/demo/progress',undefined)).body.progress?.current,id);
+ release();assert.equal((await run).status,200);
+ assert.equal((await route('POST','/api/demo/pay-one',{id})).status,400);
+ assert.equal(calls,1);
 });

@@ -81,6 +81,9 @@ function renderDocument(state,list){
  const invoice=list.find(i=>i.id===selected);if(!invoice)return;
  target.append(invoiceDocument(invoice,state.mail?.issued_at));
  actions.append(button(`Hand all ${list.length} to my agent →`,()=>handAll(),{tone:'primary'}));
+ const result=decision(state,invoice);
+ if(['queued','proposed'].includes(result.outcome))actions.append(button('Pay this invoice',()=>payOne(invoice.id),{tone:'primary'}));
+ else actions.append(el('span',`Status: ${TAGS[result.outcome]?.[0]??String(result.outcome).toUpperCase()}`,'dw-tag '+(TAGS[result.outcome]?.[1]??'neutral')));
  // Identical for every invoice: check the account written on it, no model involved.
  actions.append(button('Ask Dave: would you pay this account?',event=>askAccount?.(invoice.payee,event.currentTarget),{tone:'secondary'}));
 }
@@ -142,7 +145,11 @@ function render(state,spending=null){
  const ordered=resultOrder(state,list),counts={paid:0,stopped:0,rejected:0};
  for(const invoice of ordered){
   const result=decision(state,invoice);
-  if(!DECIDED.includes(result.outcome)){queue.append(row(invoice.supplier+' · '+shortBill(invoice.id),formatUnits(invoice.amount)+' NEAR',result.outcome));continue;}
+  if(!DECIDED.includes(result.outcome)){
+   const item=row(invoice.supplier+' · '+shortBill(invoice.id),formatUnits(invoice.amount)+' NEAR',result.outcome);
+   if(['queued','proposed'].includes(result.outcome))item.append(button('Pay',()=>payOne(invoice.id),{tone:'secondary'}));
+   queue.append(item);continue;
+  }
   count(counts,result.outcome);results.append(resultRow(invoice,result));
  }
  if(!queue.children?.length)queue.append(el('p','Nothing waiting.','dw-muted'));
@@ -283,15 +290,19 @@ function handAll(){
  if(globalThis.location&&location.hash!=='#demo/pay')location.hash='#demo/pay';
  return mutate('pay-all',{live:$('#cafe-live').checked===true});
 }
+function payOne(id){
+ if(globalThis.location&&location.hash!=='#demo/pay')location.hash='#demo/pay';
+ return mutate('pay-one',{id});
+}
 export async function refreshCafe(){
  if(!enabled||busy)return;busy=true;lock();
  try{const reply=await api('/api/demo/state');if(!reply.ok)throw Error(reply.error);render(reply.state,await readSpending(reply.state));notice(feedback,'');}
  catch(error){notice(feedback,'Could not read café','danger',error.message);}finally{busy=false;lock();}
 }
 async function mutate(action,body={},inline=null){
- if(!enabled||busy)return false;busy=true;lock();notice(feedback,action==='pay-all'?'Paying queued invoices…':'Updating café…','busy');
+ if(!enabled||busy)return false;busy=true;lock();notice(feedback,action==='pay-all'||action==='pay-one'?'Paying queued invoices…':'Updating café…','busy');
  let polling=false;
- const timer=action==='pay-all'?setInterval(async()=>{
+ const timer=['pay-all','pay-one'].includes(action)?setInterval(async()=>{
   if(polling)return;polling=true;
   try{
    const reply=await api('/api/demo/progress');

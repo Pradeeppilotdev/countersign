@@ -6,6 +6,31 @@ import {tmpdir} from 'node:os';
 import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe,retryCafeBill} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
 import {lookalike} from '../agent/ask/check.ts';
+import {runAgentBill} from '../agent/desk-web.ts';
+import {createDemoRoute} from '../app/demo-route.ts';
+
+test('pay-one settles only its chosen café bill once on chain',{timeout:240000},async()=>{
+ const directory=join(mkdtempSync(join(tmpdir(),'countersign-cafe-one-')),'agent-vault');
+ try{
+ await setupCafe(directory);
+ const received:any=await receiveCafe(directory);
+ const id=received.mail.invoices.find((invoice:any)=>invoice.id.startsWith('INV-BEANS-01-')).id;
+ const state=()=>readCafe(directory),op=async()=>({});
+ const route=createDemoRoute({network:()=>undefined,state,setup:op,receive:op,pay:op,
+  payOne:async bill=>{const {record}=await runAgentBill(directory,bill,false);return {record,state:await state()};},
+  faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,retry:op,reset:op,modelReady:()=>false});
+ assert.equal((await route('POST','/api/demo/pay-one',{id:'INV-UNKNOWN'})).status,400);
+ const first=await route('POST','/api/demo/pay-one',{id});
+ assert.equal(first.status,200);
+ const after:any=await state();
+ assert.equal(after.bills.find((bill:any)=>bill.id===id).outcome,'paid');
+ assert.equal(after.suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,parseNear('0.4'));
+ for(const supplier of after.suppliers.filter((supplier:any)=>supplier.id!=='Bean-Co'))assert.equal(supplier.received,'0');
+ assert.equal((await route('POST','/api/demo/pay-one',{id})).status,400);
+ const again:any=await state();
+ assert.deepEqual(again.suppliers.map((supplier:any)=>supplier.received),after.suppliers.map((supplier:any)=>supplier.received));
+ }finally{if(existsSync(directory))await backupCafe(directory);}
+});
 
 test('café pays each real bill once, rejects tampering, enforces budget/week, and backs up reset data',{timeout:240000},async()=>{
  const directory=join(mkdtempSync(join(tmpdir(),'countersign-cafe-')),'agent-vault');
