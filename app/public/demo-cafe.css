@@ -170,3 +170,76 @@ body.demo-world .ask-widget-disclaimer { display: block; margin: 0; padding-top:
 @media (max-width: 720px) {
   body.demo-world .ask-widget-dock { background: var(--dw-bg); border-top-color: var(--dw-line); }
 }
+
+/* Step 2: mailbox, invoice documents, viewer */
+body.demo-world .dw-mail-title { font-size: 30px; line-height: 1.15; margin: 6px 0 10px; }
+body.demo-world .dw-mailbox { margin-top: 8px; }
+body.demo-world #demo-cafe .dw-mail-item {
+  display: block; width: 100%; text-align: left; padding: 12px 12px 12px 14px; margin: 0;
+  background: transparent; color: var(--dw-text); border: 0; border-bottom: 1px solid var(--dw-line);
+  border-left: 2px solid transparent; border-radius: 0; font: inherit; cursor: pointer;
+}
+body.demo-world #demo-cafe .dw-mail-item:hover { background: var(--dw-surface); }
+body.demo-world #demo-cafe .dw-mail-item[aria-pressed="true"] { background: var(--dw-surface-2); border-left-color: var(--dw-green); }
+body.demo-world .dw-mail-head,
+body.demo-world .dw-mail-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+body.demo-world .dw-mail-head strong { font-size: 14px; }
+body.demo-world .dw-mail-head .dw-mono { font-size: 12px; }
+body.demo-world .dw-mail-foot { margin-top: 4px; font-size: 12px; }
+body.demo-world .dw-mail-foot .dw-muted { margin: 0; font-size: 12px; }
+body.demo-world .dw-post { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr) minmax(0, 0.7fr); }
+body.demo-world .dw-doc-col #dw-invoice-actions { margin-top: 18px; }
+body.demo-world .dw-ask-later { margin: 0; font-size: 13px; }
+body.demo-world .dw-steps { margin: 12px 0 0; padding-left: 18px; color: var(--dw-muted); font-size: 13px; }
+body.demo-world .dw-steps li + li { margin-top: 10px; }
+
+/* The paper invoice: identical for every invoice, genuine or not. */
+body.demo-world .inv-doc { background: #ffffff; color: #111; border-radius: 0; padding: 32px; font-family: var(--dw-sans); }
+body.demo-world .inv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding-bottom: 20px; border-bottom: 2px solid #111; }
+body.demo-world #demo-cafe .inv-supplier,
+body.demo-world .inv-supplier { color: #111; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+body.demo-world .inv-desc { margin: 2px 0 0; color: #555; font-size: 13px; }
+body.demo-world .inv-title { text-align: right; }
+body.demo-world .inv-label { display: block; font-family: var(--dw-mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #666; }
+body.demo-world .inv-title .inv-label { color: #111; font-weight: 700; font-size: 13px; }
+body.demo-world .inv-no { display: block; font-family: var(--dw-mono); font-size: 16px; margin-top: 4px; }
+body.demo-world .inv-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 18px 0; border-bottom: 1px solid #ddd; }
+body.demo-world .inv-meta strong { display: block; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+body.demo-world .inv-lines { padding: 8px 0; }
+body.demo-world .inv-line { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+body.demo-world .inv-amount { font-family: var(--dw-mono); white-space: nowrap; }
+body.demo-world .inv-total { border-top: 2px solid #111; border-bottom: 0; font-weight: 700; font-size: 16px; padding-top: 14px; }
+body.demo-world .inv-pay { padding: 16px 0; border-top: 1px solid #ddd; margin-top: 8px; }
+body.demo-world .inv-payee { display: block; font-family: var(--dw-mono); font-size: 15px; margin-top: 4px; overflow-wrap: anywhere; }
+body.demo-world .inv-foot { padding-top: 14px; border-top: 1px solid #ddd; color: #555; font-family: var(--dw-mono); font-size: 11px; }
+
+/* Invoice names in results and receipts open the viewer. */
+body.demo-world #demo-cafe .dw-link {
+  background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 700; font-size: 13px;
+  color: var(--dw-text); text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--dw-line);
+  text-underline-offset: 4px; overflow-wrap: anywhere;
+}
+body.demo-world #demo-cafe .dw-link:hover { color: var(--dw-green); text-decoration-color: var(--dw-green); }
+body.demo-world .dw-receipt { border-top: 1px solid var(--dw-line); padding: 10px 0 0; margin-top: 10px; }
+body.demo-world .dw-receipt .dw-link { font-family: var(--dw-mono); font-weight: 400; font-size: 12px; }
+body.demo-world #demo-cafe .dw-receipt details { border-top: 0; padding: 4px 0 0; }
+body.demo-world #demo-cafe .dw-receipt summary { color: var(--dw-muted); font-size: 11px; }
+
+body.demo-world .dw-viewer { position: fixed; inset: 0; z-index: 60; background: rgba(10, 11, 11, 0.86); display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; overflow-y: auto; }
+body.demo-world .dw-viewer[hidden] { display: none; }
+body.demo-world .dw-viewer-box { width: 100%; max-width: 640px; background: var(--dw-bg); border: 1px solid var(--dw-line); }
+body.demo-world .dw-viewer-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--dw-line); }
+body.demo-world #demo-cafe .dw-viewer-head h2 { font-size: 15px; }
+
+@media (max-width: 900px) {
+  body.demo-world .dw-post { grid-template-columns: minmax(0, 1fr); }
+  body.demo-world .dw-post .dw-doc-col { order: 0; }
+}
+@media (max-width: 600px) {
+  body.demo-world .inv-doc { padding: 20px 16px; }
+  body.demo-world #demo-cafe .inv-supplier,
+  body.demo-world .inv-supplier { font-size: 22px; }
+  body.demo-world .inv-meta { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  body.demo-world .dw-mail-title { font-size: 24px; }
+  body.demo-world .dw-viewer { padding: 16px 8px; }
+}

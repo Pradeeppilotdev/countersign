@@ -15,6 +15,12 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
   const received:any=await receiveCafe(directory);
   assert.equal(received.bills.length,6);assert.equal(received.rejected.length,1);
   assert.match(received.rejected[0].reason,/Invalid merchant signature/);
+  // Demo mailbox copy: every delivered invoice, the tampered one as written.
+  assert.equal(received.mail.invoices.length,7);
+  assert.equal(received.rejected[0].payee,received.scam.payee);
+  assert.equal(received.mail.invoices.find((i:any)=>i.id===received.rejected[0].id).payee,received.scam.payee);
+  assert.deepEqual(received.mail.invoices.filter((i:any)=>i.merchant==='Milk-Co').map((i:any)=>i.week),[1,1]);
+  assert.ok(received.mail.invoices.filter((i:any)=>i.merchant!=='Milk-Co').every((i:any)=>i.week===null));
   const paid:any=await payCafe(directory,false,{running:false,completed:0,total:0,current:null});
   assert.equal(paid.scam.received,'0');
   for(const supplier of paid.suppliers){

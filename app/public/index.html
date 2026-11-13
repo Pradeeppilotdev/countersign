@@ -93,20 +93,25 @@
               <h2 id="dw-rules-title">The rules the vault enforces</h2>
               <div id="cafe-rules" class="dw-rows"></div>
             </section>
-            <section class="dw-chapter dw-grid" id="dw-chapter-post" data-chapter="post" aria-labelledby="dw-post-title" hidden>
+            <section class="dw-chapter dw-grid dw-post" id="dw-chapter-post" data-chapter="post" aria-labelledby="dw-post-title" hidden>
               <div class="dw-col">
-                <p class="dw-label">Received invoices</p>
-                <div id="cafe-bills" class="dw-rows"></div>
-              </div>
-              <div class="dw-col dw-main">
-                <p class="dw-kicker">03 · Morning post</p>
-                <h2 id="dw-post-title">Today's invoices arrive</h2>
-                <p class="dw-muted">Each supplier signs its invoice. Anything that fails the check is rejected before it reaches the agent.</p>
+                <p class="dw-label">03 · Your mailbox</p>
+                <h2 id="dw-post-title" class="dw-mail-title">Today's post</h2>
+                <p class="dw-muted">They all look normal. Some aren't. Hand the pile to your agent and the vault decides.</p>
                 <div id="cafe-post-actions" class="cafe-actions"></div>
+                <div id="cafe-bills" class="dw-rows dw-mailbox"></div>
               </div>
-              <div class="dw-col">
-                <p class="dw-label">Rejected at intake</p>
-                <div id="cafe-rejected" class="dw-rows"></div>
+              <div class="dw-col dw-main dw-doc-col">
+                <div id="dw-invoice" class="dw-invoice"></div>
+                <div id="dw-invoice-actions" class="cafe-actions"></div>
+              </div>
+              <div class="dw-col dw-aside">
+                <p class="dw-label">What happens next</p>
+                <ol class="dw-steps">
+                  <li>Your agent reads each invoice and asks the vault to pay it.</li>
+                  <li>The vault checks the supplier's signature, your rules and today's budget.</li>
+                  <li>Only invoices that pass every check are paid. The rest stop, with a reason.</li>
+                </ol>
               </div>
             </section>
             <section class="dw-chapter dw-grid" id="dw-chapter-pay" data-chapter="pay" aria-labelledby="dw-pay-title" hidden>
@@ -133,6 +138,12 @@
               <div id="cafe-ledger" class="cafe-ledger"></div>
               <div id="cafe-end-actions" class="cafe-actions"></div>
             </section>
+          </div>
+          <div id="dw-viewer" class="dw-viewer" role="dialog" aria-modal="true" aria-labelledby="dw-viewer-title" hidden>
+            <div class="dw-viewer-box">
+              <div class="dw-viewer-head"><h2 id="dw-viewer-title">Invoice</h2><button id="dw-viewer-close" class="button secondary small" type="button">Close</button></div>
+              <div id="dw-viewer-body"></div>
+            </div>
           </div>
         </section>
         <section

@@ -221,7 +221,7 @@ test("the demo shell links each chapter tab and exits to the product app", () =>
   assert.match(html, /<a id="demo-exit"[^>]*href="#agent-payments"[^>]*>Exit demo → Countersign app<\/a>/);
   for (const c of CHAPTERS)
     assert.match(html, new RegExp(`href="#demo/${c.id}" data-chapter="${c.id}"><span class="dw-num">${c.number}</span>${c.label}</a>`));
-  for (const id of ["demo-cafe", "cafe-feedback", "cafe-actions", "cafe-summary", "cafe-ledger", "cafe-bills", "cafe-rejected", "cafe-progress", "cafe-read-at", "cafe-ask"])
+  for (const id of ["demo-cafe", "cafe-feedback", "cafe-actions", "cafe-summary", "cafe-ledger", "cafe-bills", "cafe-progress", "cafe-read-at", "cafe-ask"])
     assert.match(html, new RegExp(`id="${id}"`), id);
   assert.doesNotMatch(html, /<script>|style="/);
 });

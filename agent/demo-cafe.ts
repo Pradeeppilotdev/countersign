@@ -11,7 +11,12 @@ import {createDeskInbox,importDeskInvoice} from './desk-core.ts';
 import {readAgentState,runAgentBill,resumeAgentBill,DeskWebError} from './desk-web.ts';
 
 type Supplier={id:string;name:string;payee:string;baseline:string;privateKey:string;version:string;domain:string};
-type Cafe={suppliers:Supplier[];scam:{payee:string;baseline:string};rejected:{id:string;reason:string}[];ready:boolean};
+// Display copy of each delivered invoice, for the demo mailbox only. It is never read
+// by import or payment code; the vault still decides from the signed invoice itself.
+type MailInvoice={id:string;merchant:string;supplier:string;payee:string;amount:string;expires_at:string;week:number|null};
+type Cafe={suppliers:Supplier[];scam:{payee:string;baseline:string};rejected:({id:string;reason:string}&Partial<MailInvoice>)[];ready:boolean;
+ mail?:{issued_at:string;invoices:MailInvoice[]}};
+const WEEK_MS=7*24*60*60*1000;
 export function requireLocalDemo(network=process.env.COUNTERSIGN_NETWORK){
  if(network!==undefined&&network!=='local')throw new DeskWebError('Demo café is available only on the local sandbox.');
 }
@@ -67,7 +72,7 @@ export async function readCafe(directory:string){
   }
   const scamReceived=(BigInt((await desk.worker.account(cafe.scam.payee).balance()).total.toString())-BigInt(cafe.scam.baseline)).toString();
   return {ready:true,network:'LOCAL_SANDBOX',vault:state.vault,available:await desk.vault.view('available_balance',{}),policy:state.policy,
-   suppliers,scam:{payee:cafe.scam.payee,received:scamReceived},rejected:cafe.rejected,bills:state.bills,read_at:new Date().toISOString()};
+   suppliers,scam:{payee:cafe.scam.payee,received:scamReceived},rejected:cafe.rejected,mail:cafe.mail??null,bills:state.bills,read_at:new Date().toISOString()};
  });
 }
 export async function receiveCafe(directory:string){
@@ -87,11 +92,17 @@ export async function receiveCafe(directory:string){
     make(beans,'BEANS-02','beans-delivery','0.4'),make(milk,'MILK-02','milk-delivery-2','0.4',true),make(pastry,'PASTRY-02','pastry-delivery-2','0.5')];
    const tampered=make(beans,'BEANS-03','beans-delivery-3','0.4');tampered.invoice.payee=cafe.scam.payee;bills.push(tampered);
    for(let i=bills.length-1;i>0;i--){const j=randomInt(i+1);[bills[i],bills[j]]=[bills[j],bills[i]];}
+   const weekly:any=await desk.vault.view('get_weekly_service',{agreement_id:'weekly-milk'});
+   const week=(bill:typeof bills[number])=>bill.service&&weekly?Math.floor((Number(bill.service.period_start_ms)-Number(weekly.anchor_ms))/WEEK_MS)+1:null;
+   // As delivered: the payee is what is written on the invoice, tampered or not.
+   const display=(bill:typeof bills[number]):MailInvoice=>({id:bill.invoice.id,merchant:bill.merchant_id,supplier:cafe.suppliers.find(s=>s.id===bill.merchant_id)!.name,
+    payee:bill.invoice.payee,amount:bill.invoice.amount,expires_at:bill.expires_at,week:week(bill)});
+   cafe.mail={issued_at:new Date().toISOString(),invoices:bills.map(display)};
    for(const bill of bills){
     try{await importDeskInvoice(desk,inbox,bill);}
     catch(error){
      if(!(error instanceof Error)||error.message!=='Invalid merchant signature')throw error;
-     cafe.rejected.push({id:bill.invoice.id,reason:error.message});
+     cafe.rejected.push({...display(bill),reason:error.message});
     }
    }
    saveJson(join(directory,'cafe.json'),cafe);
