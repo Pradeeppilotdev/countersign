@@ -6,11 +6,11 @@ import { el, badge, api } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
 import { suggestFollowUps } from "./ask-suggest.js";
 
-export function askCard(label) {
+export function askCard(label, isAccount = false) {
   const card = el("article", "", "ask-card"),
     head = el("header", "", "ask-card-head"),
     body = el("div", "", "ask-card-body");
-  head.append(el("h3", label, "ask-card-title"));
+  head.append(el("h3", label, isAccount ? "ask-card-title sr-only" : "ask-card-title"));
   card.append(head, body);
   return { card, head, body };
 }
@@ -54,20 +54,30 @@ function foldedAnswer(body, { reply, records }) {
 export function setAnswer(head, body, text, isAccount = false) {
   body.replaceChildren();
   body.classList.remove("has-error");
+  if (isAccount) {
+    const result = String(text).match(/^(PAY|WARN|STOP):[ \t]*([^\n]*)/);
+    if (result) {
+      const verdict = result[1], reason = result[2].trim();
+      const statement = verdict === "PAY"
+        ? "Yes — this is a recognised supplier payment account. Your vault has paid it before."
+        : verdict === "STOP"
+          ? "No — do not pay this account."
+          : "Not yet — verify this account before paying.";
+      body.append(el("p", statement, "ask-account-decision"));
+      if (verdict !== "PAY" && reason) body.append(el("p", reason, "ask-account-reason"));
+      body.append(el("p", "This is an account check, not approval of the invoice. The bill must still pass its signature, payee, amount and spending-rule checks.", "ask-account-note"));
+      const detail = el("details", "", "ask-account-checks");
+      const report = el("div", "", "ask-records");
+      recordLines(report, String(text).split("\n").slice(1).join("\n"));
+      detail.append(el("summary", "Show account checks"), report);
+      body.append(detail);
+      if (head) head.append(badge(verdict === "PAY" ? "YES" : verdict === "STOP" ? "NO" : "CHECK", verdict === "PAY" ? "success" : verdict === "STOP" ? "danger" : "warning"));
+      return;
+    }
+  }
   const split = isAccount ? null : splitAnswer(text);
   if (split) foldedAnswer(body, split);
   else recordLines(body, text);
-  if (isAccount) {
-    const t = String(text),
-      verdict = t.startsWith("STOP")
-        ? ["STOP", "danger"]
-        : t.startsWith("WARN")
-          ? ["WARN", "warning"]
-          : t.startsWith("PAY")
-            ? ["PAY", "success"]
-            : null;
-    if (verdict) head.append(badge(verdict[0], verdict[1]));
-  }
 }
 
 export function setCardError(body, message) {
@@ -148,7 +158,7 @@ export async function runAsk(container, question, { onSource, onFollowUp, maxCar
 
 // Runs the read-only account check (no model) and renders it as a card.
 export async function runAccountCheck(container, account, { maxCards = Infinity } = {}) {
-  const { card, head, body } = askCard("Would you pay " + account + "?");
+  const { card, head, body } = askCard("Would you pay " + account + "?", true);
   container.prepend(card);
   trimCards(container, maxCards);
   setBusy(body, "Checking…");

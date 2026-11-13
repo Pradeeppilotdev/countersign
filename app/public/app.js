@@ -401,7 +401,7 @@ function prependAskCard(card) {
 }
 async function runAskCard(kind, label, payload, button, labelNode, busyText) {
   const isAccount = kind === "account",
-    { card, head, body } = askCard(label);
+    { card, head, body } = askCard(label, isAccount);
   let success = false;
   prependAskCard(card);
   setBusy(body, isAccount ? "Checking the account…" : "Asking Dave…");
@@ -441,8 +441,12 @@ askForm.addEventListener("submit", (event) => {
   if (askBtn.disabled) return;
   const text = askTextInput.value.trim();
   if (!text) return;
+  askQuestionBox.clear();
   runAskCard("question", text, { text }, askBtn, askBtnLabel, "Asking…").then(ok => {
-    if (ok && askTextInput.value.trim() === text) askQuestionBox.clear();
+    if (!ok && !askTextInput.value.trim()) {
+      askTextInput.value = text;
+      askQuestionBox.grow();
+    }
   });
 });
 accountForm.addEventListener("submit", (event) => {

@@ -187,13 +187,49 @@ test('panel follow-ups use the question API and retain focus when old cards are 
   assert.equal(answers.children[0].find(n=>n.tag==='button'),undefined);
 });
 
-test('shared account answers keep verdict colors and Sources text without parsing markup',t=>{
+test('account check answers yes/no/not yet, with details folded and no visible repeated question',t=>{
   setup(t);
-  for(const [verdict,tone] of [['STOP','danger'],['WARN','warning'],['PAY','success']]){
-    const {card,head,body}=askCard('Account');
-    assert.equal(applyAsk(card,head,body,{ok:true,text:`${verdict}: <script>unsafe</script>\nSources: chain`},true),true);
+  for(const [verdict,tone,opening] of [['STOP','danger','No —'],['WARN','warning','Not yet —'],['PAY','success','Yes —']] as const){
+    const {card,head,body}=askCard('Would you pay this account?',true);
+    assert.equal(head.children[0].className,'ask-card-title sr-only');
+    assert.equal(applyAsk(card,head,body,{ok:true,text:`${verdict}: Account not pinned.\n- Exists: yes.\nSources: chain`},true),true);
     assert.ok(head.find((n:Element)=>n.className===`badge ${tone}`));
-    assert.ok(body.find((n:Element)=>n.className==='ask-sources'));
+    assert.equal(body.children[0].textContent.startsWith(opening),true);
+    const details=body.find((n:Element)=>n.tag==='details')!;
+    assert.equal(details.children[0].textContent,'Show account checks');
+    assert.equal(details.attributes.open,undefined);
+    assert.match(details.textContent,/Sources: chain/);
     assert.equal(body.find((n:Element)=>n.tag==='script'),undefined);
   }
+});
+
+
+test('Ask immediately empties the composer while waiting; an error restores the question for retry',async t=>{
+  const {widget,input,form,answers}=setup(t);widget.open();
+  let resolveRequest:(response:Response)=>void=()=>{};
+  t.mock.method(globalThis,'fetch',async()=>new Promise<Response>(r=>{resolveRequest=r;}));
+  input.value='How much do I have?';
+  const pending=form.event('submit');
+  assert.equal(input.value,''); // No manual deletion while Dave is thinking.
+  assert.equal(answers.children[0].find(n=>n.tag==='h3')!.textContent,'How much do I have?');
+  assert.equal(answers.children[0].find(n=>n.tag==='h3')!.className,'ask-card-title');
+  assert.equal(form.hidden,false); // Keep the composer available, don't hide it.
+  resolveRequest(reply('Temporary failure',false));
+  await pending;
+  assert.equal(input.value,'How much do I have?');
+  assert.equal(answers.children[0].find(n=>n.tag==='h3')!.textContent,'How much do I have?');
+  assert.match(answers.textContent,/Temporary failure/);
+});
+
+test('Ask leaves newly typed draft alone when the previous answer completes',async t=>{
+  const {widget,input,form}=setup(t);widget.open();
+  let resolveRequest:(response:Response)=>void=()=>{};
+  t.mock.method(globalThis,'fetch',async()=>new Promise<Response>(r=>{resolveRequest=r;}));
+  input.value='How much do I have?';
+  const pending=form.event('submit');
+  assert.equal(input.value,'');
+  input.value='What are my rules?';
+  resolveRequest(reply('Your vault holds 4.6 NEAR.'));
+  await pending;
+  assert.equal(input.value,'What are my rules?');
 });

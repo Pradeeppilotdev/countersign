@@ -1701,3 +1701,10 @@ input[aria-invalid="true"] {
     min-height: 40px;
   }
 }
+
+/* Account checks: readable conclusion, optional technical evidence. */
+.ask-account-decision { font-size: 14px; line-height: 1.5; font-weight: 700; margin: 0 0 8px; }
+.ask-account-reason { font-size: 12px; line-height: 1.5; margin: 0 0 8px; }
+.ask-account-note { font-size: 11px; line-height: 1.55; color: var(--muted); margin: 0 0 10px; }
+.ask-account-checks summary { cursor: pointer; color: var(--teal-dark); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; }
+.ask-account-checks .ask-records { padding-top: 9px; }

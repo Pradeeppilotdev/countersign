@@ -93,7 +93,10 @@ export function createAskWidget({ onNavigate } = {}) {
   async function ask(question) {
     if (submitting) return;
     submitting = true;
-    // Disabling a focused submit button must not drop keyboard focus to the page.
+    // The submitted question should not remain in the typing box while Dave replies.
+    // Restore it only if the request fails and no replacement draft was typed.
+    const submittedDraft = input.value;
+    if (input.value.trim() === question) questionBoxControl.clear();
     input.focus();
     submitBtn.disabled = true;
     try {
@@ -112,7 +115,10 @@ export function createAskWidget({ onNavigate } = {}) {
           ask(suggestion);
         },
       });
-      if (ok && input.value.trim() === question) questionBoxControl.clear();
+      if (!ok && !input.value.trim()) {
+        input.value = submittedDraft || question;
+        questionBoxControl.grow();
+      }
     } finally {
       submitting = false;
       submitBtn.disabled = false;
