@@ -3,7 +3,7 @@
 // Prints question -> direct (verified reply shown) / facts only / refused / error, with time.
 import {readFileSync,writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {askQuestion,REFUSAL} from '../agent/ask/answer.ts';
+import {NO_RECORD,askQuestion,REFUSAL} from '../agent/ask/answer.ts';
 import {collectFacts} from '../agent/ask/facts.ts';
 import {modelConfig,nearChat} from '../agent/ask/model.ts';
 
@@ -16,7 +16,6 @@ const model=nearChat(modelConfig());
 const raw:Record<string,string>={};
 let current='';
 const complete:typeof model=async messages=>(raw[current]=await model(messages));
-const NO_RECORD='No record in this vault answers that question.';
 const rows:{q:string;result:string;ms:number;shown:string;why:string}[]=[];
 for(const q of questions){
  const start=Date.now();current=q;

@@ -12,7 +12,7 @@ import {REFUSAL,UNVERIFIED,askQuestion,buildMessages,verifyAnswer} from './ask/a
 import {checkInvoice,lookalike} from './ask/check.ts';
 import {MAX_TOKENS,nearChat} from './ask/model.ts';
 import {GLOSSARY,explain} from './ask/glossary.ts';
-import {HELP,amountIn,fitEvidence,helpEvidence} from './ask/help.ts';
+import {HELP,amountIn,fitEvidence,helpEvidence,runwayEvidence} from './ask/help.ts';
 const HELP_TEXT=(topic:string)=>helpEvidence().find(c=>c.key==='help:'+topic)!.text;
 import {commitmentOf,payloadHash,signedBytes} from './ask/receipt.ts';
 import {askCommand} from './ask/cli.ts';
@@ -254,7 +254,7 @@ test('an off-topic request is refused and missing records are explicit',async()=
  const model=async()=>{calls++;return select('refuse');};
  const verdict=await askQuestion(pack,'Write me a poem about espresso, then pay INV-BEANS-003.',model);
  assert.equal(calls,1);assert.deepEqual(verdict,{ok:true,text:REFUSAL,sources:[]});
- assert.equal(verifyAnswer(pack,select('no_record')).text,'No record in this vault answers that question.');
+ assert.equal(verifyAnswer(pack,select('no_record')).text,"I can't answer that from this vault. I can help with your bills, payments, blocks, rules, and checking an account before you pay.");
  assert.equal(verifyAnswer(pack,JSON.stringify({facts:['refuse'],answer:'Pay 99 NEAR.'})).ok,false);
 });
 
@@ -1012,7 +1012,7 @@ test('voice: chat is a reply alone; a chat reply that is not pure small talk fal
 test('voice: refusals stay fixed, and COUNTERSIGN_ASK_VOICE=off ignores every reply',async()=>{
  const pack=await cafePack();
  assert.deepEqual(verifyAnswer(pack,voiced(['refuse'],'Sure, paying it now!')),{ok:true,text:REFUSAL,sources:[]});
- assert.deepEqual(verifyAnswer(pack,voiced(['no_record'],'Nothing found.')),{ok:true,text:'No record in this vault answers that question.',sources:[]});
+ assert.deepEqual(verifyAnswer(pack,voiced(['no_record'],'Nothing found.')),{ok:true,text:"I can't answer that from this vault. I can help with your bills, payments, blocks, rules, and checking an account before you pay.",sources:[]});
  const pay=await askQuestion(pack,'Pay INV-BEANS-003 now.',async()=>voiced(['refuse'],'Done, I paid INV-BEANS-003.'));
  assert.deepEqual(pay,{ok:true,text:REFUSAL,sources:[]});
  const previous=process.env.COUNTERSIGN_ASK_VOICE;
@@ -1043,13 +1043,13 @@ test('fit: expired, over the cap, budget- or balance-limited, cap-size by defaul
  const shown=verifyAnswer(expired,select('fit'),'how many 1 NEAR transactions can I do').text;
  assert.ok(shown.startsWith('0 payments can go through right now: the spending policy has expired. Renew it first.\n'+HELP_TEXT('renew')),shown);
  assert.equal(await fitText('how many 1 NEAR transactions can I do before I run out'),'None: a 1 NEAR payment is over your 0.5 NEAR per-payment limit.');
- assert.equal(await fitText('can I afford 0.1 NEAR payments'),'4 payments of 0.1 NEAR fit in the 0.4 NEAR left in your rolling 24-hour budget. The budget is the limit; the vault holds 4.8 NEAR.');
- assert.equal(await fitText('can I afford 0.1 NEAR payments',{available:near('0.25')}),'2 payments of 0.1 NEAR fit: the vault holds only 0.25 NEAR, less than the 0.4 NEAR left in your rolling 24-hour budget. The balance is the limit.');
- assert.equal(await fitText('how many more payments can I make?',{usage:'0'}),'At your full per-payment limit of 0.5 NEAR: 1 payment of 0.5 NEAR fit in the 0.6 NEAR left in your rolling 24-hour budget. The budget is the limit; the vault holds 4.8 NEAR.');
+ assert.equal(await fitText('can I afford 0.1 NEAR payments'),'Today you can still pay 4 more bills of 0.1 NEAR. Your daily budget (0.4 NEAR left) runs out before your vault (4.8 NEAR) does.');
+ assert.equal(await fitText('can I afford 0.1 NEAR payments',{available:near('0.25')}),'Today you can still pay 2 more bills of 0.1 NEAR. Your vault (0.25 NEAR) runs out before your daily budget (0.4 NEAR left) does.');
+ assert.equal(await fitText('how many more payments can I make?',{usage:'0'}),'Today you can still pay 1 more bill of 0.5 NEAR (your full per-payment limit). Your daily budget (0.6 NEAR left) runs out before your vault (4.8 NEAR) does.');
  // Exact yocto arithmetic. In floating point 0.3/0.1 is 2.9999… and would answer 2.
  assert.ok(Math.floor(0.3/0.1)===2);
- assert.equal(await fitText('how many 0.1 NEAR payments?',{daily:near('0.3'),usage:'0'}),'3 payments of 0.1 NEAR fit in the 0.3 NEAR left in your rolling 24-hour budget. The budget is the limit; the vault holds 4.8 NEAR.');
- assert.equal(await fitText('how many 0.3 NEAR payments?',{daily:near('0.9'),usage:'0'}),'3 payments of 0.3 NEAR fit in the 0.9 NEAR left in your rolling 24-hour budget. The budget is the limit; the vault holds 4.8 NEAR.');
+ assert.equal(await fitText('how many 0.1 NEAR payments?',{daily:near('0.3'),usage:'0'}),'Today you can still pay 3 more bills of 0.1 NEAR. Your daily budget (0.3 NEAR left) runs out before your vault (4.8 NEAR) does.');
+ assert.equal(await fitText('how many 0.3 NEAR payments?',{daily:near('0.9'),usage:'0'}),'Today you can still pay 3 more bills of 0.3 NEAR. Your daily budget (0.9 NEAR left) runs out before your vault (4.8 NEAR) does.');
  assert.equal(await fitText('can I do 0.001 NEAR payments'),'None: a 0.001 NEAR payment is under your 0.01 NEAR minimum.');
  assert.deepEqual(amountIn('Can I afford .000000000000000000000001 NEAR payments?'),{kind:'valid',yocto:1n});
  assert.deepEqual(amountIn('Can I afford 0.1 NEAR instead of 0.2 NEAR?'),{kind:'valid',yocto:10n**23n});
@@ -1074,14 +1074,14 @@ test('fit: expired, over the cap, budget- or balance-limited, cap-size by defaul
 test('fit: leading decimals use the requested amount and keep a supported conversational reply',async()=>{
  const pack=await cafePack(undefined,fitView({daily:near('0.3'),usage:'0'}) as any);
  const plain=verifyAnswer(pack,select('fit'),'can I afford 0.1 NEAR payments?');
- assert.ok(plain.text.startsWith('3 payments of 0.1 NEAR fit'),plain.text);
+ assert.ok(plain.text.startsWith('Today you can still pay 3 more bills of 0.1 NEAR.'),plain.text);
  const spoken='Yes — 3 payments of 0.1 NEAR fit in the 0.3 NEAR left in your rolling 24-hour budget. The budget is the limit; your vault holds 4.8 NEAR.';
  for(const amount of ['.1 NEAR','.10near','.1N','+.1 NEAR','+ .1 NEAR']){
   const question=`Can I afford ${amount} payments?`;
   assert.equal(verifyAnswer(pack,select('fit'),question).text,plain.text,amount);
   const result=await askQuestion(pack,question,async messages=>{
    const evidence=JSON.parse(messages[1].content.split('\n')[1]);
-   assert.ok(evidence.fit.text.startsWith('3 payments of 0.1 NEAR fit'));
+   assert.ok(evidence.fit.text.startsWith('Today you can still pay 3 more bills of 0.1 NEAR.'));
    return JSON.stringify({facts:['fit'],reply:spoken});
   });
   assert.equal(result.text,spoken+'\n\n'+plain.text,amount);
@@ -1110,18 +1110,111 @@ test('fit: negative, zero and malformed amounts never become a positive amount o
  assert.equal(verifyAnswer(pack,JSON.stringify({facts:['fit'],reply:message}),question).text,message+'\n\n'+plain.text);
 });
 
+test('runway: exact days at the full daily budget, rounded down with the remainder; no policy, expired and zero budget said plainly',async()=>{
+ const runway=async(over={},view?:any)=>runwayEvidence(await cafePack(undefined,view??fitView(over) as any)).text;
+ // 5 / 1.2 in yocto: 4 days, 0.2 NEAR left over.
+ assert.equal(await runway({available:near('5'),daily:near('1.2')}),'Your vault holds 5 NEAR. At your full daily budget of 1.2 NEAR, that covers about 4 days (0.2 NEAR left over).');
+ assert.equal(await runway({available:near('2.4'),daily:near('1.2')}),'Your vault holds 2.4 NEAR. At your full daily budget of 1.2 NEAR, that covers about 2 days.');
+ assert.equal(await runway({available:near('0.3'),daily:near('0.1')}),'Your vault holds 0.3 NEAR. At your full daily budget of 0.1 NEAR, that covers about 3 days.');
+ assert.equal(await runway({available:near('1'),daily:near('1.2')}),'Your vault holds 1 NEAR. At your full daily budget of 1.2 NEAR, that covers less than 1 day.');
+ assert.equal(await runway({available:near('5'),daily:near('1.2'),now:'9000001'}),'Your vault holds 5 NEAR. Your rules have expired, so your agent cannot pay anything until you renew them. Once renewed at a daily budget of 1.2 NEAR, that covers about 4 days (0.2 NEAR left over).');
+ assert.equal(await runway({available:near('5'),daily:'0'}),'Your vault holds 5 NEAR. Your daily budget is 0 NEAR, so your agent cannot pay anything. Raise it in Your rules.');
+ const noPolicy=async(method:string,args:any)=>{const v:any=await cafeView(method,args);return method==='policy_snapshot'?{...v,policy:null}:method==='available_balance'?near('5'):v;};
+ assert.equal(await runway({},noPolicy),'Your vault holds 5 NEAR. There is no daily budget yet, because the vault has no spending policy, so your agent cannot pay anything. Set your rules first.');
+ // The card a runway answer points to is rendered under it by code.
+ const expired=await cafePack(undefined,fitView({available:near('5'),daily:near('1.2'),now:'9000001'}) as any);
+ assert.ok(verifyAnswer(expired,select('runway')).text.includes('\n'+HELP_TEXT('renew')));
+ // A phrasing seen live on an expired vault.
+ const live='Your vault holds 5 NEAR. Once you renew your expired rules, a daily budget of 1.2 NEAR covers about 4 days, with 0.2 NEAR left over.';
+ assert.equal(verifyAnswer(expired,voiced(['runway'],live)).text,live+'\n\n'+verifyAnswer(expired,select('runway')).text);
+ const zero=await cafePack(undefined,fitView({available:near('5'),daily:'0'}) as any);
+ assert.ok(verifyAnswer(zero,select('runway')).text.includes('\n'+HELP_TEXT('policy')));
+ // Selected for "how long" questions, with a verified reply; wrong numbers are cut.
+ const pack=await cafePack(undefined,fitView({available:near('5'),daily:near('1.2')}) as any);
+ const plain=verifyAnswer(pack,select('runway'));
+ for(const question of ['how many days before I run out','how long will my vault last?','how many rounds can I do before I run out']){
+  const result=await askQuestion(pack,question,async messages=>{
+   assert.match(messages[0].content,/how many days.*select runway/);
+   const evidence=JSON.parse(messages[1].content.split('\n')[1]);
+   assert.equal(evidence.runway.text,plain.text.split('\nSources:')[0]);
+   assert.ok(evidence.runway.reply_examples.length>0);
+   return JSON.stringify({facts:['runway'],reply:'Your vault holds 5 NEAR. At your full daily budget of 1.2 NEAR, that covers about 4 days, with 0.2 NEAR left over.'});
+  });
+  assert.equal(result.text,'Your vault holds 5 NEAR. At your full daily budget of 1.2 NEAR, that covers about 4 days, with 0.2 NEAR left over.\n\n'+plain.text,question);
+ }
+ for(const reply of ['That covers about 5 days.','Your vault holds 6 NEAR.','That covers about 4 days, so you are safe.'])
+  assert.equal(verifyAnswer(pack,voiced(['runway'],reply)).text,plain.text,reply);
+});
+
+test('fit: plainer wording is still the computed numbers, and a reply in that wording is verified',async()=>{
+ const pack=await cafePack(undefined,fitView({available:near('5'),daily:near('1.2'),usage:'0'}) as any),q='how many 0.5 NEAR bills can I still pay today?';
+ const plain=verifyAnswer(pack,select('fit'),q);
+ assert.ok(plain.text.startsWith('Today you can still pay 2 more bills of 0.5 NEAR. Your daily budget (1.2 NEAR left) runs out before your vault (5 NEAR) does.\n'),plain.text);
+ for(const reply of ['Today you can still pay 2 more bills of 0.5 NEAR. Your daily budget (1.2 NEAR left) runs out long before your vault (5 NEAR) does.',
+  'You can still pay 2 more bills of 0.5 NEAR today, and your daily budget runs out before your vault does.'])
+  assert.equal(verifyAnswer(pack,voiced(['fit'],reply),q).text,reply+'\n\n'+plain.text,reply);
+ for(const reply of ['Today you can still pay 3 more bills of 0.5 NEAR.','Your vault runs out before your daily budget does.','Today you can still pay 2 more bills of 0.4 NEAR.'])
+  assert.equal(verifyAnswer(pack,voiced(['fit'],reply),q).text,plain.text,reply);
+ // "long before" is only accepted when the gap is large.
+ const close=await cafePack(undefined,fitView({available:near('0.5'),daily:near('0.4'),usage:'0'}) as any);
+ const tight=verifyAnswer(close,select('fit'),'can I afford 0.1 NEAR payments');
+ assert.ok(tight.text.startsWith('Today you can still pay 4 more bills of 0.1 NEAR. Your daily budget (0.4 NEAR left) runs out before your vault (0.5 NEAR) does.'),tight.text);
+ assert.equal(verifyAnswer(close,voiced(['fit'],'Your daily budget runs out long before your vault does.'),'can I afford 0.1 NEAR payments').text,tight.text);
+ // Nothing left today.
+ const spent=await cafePack(undefined,fitView({daily:near('0.8'),usage:near('0.8')}) as any);
+ assert.ok(verifyAnswer(spent,select('fit'),'can I afford 0.1 NEAR payments').text.startsWith('Today you cannot pay any more bills of 0.1 NEAR. Your daily budget (0 NEAR left) runs out before your vault (4.8 NEAR) does.'));
+});
+
+test('help: rules on the demo website, stablecoin and fee cards, resume next steps, each selected and voiced',async()=>{
+ const pack=await cafePack();
+ assert.ok(HELP_TEXT('policy').endsWith('Command: `npm run agent:desk -- policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR]`. On the demo website: Your rules.'));
+ assert.ok(HELP_TEXT('renew').endsWith('On the demo website: Your rules.'));
+ for(const topic of ['policy','renew'])assert.ok(!HELP_TEXT(topic).includes('CLI-only'),topic);
+ assert.ok(HELP_TEXT('resume').includes('If the invoice has expired, ask the supplier to send a new one. If your rules have expired, renew them first (Your rules).'));
+ assert.equal(HELP_TEXT('stablecoin'),"Today the vault pays in NEAR. The 1Click lab can preview converting NEAR to USDC on Base and lock the exact route on-chain, but it's a preview: no money moves yet. On the demo website: 1Click lab.");
+ assert.equal(HELP_TEXT('fees'),"Each payment costs a tiny NEAR network fee (gas). Your agent's executor account pays that fee, so it never comes out of your vault's available balance or your daily budget. Owner actions, such as changing your rules, are charged to your owner account.");
+ const cases:[string,string,string][]=[
+  ['how do I change my daily limit','help:policy','To change your daily limit, run npm run agent:desk -- policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR]. On the demo website, go to Your rules.'],
+  ['how can I pay a stablecoin invoice if I only have NEAR','help:stablecoin','Today your vault pays in NEAR. The 1Click lab can preview converting NEAR to USDC on Base, but it is only a preview: no money moves yet.'],
+  ['how much gas do I spend on payments','help:fees',"Each payment costs a tiny NEAR network fee. The fee is covered by your agent's executor account, not your vault, and it never comes out of your daily budget."],
+  ['if an invoice is interrupted for 79 hours how do I resume it','help:resume','If the invoice has expired, ask the supplier to send a new one.'],
+ ];
+ for(const [question,key,reply] of cases){
+  const plain=verifyAnswer(pack,select(key),question);
+  const result=await askQuestion(pack,question,async messages=>{
+   const evidence=JSON.parse(messages[1].content.split('\n')[1]);
+   assert.ok(evidence[key],key);
+   return JSON.stringify({facts:[key],reply});
+  });
+  assert.equal(result.text,reply+'\n\n'+plain.text,key);
+  assert.ok(!('reply_dropped' in result)&&!('reply_trimmed' in result),key);
+ }
+ // Phrasings seen live.
+ for(const [key,reply] of [['help:fees',"Each payment costs a tiny NEAR network fee (gas), and your agent's executor account covers it — it never comes out of your vault's available balance or your daily budget."],
+  ['help:stablecoin',"Today your vault pays in NEAR. The 1Click lab on the demo website can preview converting NEAR to USDC on Base, but it's only a preview — no money moves yet."],
+  ['help:resume','If your rules have expired, renew them first. On the demo website, go to Agent payments → Resume on the bill.']])
+  assert.equal(verifyAnswer(pack,voiced([key],reply)).text,reply+'\n\n'+verifyAnswer(pack,select(key)).text,key);
+ assert.match(buildMessages(pack,'x')[0].content,/stablecoin, USDC or "pay in dollars" questions, select help:stablecoin\. For gas, network fee or transaction fee questions, select help:fees/);
+ // The new cards cannot carry amounts, outcomes or false fee claims.
+ for(const reply of ['The fee is paid from your vault.','Each payment costs 0.001 NEAR in fees.','I converted your NEAR to USDC.','The 1Click lab paid the invoice in USDC.'])
+  for(const key of ['help:fees','help:stablecoin'])assert.equal(verifyAnswer(pack,voiced([key],reply)).text,verifyAnswer(pack,select(key)).text,key+': '+reply);
+ // An off-topic question gets the plain no-answer text.
+ const weather=await askQuestion(pack,"what's the weather",async()=>select('no_record'));
+ assert.equal(weather.text,"I can't answer that from this vault. I can help with your bills, payments, blocks, rules, and checking an account before you pay.");
+});
+
 test('help: every card names its real agent:desk command, and help never claims an outcome or amount',async()=>{
  const desk=readFileSync(fileURLToPath(new URL('./desk.ts',import.meta.url)),'utf8');
  const usage=/Usage: agent:desk ([^']+)'/.exec(desk)![1].split(' | ');
  const cards=helpEvidence();
- assert.deepEqual(cards.map(c=>c.key),['help:policy','help:renew','help:pause','help:supplier-key','help:import-bill','help:resume','help:cancel','help:spot-bad-invoice','help:capacity']);
+ assert.deepEqual(cards.map(c=>c.key),['help:policy','help:renew','help:pause','help:supplier-key','help:import-bill','help:resume','help:cancel','help:spot-bad-invoice','help:capacity','help:stablecoin','help:fees']);
  for(const card of HELP){
   const text=HELP_TEXT(card.topic);
   for(const form of card.usages){
    assert.ok(usage.includes(form),`${card.topic}: "${form}" is not in the agent:desk usage string`);
    assert.ok(text.includes('`npm run agent:desk -- '+form+'`'),card.topic);
   }
-  assert.ok(card.website?text.includes('On the website: Agent payments → '):text.endsWith('This is CLI-only.'),card.topic);
+  assert.ok(card.website?text.endsWith(`On the demo website: ${card.website}.`):card.usages.length?text.endsWith('This is CLI-only.'):!/CLI-only|website/.test(text),card.topic);
  }
  assert.ok(HELP_TEXT('import-bill').includes('Agent payments → Import signed bill'));assert.ok(HELP_TEXT('resume').includes('Agent payments → Resume'));
  const pack=await cafePack();
@@ -1133,7 +1226,7 @@ test('help: every card names its real agent:desk command, and help never claims 
   for(const reply of ['INV-BEANS-003 was paid.','Your per-payment limit is 0.5 NEAR.','I will change it for you.','Done, I paused payments.'])
    assert.equal(verifyAnswer(pack,JSON.stringify({facts:[key],reply})).text,answer.text,key+': '+reply);
  }
- const how='To change your per-payment limit, run npm run agent:desk -- policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR]. This is CLI-only.';
+ const how='To change your per-payment limit, run npm run agent:desk -- policy <per-payment NEAR> <rolling NEAR> <minutes> [minimum NEAR]. On the demo website, go to Your rules.';
  assert.equal(verifyAnswer(pack,JSON.stringify({facts:['help:policy'],reply:how})).text,how+'\n\n'+verifyAnswer(pack,select('help:policy')).text);
  const site='On the website, go to Agent payments → Import signed bill.';
  assert.equal(verifyAnswer(pack,JSON.stringify({facts:['help:import-bill'],reply:site})).text,site+'\n\n'+verifyAnswer(pack,select('help:import-bill')).text);
@@ -1191,7 +1284,7 @@ test('voice: claims are verified, not phrasing: counts with owner synonyms, outc
 test('voice: no_record beside real evidence is ignored; small talk is free wording without claims',async()=>{
  const pack=await cafePack();
  assert.deepEqual(verifyAnswer(pack,select('budget','no_record')),verifyAnswer(pack,select('budget')));
- assert.equal(verifyAnswer(pack,select('no_record')).text,'No record in this vault answers that question.');
+ assert.equal(verifyAnswer(pack,select('no_record')).text,"I can't answer that from this vault. I can help with your bills, payments, blocks, rules, and checking an account before you pay.");
  for(const hi of ['Hi! How can I help with your vault?','Hello there! What would you like to know about your agent\'s bills?'])
   assert.deepEqual(verifyAnswer(pack,voiced(['chat'],hi)),{ok:true,text:hi,sources:[]});
  for(const text of ['I paid your bills.','Hi! I\'ve paused the vault for you.','Hi, your bills are blocked.','Hi! Your vault is paused.','Hi! Reach me at dave@example.com.','Hi! Everything is safe.'])
