@@ -49,7 +49,8 @@ export async function askCommand(args:string[],directory:string):Promise<string>
  // Developer aid only: say why an answer was discarded. The owner still sees the fixed line.
  if(process.env.COUNTERSIGN_ASK_DEBUG){
   if(!verdict.ok)console.error(`[ask debug] ${verdict.why}`);
-  else if(verdict.reply_dropped)console.error(`[ask debug] reply dropped: ${verdict.reply_dropped}`);
+  else if(verdict.reply_trimmed)console.error(`[ask debug] sentences cut: ${verdict.reply_trimmed}`);
+  else if(verdict.reply_dropped)console.error(`[ask debug] reply dropped: ${verdict.reply_dropped}`+(verdict.dropped_reply!==undefined?`\n[ask debug] dropped reply: ${JSON.stringify(verdict.dropped_reply)}`:''));
  }
  return verdict.text;
 }

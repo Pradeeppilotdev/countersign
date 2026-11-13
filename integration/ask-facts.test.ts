@@ -147,10 +147,10 @@ test('facts pack matches a fresh café run: paid, tampered, duplicate, over-budg
   const spoken='Yes — 3 payments of 0.1 NEAR fit in the 0.3 NEAR left in your rolling 24-hour budget. The budget is the limit; your vault holds 4.5 NEAR.';
   const fit=await askQuestion(pack,'Can I afford .1 NEAR payments?',async messages=>{
    const evidence=JSON.parse(messages[1].content.split('\n')[1]);
-   assert.ok(evidence.fit.text.startsWith('3 payments of 0.1 NEAR fit'));
+   assert.ok(evidence.fit.text.startsWith('Today you can still pay 3 more bills of 0.1 NEAR.'));
    return JSON.stringify({facts:['fit'],reply:spoken});
   });
-  assert.ok(fit.text.startsWith(spoken+'\n\n3 payments of 0.1 NEAR fit'));
+  assert.ok(fit.text.startsWith(spoken+'\n\nToday you can still pay 3 more bills of 0.1 NEAR. Your daily budget (0.3 NEAR left) runs out before your vault (4.5 NEAR) does.'));
   assert.ok(!('reply_dropped' in fit));
   const negative=await askQuestion(pack,'Can I afford -.1 NEAR payments?',async()=>JSON.stringify({facts:['fit'],reply:spoken}));
   assert.ok(negative.text.startsWith('Please enter a positive NEAR amount'));
