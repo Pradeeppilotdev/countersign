@@ -1460,3 +1460,51 @@ test('a model timeout gives the slow message, not a generic error',async()=>{
  await assert.rejects(()=>slowBody(messages),error=>String((error as Error).message)===SLOW);
  await assert.rejects(()=>nearChat({apiKey:'k',model:'m'},async()=>{throw new TypeError('fetch failed');})(messages),/the model request failed\./);
 });
+
+test('voice review: monetary signs, leading decimals and one-yocto differences keep their meaning',async()=>{
+ const pack=await cafePack();
+ const rejected=(source:typeof pack,keys:string[],text:string)=>{
+  const result=verifyAnswer(source,voiced(keys,text));
+  assert.equal(result.text,verifyAnswer(source,select(...keys)).text,text);
+  assert.ok(result.reply_dropped,text);
+ };
+ for(const value of ['-0.4','−0.4','- 0.4','—0.4','0.400000000000000000000001','0.4e0','0.4.0','$0.4','0,4'])
+  rejected(pack,['budget'],`Your remaining budget is ${value} NEAR.`);
+ rejected(pack,['invoice:INV-BEANS-001'],'INV-BEANS-001 was paid -0.1 NEAR.');
+ rejected(pack,['activity'],'INV-CUPS-004 and INV-BEANS-001 were 0.100000000000000000000001 NEAR.');
+ rejected(pack,['suppliers'],'local-merchant received 0.200000000000000000000001 NEAR.');
+ rejected(pack,['balance'],'Your available balance is 4.800000000000000000000001 NEAR.');
+ const one=structuredClone(pack);one.vault.available_near='1';
+ rejected(one,['balance'],'Your available balance is .1 NEAR.');
+ for(const value of ['.4','0.40','+0.4','0.400000000000000000000000']){
+  const text=`Your remaining budget is ${value} NEAR.`,result=verifyAnswer(pack,voiced(['budget'],text));
+  assert.ok(result.text.startsWith(text+'\n\n'),text);assert.equal(result.reply_dropped,undefined,text);
+ }
+ const text='Quick update: INV-BEANS-001 was paid .1 NEAR.';
+ assert.ok(verifyAnswer(pack,voiced(['invoice:INV-BEANS-001'],text)).text.startsWith(text+'\n\n'));
+});
+
+test('voice review: a negated aggregate never borrows its positive count',async()=>{
+ const extra=Array.from({length:12},(_,i)=>{const id=`INV-Q-${i+1}`;return {...cafeInbox()[2],id,state:'queued',error:null,has_proposal:false,attempt_state:null,
+  invoice:{id,payee,asset:'near',amount:near('0.2')},commitment:commitmentOf({id,payee,asset:'near',amount:near('0.2')})};});
+ const pack=await cafePack(undefined,cafeView,extra),plain=verifyAnswer(pack,select('activity')).text;
+ for(const text of ['You do not have 12 pending bills.',"You don't have 12 pending bills.",'You have 12 bills not queued.','12 bills were never queued.','You have -12 queued bills.','You have .12 queued bills.']){
+  const result=verifyAnswer(pack,voiced(['activity'],text));assert.equal(result.text,plain,text);assert.ok(result.reply_dropped,text);
+ }
+ for(const text of ['You have 12 pending bills.','You have 12 bills not paid yet.','Nothing was cancelled, and 12 invoices are outstanding.']){
+  const result=verifyAnswer(pack,voiced(['activity'],text));assert.equal(result.text,text+'\n\n'+plain,text);assert.equal(result.reply_dropped,undefined,text);
+ }
+ const mixed=verifyAnswer(pack,voiced(['activity'],'You have 12 bills not queued. 2 bills were paid.'));
+ assert.equal(mixed.text,'2 bills were paid.\n\n'+plain);assert.ok(mixed.reply_trimmed);
+});
+
+test('voice review: conversational greetings survive but chat cannot invent facts',async()=>{
+ const pack=await cafePack();
+ for(const text of ['Your supplier is dishonest.','The capital of France is Paris.','Your vault is empty.','These bills are legitimate.','The merchant stole your money.','Hi! Your supplier is dishonest.']){
+  const result=verifyAnswer(pack,voiced(['chat'],text));assert.equal(result.text,REFUSAL,text);assert.ok(result.reply_dropped,text);
+ }
+ for(const greeting of ['Hi!','Hello there!','Hey Dave!'])for(const invitation of ['How can I help with your vault today?',"What would you like to know about your agent's bills?",'Would you like to review your payments?']){
+  const text=greeting+' '+invitation;
+  assert.deepEqual(verifyAnswer(pack,voiced(['chat'],text)),{ok:true,text,sources:[]});
+ }
+});

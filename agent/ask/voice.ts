@@ -138,6 +138,30 @@ const billAllows:Record<string,(b:Bill)=>boolean>={
 const negates=(t:string|undefined)=>t!==undefined&&(t==='not'||t==='never'||t==='no'||t==='none'||t==='nothing'||t.endsWith("n't"));
 const lower=(t:string)=>t.replace(/[’‘]/g,"'").toLowerCase();
 
+// Compare money in exact base units. A sign or leading decimal must never be
+// discarded by the word tokenizer, and a one-yocto difference must stay visible.
+function nearUnits(value:string|null|undefined):bigint|null{
+ if(value==null||!/^\+?(?:\d+(?:\.\d{1,24})?|\.\d{1,24})$/.test(value))return null;
+ const [whole,fraction='']=value.replace(/^\+/,'').split('.');
+ return BigInt(whole||'0')*10n**24n+BigInt(fraction.padEnd(24,'0'));
+}
+const sameNear=(expected:string|null|undefined,value:string)=>{
+ const a=nearUnits(expected),b=nearUnits(value);return a!==null&&b!==null&&a===b;
+};
+
+// Chat may combine greetings and invitations freely, but it has no evidence
+// for factual claims. Positive sentence grammar avoids an endless blacklist.
+export function smallTalkReply(reply:string):boolean{
+ const topic="(?:your )?(?:vault|bills|payments|rules|agent's bills|agent's payments)";
+ return composed(reply,[...friendly,
+  `(?:how|what) (?:can|may) I help(?: you)?(?: with ${topic})?(?: today| right now)?`,
+  `what would you like to (?:know|ask) about ${topic}(?: today)?`,
+  `(?:want|would you like) (?:me to help with|to check|to review|a summary of) ${topic}(?: today)?`,
+  `I can help(?: you)? (?:check|review|understand) ${topic}`,
+  "ready when you are", "what's up",
+ ]);
+}
+
 // Glossary text for a selected bill, located in the reply (case-insensitive). A
 // reason may span two sentences, so these ranges are never split.
 function glossarySpans(pack:FactsPack,allowed:Set<number>,reply:string){
@@ -183,6 +207,16 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
   .replace(/\b(?:in the |over the )?(?:last |past )?24(?:[- ]hours?|h)\b/g,' ').replace(/\bso far\b/g,' ').replace(/\bin total\b/g,' total ')
   .replace(/\b(?:still |yet )?waiting to be paid\b|\b(?:still |yet )to be paid\b|\bawaiting payment\b/g,' ~waiting ')
   .replace(/\b(?:not (?:yet )?paid(?: yet)?|(?:has|have)(?:n't| not)(?: yet)? been paid(?: yet)?)\b/g,' ~unpaid ');
+ if(/(?:^|[\s(])[-−]\s*(?:\d|\.\d)/.test(text))return no('negative quantity');
+ let invalidAmount=false;
+ text=text.replace(/([+\-−]?\s*[^\s()]+)\s+near\b/g,(all,raw:string)=>{
+  if(!/\d/.test(raw))return all;
+  const value=raw.trim();
+  if(nearUnits(value)===null){invalidAmount=true;return all;}
+  const unsigned=value.replace(/^\+/,'');
+  return ` ${unsigned.startsWith('.')?'0':''}${unsigned} near`;
+ });
+ if(invalidAmount)return no('invalid NEAR amount');
  // Outcomes following a list of IDs apply to every subject in that list.
  // This also covers lists split into separate parser clauses by punctuation.
  const outcomes=[...text.matchAll(/\b(?:paid|settled|blocked|rejected|failed|queued|proposed|pending|waiting|unpaid|cancelled|canceled|refunded)\b/g)];
@@ -192,7 +226,7 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
  }
  const amounts=[...text.matchAll(/\b\d+(?:\.\d+)?\s+near\b/g)];
  if(new Set(ids).size>1&&amounts.length&&amounts.every(m=>m.index>lastIdAt)&&outcomes.every(m=>m.index>lastIdAt)){
-  if(amounts.some(m=>ids.some(i=>pack.invoices[i].amount_near===null||Number(pack.invoices[i].amount_near)!==Number(m[0].split(/\s+/)[0]))))return no('shared amount contradicts an invoice');
+  if(amounts.some(m=>ids.some(i=>!sameNear(pack.invoices[i].amount_near,m[0].split(/\s+/)[0]))))return no('shared amount contradicts an invoice');
  }
  // A flag phrase ("blocked attempt", "duplicate bill") is checked against the invoice it is said about.
  for(const i of new Set(ids))for(const f of pack.invoices[i].flags)text=text.replace(new RegExp(`\\b${escape(f.replace(/_/g,' '))}\\b`,'g'),` §f${i} `);
@@ -205,7 +239,7 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
  let sentenceCount:number|null=null;                                // a count earlier in the sentence covers later outcome words
  const clauses=text.split(/[,:—–()]|\s(?:and|but|with|while|plus)\s/);
  for(const clause of clauses){
-  const tokens=clause.match(/§c|§[imwf]\d+|\d+(?:\.\d+)?|~\w+|[a-z0-9]+(?:[-'][a-z0-9]+)*/g)??[];
+  const tokens=clause.match(/§c|§[imwf]\d+|\d+(?:\.\d+)?|\.\d+|~\w+|[a-z0-9]+(?:[-'][a-z0-9]+)*/g)??[];
   if(!tokens.length)continue;
   if(new RegExp(`^(?:${friendly.join('|')})$`,'i').test(clause.trim().replace(/[.!?]+$/,'')))continue;
   const used=new Set<number>();
@@ -219,6 +253,9 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
   const outcomeIdx=tokens.map((t,i)=>OUTCOME_TOKEN[t]?i:-1).filter(i=>i>=0);
   const outcomeNear=(i:number)=>{const after=outcomeIdx.find(j=>j>i);return OUTCOME_TOKEN[tokens[after??outcomeIdx.filter(j=>j<i).pop()!]];};
   const isCount=(w:string,j:number)=>/^\d+$/.test(w)&&tokens[j+1]!=='near'||WORD_NUMBERS[w]!==undefined&&!(w==='one'&&['this','that','the','which','each'].includes(tokens[j-1]))||['no','none','nothing'].includes(w);
+  // A zero count ("nothing was cancelled") is supported. Other negated
+  // aggregates need a complement, not the positive count; fall back to facts.
+  if(!hasId&&outcomeIdx.length&&tokens.some(isCount)&&tokens.some(t=>negates(t)&&!['no','none','nothing'].includes(t)))return no('unsupported negated aggregate');
   for(let i=0;i<tokens.length;i++){
    const t=tokens[i];
    if(t.startsWith('§i')){used.add(i);continue;}
@@ -233,19 +270,19 @@ function claimsHold(pack:FactsPack,keys:string[],sentence:string,spans:{from:num
     if(!next?.startsWith('§m')||idAt(i)!==Number(next.slice(2)))return no('"because" without that invoice\'s own reason');
     used.add(i);continue;
    }
-   const value=/^\d+(?:\.\d+)?$/.test(t)?t:null;
+   const value=/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(t)?t:null;
    if(value!==null&&tokens[i+1]==='near'){                            // an amount, bound to its invoice or budget field
     used.add(i);used.add(i+1);
     const bill=hasId||ids.length?idAt(i):null;
-    if(bill!==null){if(pack.invoices[bill].amount_near===null||Number(pack.invoices[bill].amount_near)!==Number(value))return no('invoice amount mismatch');continue;}
+    if(bill!==null){if(!sameNear(pack.invoices[bill].amount_near,value))return no('invoice amount mismatch');continue;}
     const named=tokens.filter(w=>suppliers.has(w));                  // "Bean-Co received 0.4 NEAR"
-    if(named.length){if(named.some(w=>Number(suppliers.get(w))!==Number(value)))return no('supplier amount mismatch');continue;}
+    if(named.length){if(named.some(w=>!sameNear(suppliers.get(w),value)))return no('supplier amount mismatch');continue;}
     const near=(words:string[])=>{let best:string|null=null,dist=Infinity;tokens.forEach((w,j)=>{if(words.includes(w)&&Math.abs(j-i)<dist){best=w;dist=Math.abs(j-i);}});return best as string|null;};
     const field=near(['used','remaining','left'])??near(['per-payment','cap','single','available','holds','hold','balance','budget','limit','daily','rolling']);
     const expected=field===null?null:field==='used'?(budget?day.used_near:null):field==='remaining'||field==='left'?(budget?day.remaining_near:null)
      :['per-payment','cap','single'].includes(field)?(budget?rules?.per_payment_near??null:null):['available','holds','hold','balance'].includes(field)?(balance?pack.vault.available_near:null)
      :(budget?day.limit_near:null);
-    if(expected===null||Number(expected)!==Number(value))return no('budget/balance amount mismatch or unselected');
+    if(!sameNear(expected,value))return no('budget/balance amount mismatch or unselected');
     continue;
    }
    const word=WORD_NUMBERS[t]!==undefined&&!(t==='one'&&['this','that','the','which','each'].includes(tokens[i-1]))?WORD_NUMBERS[t]:null;

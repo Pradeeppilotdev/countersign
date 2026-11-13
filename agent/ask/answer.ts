@@ -3,7 +3,7 @@
 // unsupported phrasing. The exact evidence and sources are always rendered below.
 import type {FactsPack} from './facts.ts';
 import type {ChatMessage,Complete} from './model.ts';
-import {voiceOptions,verifiedReply} from './voice.ts';
+import {voiceOptions,verifiedReply,smallTalkReply} from './voice.ts';
 import {fitEvidence,helpEvidence,runwayEvidence,type Voice} from './help.ts';
 
 export const REFUSAL="I can only answer questions about this vault's payments and rules.";
@@ -149,16 +149,13 @@ function basicShape(reply:string,max:number){
  return null;
 }
 
-const ASSESSMENT=/\b(?:fine|safe|safety|secure|risks?|risky|scam\w*|fraud\w*|healthy|suspicious|dangerous|scary|concerning|alarming|looks off|trust\w*|everything|nothing|problems?|issues?|wrong|budget|balance|limit|cap|funds|spending|policy|rules?)\b/i;
 export function checkChat(reply:string,pack:FactsPack):string|null{
  const shape=basicShape(reply,MAX_CHAT);if(shape)return shape;
  if(/\d/.test(reply)||numbersIn(reply).length)return 'A chat reply may not contain numbers.';
  if(idsIn(reply,pack).length)return 'A chat reply may not name an invoice.';
  if(new RegExp(OUTCOME_WORD.source,'i').test(reply)||/\b(?:went through|went|through|cleared|sent|send|sending|approv(?:e|ed|al)|authoriz(?:e|ed|ation)|transfer(?:red)?|processed|released|submitted)\b/i.test(reply))return 'A chat reply may not state an outcome or action.';
  if(PAUSE_WORD.test(reply)||POLICY_WORD.test(reply))return 'A chat reply may not describe the vault.';
- // Small talk carries no claims. Any wording is fine, but not an assessment of the vault, its suppliers or its risks.
- if(ASSESSMENT.test(reply))return 'A chat reply may not assess the vault.';
- return null;
+ return smallTalkReply(reply)?null:'A chat reply must be a greeting or an invitation, without factual claims.';
 }
 
 // The verified sentences of a reply (unverified ones are cut), or why nothing could be kept.
