@@ -218,10 +218,44 @@ function render(pack:FactsPack,facts:Map<string,Evidence>,raw:string,question:st
  return {...answer,text:kept+'\n\n'+answer.text,...why?{reply_trimmed:why}:{}};
 }
 
+// A lone no_record from the model: before giving up, map plain keywords in the question to existing
+// evidence. The first rule whose evidence exists is rendered exactly as if the model had selected it,
+// without any model reply. Order matters: specific phrasings come before broad ones.
+const FALLBACK:[RegExp,string][]=[
+ [/\bchange\b.*\b(?:limits?|budget|cap|policy|rules)\b/i,'help:policy'],
+ [/\bresum(?:e|ing)\b/i,'help:resume'],
+ [/\b(?:gas|fees?)\b/i,'help:fees'],
+ [/\b(?:stablecoins?|usdc)\b/i,'help:stablecoin'],
+ [/\bhow long\b|\bdays?\b|\brun(?:ning)? out\b/i,'runway'],
+ [/\bafford\b|\bfit\b/i,'fit'],
+ [/\b(?:budget|limits?|rules?|polic(?:y|ies))\b/i,'budget'],
+ [/\bbalance\b|\bhow much\b.*\b(?:do i have|have i got|is left|left)\b|\bavailable\b/i,'balance'],
+ [/\b(?:paid|blocked|stopped|failing|failed|waiting|pending)\b|\bhow(?:'s| is)\s+(?:my\s+)?agent\b/i,'activity'],
+ [/\bhow many\b/i,'fit'],
+];
+export function fallbackKey(question:string,facts:{has(key:string):boolean}):string|null{
+ for(const [pattern,key] of FALLBACK)if(pattern.test(question)&&facts.has(key))return key;
+ return null;
+}
+function answer(pack:FactsPack,facts:Map<string,Evidence>,raw:string,question:string):Verdict{
+ const verdict=render(pack,facts,raw,question);
+ if(!verdict.ok||verdict.text!==NO_RECORD)return verdict;
+ let lone=false;
+ try{const parsed=JSON.parse(raw);lone=Array.isArray(parsed?.facts)&&parsed.facts.length===1&&parsed.facts[0]==='no_record';}catch{}
+ if(!lone)return verdict;
+ const key=fallbackKey(question,facts);
+ const debug=(line:string)=>{if(process.env.COUNTERSIGN_ASK_DEBUG)console.error(`[ask debug] ${line}`);};
+ if(!key){debug('no_record alone; no keyword fallback matched.');return verdict;}
+ const fallback=render(pack,facts,JSON.stringify({facts:[key]}),question);
+ if(!fallback.ok){debug(`no_record alone; keyword fallback ${key} failed: ${fallback.why}`);return verdict;}
+ debug(`no_record alone; keyword fallback selected ${key}.`);
+ return fallback;
+}
+
 export function verifyAnswer(pack:FactsPack,raw:string,question=''):Verdict{
- return render(pack,evidenceFor(pack,question),raw,question);
+ return answer(pack,evidenceFor(pack,question),raw,question);
 }
 export async function askQuestion(pack:FactsPack,question:string,complete:Complete):Promise<Verdict>{
  const facts=evidenceFor(pack,question);
- return render(pack,facts,await complete(messagesFor(pack,facts,question)),question);
+ return answer(pack,facts,await complete(messagesFor(pack,facts,question)),question);
 }

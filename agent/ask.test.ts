@@ -10,7 +10,7 @@ import {readInbox} from './ask/inbox-reader.ts';
 import {VIEW_METHODS,openVaultReader} from './ask/views.ts';
 import {REFUSAL,UNVERIFIED,askQuestion,buildMessages,verifyAnswer} from './ask/answer.ts';
 import {checkInvoice,lookalike} from './ask/check.ts';
-import {MAX_TOKENS,nearChat} from './ask/model.ts';
+import {MAX_TOKENS,SLOW,TIMEOUT_MS,nearChat} from './ask/model.ts';
 import {GLOSSARY,explain} from './ask/glossary.ts';
 import {HELP,amountIn,fitEvidence,helpEvidence,runwayEvidence} from './ask/help.ts';
 const HELP_TEXT=(topic:string)=>helpEvidence().find(c=>c.key==='help:'+topic)!.text;
@@ -1423,4 +1423,40 @@ test('review follow-up: chat rejects payment actions and approval claims',async(
  for(const text of ['Your payment was sent.','Your bill is approved.','The money was transferred.'])
   assert.equal(verifyAnswer(pack,voiced(['chat'],text)).text,REFUSAL,text);
  assert.equal(verifyAnswer(pack,voiced(['chat'],'Hi! How can I help with your vault today?')).text,'Hi! How can I help with your vault today?');
+});
+
+test('a lone no_record falls back to keyword-matched evidence, rendered without a model reply',async()=>{
+ const pack=await cafePack();
+ const NO_RECORD="I can't answer that from this vault. I can help with your bills, payments, blocks, rules, and checking an account before you pay.";
+ const lone=async()=>JSON.stringify({facts:['no_record'],reply:'Sorry, I cannot tell.'});
+ const balance=verifyAnswer(pack,select('balance'));
+ for(const question of ['How much do I have?','how much NEAR is available']){
+  const verdict=await askQuestion(pack,question,lone);
+  assert.deepEqual(verdict,balance,question);
+  assert.equal(verdict.text.split('\n')[0],`The vault has ${pack.vault.available_near} NEAR available.`);
+  assert.match(verdict.text,/\nSources: /);
+ }
+ assert.deepEqual(await askQuestion(pack,"what's the weather",lone),{ok:true,text:NO_RECORD,sources:[]});
+ // Other keyword families map to their existing evidence.
+ assert.deepEqual(await askQuestion(pack,'What is my budget?',lone),verifyAnswer(pack,select('budget')));
+ assert.deepEqual(await askQuestion(pack,'Which bills got blocked?',lone),verifyAnswer(pack,select('activity')));
+ assert.deepEqual(await askQuestion(pack,'How long until I run out?',lone),verifyAnswer(pack,select('runway')));
+ assert.deepEqual(await askQuestion(pack,'Do I pay gas?',lone),verifyAnswer(pack,select('help:fees')));
+ assert.deepEqual(await askQuestion(pack,'How do I change my limit?',lone),verifyAnswer(pack,select('help:policy')));
+ // no_record beside other keys, refuse and chat are unchanged.
+ assert.deepEqual(await askQuestion(pack,'How much do I have?',async()=>select('refuse')),{ok:true,text:REFUSAL,sources:[]});
+ assert.equal(TIMEOUT_MS,30_000);
+});
+
+test('a model timeout gives the slow message, not a generic error',async()=>{
+ const messages=[{role:'user' as const,content:'hi'}];
+ let signal:AbortSignal|undefined;
+ const slow=nearChat({apiKey:'k',model:'m'},async(_url,options)=>{signal=options?.signal??undefined;throw new DOMException('The operation was aborted due to timeout','TimeoutError');});
+ await assert.rejects(()=>slow(messages),error=>String((error as Error).message)===SLOW);
+ assert.ok(signal);
+ assert.equal(SLOW,'Dave is slow right now. Try again in a moment.');
+ // A body read that times out is slow too; other failures keep their message.
+ const slowBody=nearChat({apiKey:'k',model:'m'},async()=>({ok:true,status:200,text:async()=>{throw new DOMException('timeout','TimeoutError');}}) as unknown as Response);
+ await assert.rejects(()=>slowBody(messages),error=>String((error as Error).message)===SLOW);
+ await assert.rejects(()=>nearChat({apiKey:'k',model:'m'},async()=>{throw new TypeError('fetch failed');})(messages),/the model request failed\./);
 });

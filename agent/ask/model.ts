@@ -5,7 +5,10 @@ import {parseEnv} from 'node:util';
 import {AskError} from './views.ts';
 
 const ENDPOINT='https://cloud-api.near.ai/v1/chat/completions';
-export const MAX_TOKENS=2000; // Reasoning models stall when the budget is small.
+export const MAX_TOKENS=2000;
+export const TIMEOUT_MS=30_000;
+export const SLOW='Dave is slow right now. Try again in a moment.';
+const timedOut=(error:unknown)=>(error as {name?:string})?.name==='TimeoutError'; // Reasoning models stall when the budget is small.
 // NEAR AI honours reasoning_effort:'low' (reasoning drops to ~1 token); 'none',
 // enable_thinking and thinking:{type:'disabled'} are ignored. Ask Dave only selects
 // evidence and writes a short reply, so it does not need long reasoning.
@@ -25,17 +28,17 @@ export function nearChat(config:{apiKey:string;model:string},send:typeof fetch=f
  return async messages=>{
   let response:Response;
   try{
-   response=await send(ENDPOINT,{method:'POST',redirect:'error',signal:AbortSignal.timeout(90_000),
+   response=await send(ENDPOINT,{method:'POST',redirect:'error',signal:AbortSignal.timeout(TIMEOUT_MS),
     headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
     body:JSON.stringify({model,stream:false,max_tokens:MAX_TOKENS,temperature:0,reasoning_effort:'low',messages})});
-  }catch{throw new AskError('Ask Dave: the model request failed.');}
+  }catch(error){throw new AskError(timedOut(error)?SLOW:'Ask Dave: the model request failed.');}
   if(!response.ok){await response.body?.cancel();throw new AskError(`Ask Dave: the model request failed (HTTP ${response.status}).`);}
   let body:any;
   try{
    const text=await response.text();
    if(text.length>262144)throw Error('oversized');
    body=JSON.parse(text);
-  }catch{throw new AskError('Ask Dave: the model reply was unreadable.');}
+  }catch(error){throw new AskError(timedOut(error)?SLOW:'Ask Dave: the model reply was unreadable.');}
   const content=body?.choices?.[0]?.message?.content;
   // Truncated or empty output is handed on as-is and fails the answer check.
   return typeof content==='string'?content:'';
