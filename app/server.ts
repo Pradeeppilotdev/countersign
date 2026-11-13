@@ -20,7 +20,7 @@ const assets: Record<string,[string,string]>={
  '/sandbox.js':['public/sandbox.js','text/javascript'], '/style.css':['public/style.css','text/css'],
  '/components.js':['public/components.js','text/javascript'], '/state.js':['public/state.js','text/javascript'],
  '/agent-payments.js':['public/agent-payments.js','text/javascript'], '/agent-payments.css':['public/agent-payments.css','text/css'],
- '/demo-cafe.js':['public/demo-cafe.js','text/javascript'], '/demo-cafe.css':['public/demo-cafe.css','text/css'],
+ '/demo-cafe.js':['public/demo-cafe.js','text/javascript'], '/demo-world.js':['public/demo-world.js','text/javascript'], '/demo-cafe.css':['public/demo-cafe.css','text/css'],
  '/ask-source.js':['public/ask-source.js','text/javascript'],
  '/ask-shared.js':['public/ask-shared.js','text/javascript'], '/ask-widget.js':['public/ask-widget.js','text/javascript'], '/ask-suggest.js':['public/ask-suggest.js','text/javascript'],
  '/ask-widget.css':['public/ask-widget.css','text/css'],

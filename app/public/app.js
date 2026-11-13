@@ -1,4 +1,5 @@
 import {enableCafe,refreshCafe,setCafeAsk} from './demo-cafe.js';
+import {demoRoute,applyDemoWorld} from './demo-world.js';
 import {
   $,
   el,
@@ -24,9 +25,14 @@ import { createAskWidget } from "./ask-widget.js";
 mountIcons();
 let askWidgetView = null;
 const cafeEnabled=await enableCafe();
+let lastView = null;
 function navigate() {
+  const demo = cafeEnabled ? demoRoute(location.hash || "#demo") : null;
+  if (demo && location.hash !== demo.hash)
+    history.replaceState(null, "", demo.hash);
+  applyDemoWorld(document, demo ? demo.chapter : null);
   const view =
-    cafeEnabled && (location.hash === "#demo" || !location.hash)
+    demo
       ? "demo-cafe"
       : location.hash === "#payments"
       ? "payments"
@@ -52,7 +58,9 @@ function navigate() {
         ? "Ask Dave"
         : "1Click lab";
   document.title = "Countersign · " + $("#page-label").textContent;
-  if (view === "demo-cafe") refreshCafe();
+  // Chapter tabs switch views only; the ledger is read when entering the demo.
+  if (view === "demo-cafe" && lastView !== "demo-cafe") refreshCafe();
+  lastView = view;
   if (view === "ask-dave") refreshAskSource();
   if (view === "agent-payments") refreshAgentPayments();
   if (askWidgetView) askWidgetView(view);
@@ -61,7 +69,7 @@ window.addEventListener("hashchange", navigate);
 navigate();
 document
   .querySelectorAll(
-    'a[href="#demo"],a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
+    'a[href="#demo"],a[href^="#demo/"],a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
   )
   .forEach((link) =>
     link.addEventListener("click", (event) => {
@@ -458,7 +466,7 @@ const askWidget = createAskWidget({
     window.scrollTo({ top: 0, behavior: "instant" });
   },
 });
-setCafeAsk(trigger=>askWidget.open("How is my agent doing?",trigger));
+setCafeAsk(trigger=>askWidget.open("How is my agent doing?",trigger),(bill,trigger)=>askWidget.askForBill(bill,trigger));
 askFromBill((bill, trigger) => askWidget.askForBill(bill, trigger));
 askWidgetView = (view) => {
   if (askWidget.setOnAskDaveView(view === "ask-dave")) askTextInput.focus();

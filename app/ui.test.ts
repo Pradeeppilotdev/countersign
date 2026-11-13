@@ -167,3 +167,61 @@ test("café budget note follows the vault's rolling remaining figure", () => {
   assert.equal(cafeBudgetSpent(null, [queued], policy), false);
   assert.equal(cafeBudgetSpent(spending(null), [], policy), false);
 });
+
+// --- Demo world: chapter routing and the separate shell -------------------
+import { readFileSync } from "node:fs";
+import { CHAPTERS, demoRoute, applyDemoWorld } from "./public/demo-world.js";
+
+test("demo hashes route to the five chapters; bare #demo opens the morning post", () => {
+  assert.deepEqual(
+    CHAPTERS.map((c) => c.id),
+    ["bank", "rules", "post", "pay", "end"],
+  );
+  for (const id of ["bank", "rules", "post", "pay", "end"])
+    assert.deepEqual(demoRoute("#demo/" + id), { chapter: id, hash: "#demo/" + id });
+  for (const hash of ["#demo", "#demo/", "#demo/unknown"])
+    assert.deepEqual(demoRoute(hash), { chapter: "post", hash: "#demo/post" });
+  for (const hash of ["#agent-payments", "#ask-dave", "#payments", "", "#demolition"])
+    assert.equal(demoRoute(hash), null);
+});
+
+test("the demo world hides the product sidebar and header, and restores them outside", () => {
+  const node = (dataset: Record<string, string> = {}) => ({
+    hidden: false,
+    dataset,
+    attrs: {} as Record<string, string>,
+    setAttribute(name: string, value: string) { this.attrs[name] = value; },
+    removeAttribute(name: string) { delete this.attrs[name]; },
+  });
+  const classes = new Set<string>();
+  const sidebar = node(), topbar = node();
+  const chapters = CHAPTERS.map((c) => node({ chapter: c.id }));
+  const tabs = CHAPTERS.map((c) => node({ chapter: c.id }));
+  const doc = {
+    body: { classList: { toggle: (name: string, on: boolean) => (on ? classes.add(name) : classes.delete(name)) } },
+    querySelector: (s: string) => (s === ".sidebar" ? sidebar : s === ".topbar" ? topbar : null),
+    querySelectorAll: (s: string) => (s === ".dw-chapter" ? chapters : s === ".dw-tab" ? tabs : []),
+  };
+  applyDemoWorld(doc, "pay");
+  assert.ok(classes.has("demo-world"));
+  assert.equal(sidebar.hidden, true);
+  assert.equal(topbar.hidden, true);
+  assert.deepEqual(chapters.map((c) => c.hidden), [true, true, true, false, true]);
+  assert.deepEqual(tabs.map((t) => t.attrs["aria-current"] ?? null), [null, null, null, "page", null]);
+  applyDemoWorld(doc, null);
+  assert.ok(!classes.has("demo-world"));
+  assert.equal(sidebar.hidden, false);
+  assert.equal(topbar.hidden, false);
+  assert.ok(chapters.every((c) => c.hidden));
+  assert.ok(tabs.every((t) => !("aria-current" in t.attrs)));
+});
+
+test("the demo shell links each chapter tab and exits to the product app", () => {
+  const html = readFileSync(new URL("./public/index.html", import.meta.url), "utf8");
+  assert.match(html, /<a id="demo-exit"[^>]*href="#agent-payments"[^>]*>Exit demo → Countersign app<\/a>/);
+  for (const c of CHAPTERS)
+    assert.match(html, new RegExp(`href="#demo/${c.id}" data-chapter="${c.id}"><span class="dw-num">${c.number}</span>${c.label}</a>`));
+  for (const id of ["demo-cafe", "cafe-feedback", "cafe-actions", "cafe-summary", "cafe-ledger", "cafe-bills", "cafe-rejected", "cafe-progress", "cafe-read-at", "cafe-ask"])
+    assert.match(html, new RegExp(`id="${id}"`), id);
+  assert.doesNotMatch(html, /<script>|style="/);
+});

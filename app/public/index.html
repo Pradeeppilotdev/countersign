@@ -61,12 +61,79 @@
         >
       </header>
       <div class="content">
-        <section id="demo-cafe" class="workspace-view" hidden aria-labelledby="cafe-title">
-          <div class="page-heading"><div><h1 id="cafe-title">Demo café</h1><p>Three suppliers. Your rules. Every payment accounted for.</p></div></div>
-          <div class="panel cafe-strip"><strong>Try it in 60 seconds</strong><ol><li>Receive today's invoices</li><li>Pay all</li><li><a href="#agent-payments">See what got blocked</a></li><li><button id="cafe-ask" class="button ghost">Ask Dave why</button></li></ol></div>
-          <div id="cafe-feedback" role="status"></div><div id="cafe-summary"></div><div id="cafe-actions" class="cafe-actions"></div><p id="cafe-progress" role="status" aria-live="polite"></p>
-          <h2>Supplier ledger</h2><p id="cafe-read-at"></p><div id="cafe-ledger" class="cafe-ledger"></div>
-          <h2>Today's invoices</h2><div id="cafe-bills"></div><h2>Rejected at intake</h2><div id="cafe-rejected"></div>
+        <section id="demo-cafe" class="workspace-view demo-shell" hidden aria-labelledby="cafe-title">
+          <header class="dw-top">
+            <div class="dw-brand">
+              <h1 id="cafe-title"><span>Dave's Café</span> <span class="dw-slash" aria-hidden="true">/</span> <span class="dw-accent">Countersign demo</span></h1>
+              <a id="demo-exit" class="dw-exit" href="#agent-payments">Exit demo → Countersign app</a>
+            </div>
+            <nav class="dw-chapters" aria-label="Demo chapters">
+              <a class="dw-tab" href="#demo/bank" data-chapter="bank"><span class="dw-num">01</span>The bank</a>
+              <a class="dw-tab" href="#demo/rules" data-chapter="rules"><span class="dw-num">02</span>Your rules</a>
+              <a class="dw-tab" href="#demo/post" data-chapter="post"><span class="dw-num">03</span>Morning post</a>
+              <a class="dw-tab" href="#demo/pay" data-chapter="pay"><span class="dw-num">04</span>Agent pays</a>
+              <a class="dw-tab" href="#demo/end" data-chapter="end"><span class="dw-num">05</span>End of day</a>
+            </nav>
+            <div class="dw-balances">
+              <div class="dw-balance"><span class="dw-label">In the vault</span><strong id="dw-vault" class="dw-value dw-green">—</strong></div>
+              <div class="dw-balance"><span class="dw-label">Dave's wallet</span><strong id="dw-wallet" class="dw-value">—</strong></div>
+            </div>
+          </header>
+          <div class="dw-body">
+            <div id="cafe-feedback" role="status"></div>
+            <div id="cafe-actions" class="cafe-actions"></div>
+            <section class="dw-chapter" id="dw-chapter-bank" data-chapter="bank" aria-labelledby="dw-bank-title" hidden>
+              <p class="dw-kicker">01 · The bank</p>
+              <h2 id="dw-bank-title">The vault holds Dave's money</h2>
+              <div id="cafe-summary" class="dw-rows"></div>
+              <div id="cafe-bank-actions" class="cafe-actions"></div>
+            </section>
+            <section class="dw-chapter" id="dw-chapter-rules" data-chapter="rules" aria-labelledby="dw-rules-title" hidden>
+              <p class="dw-kicker">02 · Your rules</p>
+              <h2 id="dw-rules-title">The rules the vault enforces</h2>
+              <div id="cafe-rules" class="dw-rows"></div>
+            </section>
+            <section class="dw-chapter dw-grid" id="dw-chapter-post" data-chapter="post" aria-labelledby="dw-post-title" hidden>
+              <div class="dw-col">
+                <p class="dw-label">Received invoices</p>
+                <div id="cafe-bills" class="dw-rows"></div>
+              </div>
+              <div class="dw-col dw-main">
+                <p class="dw-kicker">03 · Morning post</p>
+                <h2 id="dw-post-title">Today's invoices arrive</h2>
+                <p class="dw-muted">Each supplier signs its invoice. Anything that fails the check is rejected before it reaches the agent.</p>
+                <div id="cafe-post-actions" class="cafe-actions"></div>
+              </div>
+              <div class="dw-col">
+                <p class="dw-label">Rejected at intake</p>
+                <div id="cafe-rejected" class="dw-rows"></div>
+              </div>
+            </section>
+            <section class="dw-chapter dw-grid" id="dw-chapter-pay" data-chapter="pay" aria-labelledby="dw-pay-title" hidden>
+              <div class="dw-col">
+                <p class="dw-label">Waiting to pay</p>
+                <div id="cafe-queue" class="dw-rows"></div>
+              </div>
+              <div class="dw-col dw-main">
+                <p class="dw-kicker">04 · Agent pays</p>
+                <h2 id="dw-pay-title">The agent pays, the vault decides</h2>
+                <div id="cafe-pay-actions" class="cafe-actions"></div>
+                <p id="cafe-progress" role="status" aria-live="polite"></p>
+                <button id="cafe-ask" class="button ghost small" type="button">Ask Dave how it went</button>
+              </div>
+              <div class="dw-col">
+                <p class="dw-label">Results</p>
+                <div id="cafe-results" class="dw-rows"></div>
+              </div>
+            </section>
+            <section class="dw-chapter" id="dw-chapter-end" data-chapter="end" aria-labelledby="dw-end-title" hidden>
+              <p class="dw-kicker">05 · End of day</p>
+              <h2 id="dw-end-title">Supplier ledger</h2>
+              <p id="cafe-read-at" class="dw-muted"></p>
+              <div id="cafe-ledger" class="cafe-ledger"></div>
+              <div id="cafe-end-actions" class="cafe-actions"></div>
+            </section>
+          </div>
         </section>
         <section
           id="payments"

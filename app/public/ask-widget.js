@@ -30,6 +30,7 @@ export function createAskWidget({ onNavigate } = {}) {
     listTitle = el("h3", "Recent answers", "ask-widget-answers-title"),
     list = el("div", "", "ask-widget-answers ask-answer-list"),
     openLink = el("a", "Open full Ask Dave", "ask-widget-open"),
+    disclaimer = el("p", "Dave is AI and can make mistakes. Payments are always decided by the vault.", "ask-widget-disclaimer"),
     panelFoot = el("footer", "", "ask-widget-footer");
   closeBtn.type = "button";
   closeBtn.setAttribute("aria-label", "Close Ask Dave");
@@ -52,7 +53,7 @@ export function createAskWidget({ onNavigate } = {}) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-labelledby", "ask-widget-title");
   panel.hidden = true;
-  panel.append(header, hint, sourceNote, listTitle, list, panelFoot);
+  panel.append(header, hint, sourceNote, listTitle, list, disclaimer, panelFoot);
 
   form = el("form", "", "ask-widget-form");
   input = el("input", "", "ask-widget-input");
