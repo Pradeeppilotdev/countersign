@@ -3,7 +3,7 @@
 // Dave request/answer logic, so it answers exactly what the main view does.
 import { el, icon } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
-import { runAsk, runAccountCheck } from "./ask-shared.js";
+import { runAsk, runAccountCheck, questionBox } from "./ask-shared.js";
 import { questionForBill } from "./ask-suggest.js";
 
 const HISTORY = 3,
@@ -56,8 +56,8 @@ export function createAskWidget({ onNavigate } = {}) {
   panel.append(header, hint, sourceNote, listTitle, list, disclaimer, panelFoot);
 
   form = el("form", "", "ask-widget-form");
-  input = el("input", "", "ask-widget-input");
-  input.type = "text";
+  input = el("textarea", "", "ask-widget-input");
+  input.rows = 1;
   input.name = "text";
   input.required = true;
   input.maxLength = 500;
@@ -67,11 +67,12 @@ export function createAskWidget({ onNavigate } = {}) {
   submitBtn = el("button", "Ask", "button primary ask-widget-ask");
   submitBtn.type = "submit";
   form.append(input, submitBtn);
+  const questionBoxControl = questionBox(input, form);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const question = input.value.trim();
-    if (!question || submitting) return;
-    return ask(question);
+    const text = input.value.trim();
+    if (!text || submitting) return;
+    return ask(text);
   });
   panel.insertBefore(form, listTitle);
   closeBtn.addEventListener("click", () => close());
@@ -106,11 +107,12 @@ export function createAskWidget({ onNavigate } = {}) {
         onFollowUp: (suggestion) => {
           if (submitting) return;
           input.value = suggestion;
+          questionBoxControl.grow();
           input.focus();
           ask(suggestion);
         },
       });
-      if (ok && input.value.trim() === question) input.value = "";
+      if (ok && input.value.trim() === question) questionBoxControl.clear();
     } finally {
       submitting = false;
       submitBtn.disabled = false;
@@ -121,7 +123,7 @@ export function createAskWidget({ onNavigate } = {}) {
     opener = trigger;
     panel.hidden = false;
     button.setAttribute("aria-expanded", "true");
-    if (typeof prefilled === "string") input.value = prefilled;
+    if (typeof prefilled === "string") { input.value = prefilled; questionBoxControl.grow(); }
     input.focus();
   }
 

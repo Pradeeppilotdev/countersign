@@ -20,7 +20,7 @@ import {
 } from "./state.js";
 import { refreshAgentPayments, askFromBill } from "./agent-payments.js";
 import { askSourceLabels } from "./ask-source.js";
-import { askCard, setBusy, setAnswer, setCardError, askDave, checkAccount, appendFollowUps } from "./ask-shared.js";
+import { askCard, setBusy, setAnswer, setCardError, askDave, checkAccount, appendFollowUps, questionBox } from "./ask-shared.js";
 import { createAskWidget } from "./ask-widget.js";
 mountIcons();
 let askWidgetView = null;
@@ -390,6 +390,7 @@ const askForm = $("#ask-question-form"),
   accountInput = $("#ask-account"),
   checkBtn = $("#ask-check-button"),
   checkBtnLabel = $("#ask-check-label");
+const askQuestionBox = questionBox(askTextInput, askForm);
 
 function prependAskCard(card) {
   if (askEmpty) {
@@ -401,6 +402,7 @@ function prependAskCard(card) {
 async function runAskCard(kind, label, payload, button, labelNode, busyText) {
   const isAccount = kind === "account",
     { card, head, body } = askCard(label);
+  let success = false;
   prependAskCard(card);
   setBusy(body, isAccount ? "Checking the account…" : "Asking Dave…");
   button.disabled = true;
@@ -415,9 +417,11 @@ async function runAskCard(kind, label, payload, button, labelNode, busyText) {
     }
     if (data.ok && data.text != null) {
       setAnswer(head, body, data.text, isAccount);
+      success = true;
       if (!isAccount) appendFollowUps(card, label, data, (suggestion) => {
         if (askBtn.disabled) return;
         askTextInput.value = suggestion;
+        askQuestionBox.grow();
         askTextInput.focus();
         askForm.requestSubmit();
       });
@@ -430,13 +434,16 @@ async function runAskCard(kind, label, payload, button, labelNode, busyText) {
     button.setAttribute("aria-busy", "false");
     labelNode.textContent = original;
   }
+  return success;
 }
 askForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (askBtn.disabled) return;
   const text = askTextInput.value.trim();
   if (!text) return;
-  runAskCard("question", text, { text }, askBtn, askBtnLabel, "Asking…");
+  runAskCard("question", text, { text }, askBtn, askBtnLabel, "Asking…").then(ok => {
+    if (ok && askTextInput.value.trim() === text) askQuestionBox.clear();
+  });
 });
 accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -452,6 +459,7 @@ document
       // A question is already running: leave what the owner typed alone.
       if (askBtn.disabled) return;
       askTextInput.value = chip.dataset.example;
+      askQuestionBox.grow();
       askForm.requestSubmit();
     }),
   );

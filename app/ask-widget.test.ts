@@ -1,13 +1,15 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAskWidget} from './public/ask-widget.js';
-import {askCard, applyAsk} from './public/ask-shared.js';
+import {askCard, applyAsk, questionBox, splitAnswer} from './public/ask-shared.js';
+import {readFileSync} from 'node:fs';
 
 // Exercise the real browser modules with HTTP mocked, without a model or chain.
 class Element {
   tag:string; children:Element[]=[]; parent:Element|null=null;
   attributes:Record<string,string>={}; handlers:Record<string,Function>={};
   className=''; value=''; hidden=false; disabled=false; id=''; private text='';
+  style:{height:string}={height:''}; scrollHeight=42; submission:unknown;
   constructor(tag:string){this.tag=tag;}
   get childElementCount(){return this.children.length;}
   get lastElementChild(){return this.children.at(-1)!;}
@@ -28,6 +30,7 @@ class Element {
   contains(n:Element):boolean{return this===n || this.children.some(child=>child.contains(n));}
   getClientRects():object[]{return this.hidden || !this.isConnected || this.parent?.getClientRects().length===0 ? [] : [{}];}
   focus(){(globalThis as any).document.activeElement=this;}
+  requestSubmit(){this.submission=this.event('submit');}
   find(predicate:(n:Element)=>boolean):Element|undefined{
     if(predicate(this))return this;
     for(const n of this.children){const found=n.find(predicate);if(found)return found;}
@@ -45,7 +48,7 @@ function setup(t:any){
   const navLink=new Element('a');navLink.setAttribute('data-view','ask-dave');body.append(navLink);
   const widget=createAskWidget({onNavigate:()=>{widget.setOnAskDaveView(true);fullInput.focus();}});
   const panel=widget.panel as Element, button=widget.button as Element;
-  const input=panel.find(n=>n.tag==='input')!, form=panel.find(n=>n.tag==='form')!;
+  const input=panel.find(n=>n.tag==='textarea')!, form=panel.find(n=>n.tag==='form')!;
   const answers=panel.find(n=>n.className.includes('ask-widget-answers '))!;
   const bill=new Element('button');body.append(bill);
   return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput,navLink};
@@ -106,6 +109,57 @@ test('429 is an error card; submitted text remains available to retry and is nev
   assert.deepEqual(JSON.parse(fetch.mock.calls[0].arguments[1]!.body as string),{kind:'question',text:input.value});
   assert.ok(answers.find(n=>n.className.includes('has-error')));
   assert.ok(answers.textContent.includes(message));assert.equal(answers.find(n=>n.tag==='img'),undefined);
+});
+
+test('both question boxes send on Enter, add a line on Shift+Enter, and grow',t=>{
+  const {input,form}=setup(t);
+  assert.equal(input.tag,'textarea');
+  const html=readFileSync(new URL('./public/index.html',import.meta.url),'utf8');
+  assert.match(html,/<textarea\s+id="ask-text"[\s\S]*?<\/textarea>/);
+  const pageInput=new Element('textarea'),pageForm=new Element('form');
+  const page=questionBox(pageInput,pageForm);
+  for(const [box,owner] of [[input,form],[pageInput,pageForm]] as const){
+    let prevented=false,submitted=0;
+    owner.addEventListener('submit',()=>{submitted++;});
+    box.value='First line';box.event('keydown',{key:'Enter',shiftKey:true,preventDefault(){prevented=true;}});
+    assert.equal(prevented,false);assert.equal(submitted,0);
+    box.value+='\nSecond line';box.scrollHeight=72;box.event('input');assert.equal(box.style.height,'74px');
+    box.event('keydown',{key:'Enter',shiftKey:false,preventDefault(){prevented=true;}});
+    assert.equal(prevented,true);assert.equal(submitted,1);
+  }
+  page.clear();assert.equal(pageInput.value,'');
+});
+
+test('verified reply folds records and Sources; plain facts stay visible',t=>{
+  setup(t);
+  const text='Dave says hello.\nAnother line.\n\n[INV-1] Paid.\nSources: vault at block 9';
+  assert.deepEqual(splitAnswer(text),{reply:'Dave says hello.\nAnother line.',records:'[INV-1] Paid.\nSources: vault at block 9'});
+  const {head,body}=askCard('Question');
+  assert.equal(applyAsk(new Element('article'),head,body,{ok:true,text}),true);
+  const toggle=body.find(n=>n.className==='ask-records-toggle')!,records=body.find(n=>n.className==='ask-records')!;
+  assert.equal(body.children[0].textContent,'Dave says hello.');
+  assert.equal(toggle.textContent,'Show the vault records');
+  assert.equal(toggle.attributes['aria-expanded'],'false');
+  assert.equal(toggle.attributes['aria-controls'],records.id);
+  assert.equal(records.hidden,true);assert.match(records.textContent,/Sources: vault at block 9/);
+  toggle.event('click');assert.equal(records.hidden,false);assert.equal(toggle.attributes['aria-expanded'],'true');
+  toggle.event('click');assert.equal(records.hidden,true);assert.equal(toggle.attributes['aria-expanded'],'false');
+  const plain=askCard('Plain');
+  const facts='[INV-1] Paid.\nSources: vault at block 9';
+  applyAsk(plain.card,plain.head,plain.body,{ok:true,text:facts});
+  assert.equal(splitAnswer(facts),null);
+  assert.equal(plain.body.find(n=>n.className==='ask-records-toggle'),undefined);
+  assert.deepEqual(plain.body.children.map(n=>n.textContent),facts.split('\n'));
+});
+
+test('successful Ask clears its question; a failed Ask keeps it for retry',async t=>{
+  const {widget,input,form}=setup(t);widget.open();
+  let calls=0;
+  t.mock.method(globalThis,'fetch',async()=>++calls===1?reply('No answer.',false):reply('A verified answer.'));
+  input.value='Why did it fail?';await form.event('submit');
+  assert.equal(input.value,'Why did it fail?');
+  await form.event('submit');
+  assert.equal(input.value,'');assert.equal(calls,2);
 });
 
 test('history stays at three during requests, duplicate submits are ignored, and newer drafts survive',async t=>{

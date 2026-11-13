@@ -19,11 +19,44 @@ export function setBusy(body, text = "Asking Dave…") {
   body.replaceChildren(el("p", text, "ask-loading"));
 }
 
+// Verified replies use "reply\n\nrecords\nSources: ...". Split at the last
+// blank line because the reply may itself contain a line break.
+export function splitAnswer(text) {
+  const value = String(text ?? ""), at = value.lastIndexOf("\n\n");
+  if (at <= 0) return null;
+  const reply = value.slice(0, at).trim(), records = value.slice(at + 2);
+  if (!reply || !records.trim() || !/^Sources: .+$/m.test(records.split("\n").at(-1))) return null;
+  return { reply, records };
+}
+function recordLines(target, text) {
+  for (const line of String(text).split("\n"))
+    target.append(el("div", line, line.startsWith("Sources:") ? "ask-sources" : "ask-line"));
+}
+let recordsId = 0;
+function foldedAnswer(body, { reply, records }) {
+  for (const line of reply.split("\n")) body.append(el("div", line, "ask-line ask-reply"));
+  const toggle = el("button", "Show the vault records", "ask-records-toggle"),
+    details = el("div", "", "ask-records");
+  toggle.type = "button";
+  details.id = "ask-records-" + ++recordsId;
+  details.hidden = true;
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", details.id);
+  recordLines(details, records);
+  toggle.addEventListener("click", () => {
+    details.hidden = !details.hidden;
+    toggle.setAttribute("aria-expanded", String(!details.hidden));
+    toggle.textContent = details.hidden ? "Show the vault records" : "Hide the vault records";
+  });
+  body.append(toggle, details);
+}
+
 export function setAnswer(head, body, text, isAccount = false) {
   body.replaceChildren();
   body.classList.remove("has-error");
-  for (const line of String(text).split("\n"))
-    body.append(el("div", line, line.startsWith("Sources:") ? "ask-sources" : "ask-line"));
+  const split = isAccount ? null : splitAnswer(text);
+  if (split) foldedAnswer(body, split);
+  else recordLines(body, text);
   if (isAccount) {
     const t = String(text),
       verdict = t.startsWith("STOP")
@@ -130,4 +163,19 @@ export async function runAccountCheck(container, account, { maxCards = Infinity 
 // Keeps at most max cards in container, dropping the oldest first.
 export function trimCards(container, max) {
   while (container.children.length > max) container.lastElementChild.remove();
+}
+
+// Shared by the full page and the floating panel. CSS caps the height at six lines.
+export function questionBox(textarea, form) {
+  const grow = () => {
+    textarea.style.height = "auto";
+    textarea.style.height = textarea.scrollHeight + 2 + "px";
+  };
+  textarea.addEventListener("input", grow);
+  textarea.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    form.requestSubmit();
+  });
+  return { grow, clear() { textarea.value = ""; grow(); } };
 }
