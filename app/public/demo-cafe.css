@@ -1,7 +1,5 @@
 /* Demo world. Everything is scoped under body.demo-world, which only the
    #demo/* routes set, so the product views keep their own look. */
-.ask-widget-disclaimer { display: none; }
-
 body.demo-world {
   --dw-bg: #0a0b0b;
   --dw-surface: #121414;
@@ -36,6 +34,8 @@ body.demo-world .dw-top {
   padding: 0 32px; border-bottom: 1px solid var(--dw-line); background: var(--dw-bg);
 }
 body.demo-world .dw-brand { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+body.demo-world .dw-brand-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; }
+body.demo-world .dw-mode { color: var(--dw-green); }
 body.demo-world #cafe-title { font-size: 16px; white-space: nowrap; }
 body.demo-world .dw-slash { color: var(--dw-muted); font-weight: 400; }
 body.demo-world .dw-accent { color: var(--dw-green); }
@@ -229,6 +229,9 @@ body.demo-world #demo-cafe .dw-viewer-head h2 { font-size: 15px; }
 @media (max-width: 900px) {
   body.demo-world .dw-post { grid-template-columns: minmax(0, 1fr); }
   body.demo-world .dw-post .dw-doc-col { order: 0; }
+  body.demo-world .dw-mailbox { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; padding: 4px 0 10px; }
+  body.demo-world #demo-cafe .dw-mail-item { flex: 0 0 280px; max-width: 88%; scroll-snap-align: start; background: var(--dw-surface); border: 1px solid var(--dw-line); }
+  body.demo-world #demo-cafe .dw-mail-item[aria-pressed="true"] { border-color: var(--dw-green); background: var(--dw-surface-2); }
 }
 @media (max-width: 600px) {
   body.demo-world .inv-doc { padding: 20px 16px; }
@@ -237,6 +240,7 @@ body.demo-world #demo-cafe .dw-viewer-head h2 { font-size: 15px; }
   body.demo-world .inv-meta { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   body.demo-world .dw-mail-title { font-size: 24px; }
   body.demo-world .dw-viewer { padding: 16px 8px; }
+  body.demo-world #demo-cafe .button { min-height: 44px; }
 }
 
 /* Step 3: The bank */

@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,existsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe,retryCafeBill} from '../agent/demo-cafe.ts';
+import {setupCafe,receiveCafe,payCafe,payCafeBill,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe,retryCafeBill} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
 import {lookalike} from '../agent/ask/check.ts';
-import {runAgentBill} from '../agent/desk-web.ts';
 import {createDemoRoute} from '../app/demo-route.ts';
 
 test('pay-one settles only its chosen café bill once on chain',{timeout:240000},async()=>{
@@ -17,7 +16,7 @@ test('pay-one settles only its chosen café bill once on chain',{timeout:240000}
  const id=received.mail.invoices.find((invoice:any)=>invoice.id.startsWith('INV-BEANS-01-')).id;
  const state=()=>readCafe(directory),op=async()=>({});
  const route=createDemoRoute({network:()=>undefined,state,setup:op,receive:op,pay:op,
-  payOne:async bill=>{const {record}=await runAgentBill(directory,bill,false);return {record,state:await state()};},
+  payOne:bill=>payCafeBill(directory,bill),
   faucet:op,walletFaucet:op,deposit:op,setRules:op,renewRules:op,retry:op,reset:op,modelReady:()=>false});
  assert.equal((await route('POST','/api/demo/pay-one',{id:'INV-UNKNOWN'})).status,400);
  const first=await route('POST','/api/demo/pay-one',{id});
@@ -25,10 +24,21 @@ test('pay-one settles only its chosen café bill once on chain',{timeout:240000}
  const after:any=await state();
  assert.equal(after.bills.find((bill:any)=>bill.id===id).outcome,'paid');
  assert.equal(after.suppliers.find((supplier:any)=>supplier.id==='Bean-Co').received,parseNear('0.4'));
+ assert.equal(after.day_vault_start,received.available);
+ assert.deepEqual(after.run,{order:[id],vault_before:received.available});
+ assert.equal(BigInt(received.available)-BigInt(after.available),BigInt(parseNear('0.4')));
+ assert.equal(JSON.parse(readFileSync(join(directory,'cafe.json'),'utf8')).day_vault_start,received.available);
  for(const supplier of after.suppliers.filter((supplier:any)=>supplier.id!=='Bean-Co'))assert.equal(supplier.received,'0');
  assert.equal((await route('POST','/api/demo/pay-one',{id})).status,400);
  const again:any=await state();
  assert.deepEqual(again.suppliers.map((supplier:any)=>supplier.received),after.suppliers.map((supplier:any)=>supplier.received));
+ assert.equal(again.day_vault_start,received.available);
+ // A later batch run keeps the first single-payment baseline and pays no bill twice.
+ const all:any=await payCafe(directory,false,{running:false,completed:0,total:0,current:null});
+ assert.equal(all.day_vault_start,received.available);
+ assert.equal(all.run.vault_before,after.available);
+ assert.ok(all.suppliers.every((supplier:any)=>supplier.received===parseNear('0.4')));
+ assert.equal(BigInt(received.available)-BigInt(all.available),BigInt(parseNear('1.2')));
  }finally{if(existsSync(directory))await backupCafe(directory);}
 });
 
@@ -129,6 +139,9 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
   const settled:any=await readCafe(directory);
   assert.equal(pastryReceived(settled).received,parseNear('0.9'));assert.equal(settled.available,retried.available);
   const next:any=await receiveCafe(directory);assert.equal(next.bills.length,12);assert.equal(next.rejected.length,2);
+  assert.equal(next.mail.invoices.length,14);
+  assert.equal(new Set(next.mail.invoices.map((invoice:any)=>invoice.id)).size,14);
+  assert.deepEqual(next.mail.invoices.slice(0,7),received.mail.invoices);
   const original=readFileSync(join(directory,'cafe.json'),'utf8');
   writeFileSync(join(directory,'keep-me.txt'),'preserve this');
   backup=await backupCafe(directory);assert.ok(backup);assert.equal(existsSync(directory),false);

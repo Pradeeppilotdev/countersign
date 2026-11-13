@@ -144,7 +144,8 @@ export async function receiveCafe(directory:string){
    // As delivered: the payee is what is written on the invoice, tampered or not.
    const display=(bill:typeof bills[number]):MailInvoice=>({id:bill.invoice.id,merchant:bill.merchant_id,supplier:cafe.suppliers.find(s=>s.id===bill.merchant_id)!.name,
     payee:bill.invoice.payee,amount:bill.invoice.amount,expires_at:bill.expires_at,week:week(bill)});
-   cafe.mail={issued_at:new Date().toISOString(),invoices:bills.map(display)};
+   // Keep earlier deliveries visible when another batch arrives the same day.
+   cafe.mail={issued_at:cafe.mail?.issued_at??new Date().toISOString(),invoices:[...(cafe.mail?.invoices??[]),...bills.map(display)]};
    for(const bill of bills){
     try{await importDeskInvoice(desk,inbox,bill);}
     catch(error){
@@ -160,6 +161,26 @@ export async function receiveCafe(directory:string){
 // results: each bill's real outcome, appended the moment its run finishes, in processing order.
 export type CafeResult={id:string;outcome:string;error:string|null;explanation:{meaning:string}|null};
 export type CafeProgress={running:boolean;completed:number;total:number;current:string|null;order?:string[];results?:CafeResult[];vault_before?:string|null};
+async function beginCafeRun(directory:string,order:string[]){
+ return withDesk(directory,async desk=>{
+  const before=String(await desk.vault.view('available_balance',{}));
+  if(order.length){
+   const cafe=config(directory);cafe.run={order,vault_before:before};cafe.day_vault_start??=before;
+   // Save before submission so a restart cannot lose the original balance.
+   saveJson(join(directory,'cafe.json'),cafe);
+  }
+  return before;
+ });
+}
+export async function payCafeBill(directory:string,id:string){
+ requireLocalDemo();const cafe=config(directory);
+ if(!cafe.ready||!cafe.mail?.invoices.some(invoice=>invoice.id===id))throw new DeskWebError('Unknown café invoice.');
+ const before=await readAgentState(directory);
+ if(!before.bills.some(bill=>bill.id===id&&['queued','proposed'].includes(bill.outcome)))throw new DeskWebError('This invoice is no longer queued.');
+ await beginCafeRun(directory,[id]);
+ const {record}=await runAgentBill(directory,id,false);
+ return {record,state:await readCafe(directory)};
+}
 export async function payCafe(directory:string,live:boolean,progress:CafeProgress){
  requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
  const state=await readAgentState(directory);
@@ -168,8 +189,7 @@ export async function payCafe(directory:string,live:boolean,progress:CafeProgres
  const queue=state.bills.filter(b=>['queued','proposed'].includes(b.outcome)).sort((a,b)=>a.id.localeCompare(b.id));
  // Round-robin deliveries: first bill from each supplier, then subsequent bills.
  queue.sort((a,b)=>{const order=(id:string)=>Number(id.match(/-(\d\d)-/)?.[1]??0);return order(a.id)-order(b.id);});
- const vaultBefore=String(await withDesk(directory,desk=>desk.vault.view('available_balance',{})));
- {const cafe=config(directory);cafe.run={order:queue.map(b=>b.id),vault_before:vaultBefore};cafe.day_vault_start??=vaultBefore;saveJson(join(directory,'cafe.json'),cafe);}
+ const vaultBefore=await beginCafeRun(directory,queue.map(b=>b.id));
  Object.assign(progress,{running:true,completed:0,total:queue.length,current:null,order:queue.map(b=>b.id),results:[],vault_before:vaultBefore});
  try{
   for(const bill of queue){

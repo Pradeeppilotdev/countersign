@@ -22,7 +22,7 @@ function row(title,detail,outcome=null){
  if(outcome)head.append(tag(outcome));item.append(head);if(detail)item.append(el('p',detail,'dw-muted'));return item;
 }
 function fact(label,value){const item=el('div','','dw-row dw-fact');item.append(el('span',label,'dw-label'),el('strong',value,'dw-mono'));return item;}
-// Invoices from the latest receive, in delivery order. Older café data without a
+// Today's delivered invoices, in delivery order. Older café data without a
 // mail copy falls back to the agent's bill list.
 export function mailbox(state){
  if(state.mail?.invoices?.length)return state.mail.invoices;
@@ -82,7 +82,7 @@ function renderDocument(state,list){
  target.append(invoiceDocument(invoice,state.mail?.issued_at));
  actions.append(button(`Hand all ${list.length} to my agent →`,()=>handAll(),{tone:'primary'}));
  const result=decision(state,invoice);
- if(['queued','proposed'].includes(result.outcome))actions.append(button('Pay this invoice',()=>payOne(invoice.id),{tone:'primary'}));
+ if(['queued','proposed'].includes(result.outcome))actions.append(button('Pay this invoice',()=>payOne(invoice.id),{tone:'secondary'}));
  else actions.append(el('span',`Status: ${TAGS[result.outcome]?.[0]??String(result.outcome).toUpperCase()}`,'dw-tag '+(TAGS[result.outcome]?.[1]??'neutral')));
  // Identical for every invoice: check the account written on it, no model involved.
  actions.append(button('Ask Dave: would you pay this account?',event=>askAccount?.(invoice.payee,event.currentTarget),{tone:'secondary'}));
@@ -98,13 +98,19 @@ function renderMailbox(state,list){
   const head=el('span','','dw-mail-head');head.append(el('strong',invoice.supplier),el('span',shortBill(invoice.id),'dw-mono dw-muted'));
   const foot=el('span','','dw-mail-foot');foot.append(el('span',invoice.week?dueLine(invoice):'Due '+dueLine(invoice),'dw-muted'),el('span',formatUnits(invoice.amount)+' NEAR','dw-mono'));
   item.append(head,foot);
-  item.addEventListener('click',()=>{selected=invoice.id;renderMailbox(state,list);renderDocument(state,list);});
+  item.addEventListener('click',()=>{
+   selected=invoice.id;
+   // Keep focus and the mobile strip's scroll position on the chosen invoice.
+   bills.querySelectorAll('button').forEach(node=>node.setAttribute('aria-pressed',String(node===item)));
+   renderDocument(state,list);
+  });
   bills.append(item);
  }
  if(!list.length)bills.append(el('p','No invoices yet. Receive today\'s post.','dw-muted'));
 }
 function render(state,spending=null){
  current=state;
+ for(const id of ['#dw-rules-error','#dw-rules-saved','#dw-deposit-error'])$(id).textContent='';
  const ids=['#cafe-summary','#cafe-actions','#cafe-ledger','#cafe-bills','#cafe-rules','#cafe-post-actions','#cafe-pay-actions','#cafe-end-actions','#cafe-queue','#cafe-results','#dw-invoice','#dw-invoice-actions'];
  const [summary,actions,ledger,bills,rules,post,pay,end,queue,results]=ids.map(id=>$(id));
  for(const id of ids)$(id).replaceChildren();
@@ -220,7 +226,7 @@ export function endTotals(state,ordered){
  const paidTo=(state.suppliers??[]).filter(s=>BigInt(s.received)>0n);
  const total=paidTo.reduce((sum,s)=>sum+BigInt(s.received),0n),counts={paid:0,stopped:0,rejected:0};
  for(const invoice of ordered)count(counts,decision(state,invoice).outcome);
- return {paid:total.toString(),suppliers:paidTo.length,stopped:counts.stopped,rejected:counts.rejected,vault_start:state.day_vault_start??state.available,vault_now:state.available};
+ return {paid:total.toString(),suppliers:paidTo.length,stopped:counts.stopped,rejected:counts.rejected,vault_start:state.day_vault_start??null,vault_now:state.available};
 }
 function renderEnd(state,ordered){
  const totals=endTotals(state,ordered),stats=$('#dw-end-stats'),ledger=$('#cafe-ledger'),stopped=$('#dw-end-stopped');
@@ -229,7 +235,8 @@ function renderEnd(state,ordered){
  stat(`Paid ${formatUnits(totals.paid)} NEAR`,`to ${totals.suppliers} ${totals.suppliers===1?'supplier':'suppliers'}`);
  stat(`Stopped ${totals.stopped}`,totals.stopped===1?'bill':'bills');
  stat(`Rejected ${totals.rejected}`,'at intake');
- stat(`Vault: ${formatUnits(totals.vault_start)} → ${formatUnits(totals.vault_now)} NEAR`,'since the first run today');
+ if(totals.vault_start===null)stat(`Vault: ${formatUnits(totals.vault_now)} NEAR`,'current available balance');
+ else stat(`Vault: ${formatUnits(totals.vault_start)} → ${formatUnits(totals.vault_now)} NEAR`,'since the first run today');
  for(const supplier of state.suppliers){
   const item=el('div','','dw-row dw-ledger-row'),head=el('div','','dw-row-head');
   head.append(el('strong',supplier.name),el('strong',formatUnits(supplier.received)+' NEAR','dw-mono dw-green'));

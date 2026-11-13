@@ -301,3 +301,10 @@ test('End of day totals match the ledger and list what was stopped and why', asy
  assert.deepEqual(asked,['How is my agent doing?']);
  assert.ok(byText(get('#cafe-end-actions'),'Start a new day'));
 });
+
+test('older café records without a starting balance show only the current balance',async t=>{
+ const {get,ui}=await loadCafe(t,'unknown-start');
+ assert.equal(ui.endTotals(STATE,ui.resultOrder(STATE,STATE.mail.invoices)).vault_start,null);
+ assert.match(get('#dw-end-stats').textContent,/Vault: 4\.2 NEARcurrent available balance/);
+ assert.doesNotMatch(get('#dw-end-stats').textContent,/→|since the first run/);
+});
