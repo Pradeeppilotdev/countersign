@@ -7,6 +7,7 @@ class Element{
  set textContent(v){this.text=String(v);this.children=[];}get textContent(){return this.text+this.children.map(n=>n.textContent).join('');}
  append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.text='';this.children=nodes;}
  setAttribute(k,v){this.attributes[k]=v;}addEventListener(k,fn){this.handlers[k]=fn;}
+ focus(options){this.focused=true;this.focusOptions=options;}
 }
 for(const unavailable of [false,true])test(`browser replay reads static evidence once and never submits a payment (unavailable: ${unavailable})`,async t=>{
  const ids=[...readFileSync(new URL('./index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g)].map(m=>m[1]);
@@ -20,9 +21,10 @@ for(const unavailable of [false,true])test(`browser replay reads static evidence
  await import(`./app.js?unavailable=${unavailable}`);
  const get=id=>nodes.get(id);
  assert.equal(get('loading').hidden,true);
- if(unavailable){assert.equal(get('load-error').hidden,false);assert.equal(get('replay-content').hidden,true);}
+ if(unavailable){assert.equal(get('load-error').hidden,false);assert.equal(get('replay-content').hidden,true);assert.equal(get('hero-stamp').hidden,true);assert.match(get('hero-caption').textContent,/unavailable/);}
  else{
   assert.equal(get('replay-content').hidden,false);assert.equal(get('received').textContent,'0.00');
+  assert.equal(get('hero-paid').textContent,'0.04');assert.equal(get('hero-extra').textContent,'0.00 NEAR');assert.equal(get('hero-bills').textContent,'02');assert.equal(get('hero-stamp').hidden,false);
   for(let round=0;round<2;round++){
    for(let i=0;i<3;i++)get('next').handlers.click();
    assert.equal(get('received').textContent,'0.04');assert.equal(get('retry').textContent,'0.00 NEAR');assert.equal(get('next').disabled,true);
@@ -32,8 +34,10 @@ for(const unavailable of [false,true])test(`browser replay reads static evidence
    for(let i=0;i<3;i++)get('next').handlers.click();
    assert.equal(get('received').textContent,'0.30');assert.match(get('receipt-link').href,/^https:\/\/testnet.nearblocks.io\/txns\//);
    get('choose-weekly').handlers.click();assert.equal(get('received').textContent,'0.00');assert.equal(get('previous').disabled,true);
+   assert.equal(get('hero-paid').textContent,'0.04');assert.equal(get('hero-extra').textContent,'0.00 NEAR');
   }
   get('steps').children[2].children[0].handlers.click();assert.match(get('worker').textContent,/Stopped/);assert.equal(get('received').textContent,'0.04');
+  assert.equal(get('steps').children[2].children[0].focused,true);assert.deepEqual(get('steps').children[2].children[0].focusOptions,{preventScroll:true});
  }
  assert.deepEqual(calls,[{path:'./evidence.json',options:undefined}]);
 });

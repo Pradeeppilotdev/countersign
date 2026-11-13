@@ -1,5 +1,7 @@
 # Recorded Demo café
 
+Visual reference: [Parallel — Finance by Lauri Lännenmäki](https://www.framer.com/marketplace/templates/parallel-finance/). The warm paper, editorial typography and ruled layouts informed this original HTML/CSS presentation. No template code or assets are bundled. The headline receipt uses the verified final result, while the walkthrough below shows each saved checkpoint separately.
+
 The public replay is a static site. Its only request is `GET ./evidence.json`; playback buttons change browser state. It has no wallet connection, payment API, model integration, account creation or owner controls.
 
 `npm run test:replay` → checks the saved balances, single attempt, receipt provenance, browser interactions, failure state and publication allowlist.
