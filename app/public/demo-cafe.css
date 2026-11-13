@@ -276,3 +276,33 @@ body.demo-world .dw-history .dw-muted { margin: 0; }
   body.demo-world .dw-bank-value { font-size: 34px; }
   body.demo-world .dw-history { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; }
 }
+
+/* Step 4: Your rules */
+body.demo-world .dw-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 24px; border-left: 2px solid var(--dw-red); background: rgba(255, 77, 79, 0.1); }
+body.demo-world .dw-banner[hidden] { display: none; }
+body.demo-world .dw-banner p { margin: 0; font-weight: 700; color: var(--dw-text); }
+body.demo-world .dw-rules { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-top: 1px solid var(--dw-line); margin-top: 18px; }
+body.demo-world #demo-cafe .dw-rules-form { margin: 0; padding: 24px 28px 24px 0; }
+body.demo-world .dw-rules-side { padding: 24px 0 24px 28px; border-left: 1px solid var(--dw-line); min-width: 0; }
+body.demo-world .dw-field + .dw-field { margin-top: 16px; }
+body.demo-world #demo-cafe .dw-field input {
+  display: block; width: 100%; max-width: 280px; height: 40px; margin-top: 6px; padding: 0 12px; border-radius: 0;
+  border: 1px solid var(--dw-line); background: var(--dw-bg); color: var(--dw-text); font-family: var(--dw-mono); font-size: 15px;
+}
+body.demo-world #demo-cafe .dw-field input:focus-visible { border-color: var(--dw-green); }
+body.demo-world .dw-rules-expiry { font-size: 12px; margin: 12px 0 0; }
+body.demo-world .dw-rules-form .dw-field-error { margin: 10px 0 0; }
+body.demo-world .dw-saved { color: var(--dw-green); font-size: 13px; margin: 10px 0 0; }
+body.demo-world .dw-saved:empty { display: none; }
+body.demo-world #demo-cafe .dw-rules-form .button { margin-top: 16px; }
+body.demo-world .dw-rules-side .dw-fact { grid-template-columns: 120px minmax(0, 1fr); }
+body.demo-world .dw-weekly-title { margin-top: 24px; }
+body.demo-world .dw-weekly { margin: 8px 0 0; padding: 12px 0; border-top: 1px solid var(--dw-line); border-bottom: 1px solid var(--dw-line); }
+
+@media (max-width: 900px) {
+  body.demo-world .dw-rules { grid-template-columns: minmax(0, 1fr); }
+  body.demo-world #demo-cafe .dw-rules-form { padding: 20px 0; }
+  body.demo-world .dw-rules-side { padding: 20px 0; border-left: 0; border-top: 1px solid var(--dw-line); }
+  body.demo-world #demo-cafe .dw-field input { max-width: none; }
+  body.demo-world .dw-banner { flex-direction: column; align-items: flex-start; }
+}

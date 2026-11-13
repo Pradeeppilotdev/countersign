@@ -112,9 +112,39 @@
               <div id="dw-bank-history" class="dw-rows"></div>
             </section>
             <section class="dw-chapter" id="dw-chapter-rules" data-chapter="rules" aria-labelledby="dw-rules-title" hidden>
+              <div id="dw-rules-expired" class="dw-banner" role="alert" hidden>
+                <p id="dw-rules-expired-text"></p>
+                <button id="dw-rules-renew" class="button primary small" type="button">Renew for 2 hours</button>
+              </div>
               <p class="dw-kicker">02 · Your rules</p>
               <h2 id="dw-rules-title">The rules the vault enforces</h2>
-              <div id="cafe-rules" class="dw-rows"></div>
+              <p class="dw-muted">The vault enforces these rules. Your agent can't change them.</p>
+              <div class="dw-rules">
+                <form id="dw-rules-form" class="dw-rules-form" novalidate>
+                  <div class="dw-field">
+                    <label for="dw-per-bill" class="dw-label">Most per bill (NEAR)</label>
+                    <input id="dw-per-bill" name="per_bill" inputmode="decimal" autocomplete="off" aria-describedby="dw-rules-error" />
+                  </div>
+                  <div class="dw-field">
+                    <label for="dw-daily" class="dw-label">Daily budget, rolling 24 hours (NEAR)</label>
+                    <input id="dw-daily" name="daily_budget" inputmode="decimal" autocomplete="off" aria-describedby="dw-rules-error" />
+                  </div>
+                  <div class="dw-field">
+                    <label for="dw-hours" class="dw-label">Rules last for (hours)</label>
+                    <input id="dw-hours" name="hours" inputmode="numeric" autocomplete="off" aria-describedby="dw-rules-error dw-rules-expiry" />
+                  </div>
+                  <p id="dw-rules-expiry" class="dw-muted dw-rules-expiry"></p>
+                  <p id="dw-rules-error" class="dw-field-error" role="alert"></p>
+                  <p id="dw-rules-saved" class="dw-saved" role="status"></p>
+                  <button id="dw-rules-save" class="button primary small" type="submit">Save rules</button>
+                </form>
+                <div class="dw-rules-side">
+                  <p class="dw-label">Approved suppliers</p>
+                  <div id="cafe-rules" class="dw-rows"></div>
+                  <p class="dw-label dw-weekly-title">Weekly service</p>
+                  <p class="dw-weekly">Milk Co, one bill per week</p>
+                </div>
+              </div>
             </section>
             <section class="dw-chapter dw-grid dw-post" id="dw-chapter-post" data-chapter="post" aria-labelledby="dw-post-title" hidden>
               <div class="dw-col">

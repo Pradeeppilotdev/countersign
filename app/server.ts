@@ -1,5 +1,5 @@
 import {createDemoRoute} from './demo-route.ts';
-import {readCafe,setupCafe,receiveCafe,payCafe,topUpCafe,walletFaucetCafe,depositCafe,resetCafe} from '../agent/demo-cafe.ts';
+import {readCafe,setupCafe,receiveCafe,payCafe,topUpCafe,walletFaucetCafe,depositCafe,setRulesCafe,renewRulesCafe,resetCafe} from '../agent/demo-cafe.ts';
 import {publicError,validateDeskPolicy} from './errors.ts';
 import { SandboxDesk } from './sandbox.ts';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +32,7 @@ const paymentDir=resolve(process.env.COUNTERSIGN_SANDBOX_DIR ?? process.env.AEGI
 const agentDir=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
 const agentRoute=createAgentRoute({state:()=>readAgentState(agentDir),importBill:invoice=>importAgentBill(agentDir,invoice),
  run:(id,live)=>runAgentBill(agentDir,id,live),resume:id=>resumeAgentBill(agentDir,id),modelReady:liveAgentModelReady,error:agentWebError});
-const demoRoute=createDemoRoute({network:()=>process.env.COUNTERSIGN_NETWORK,state:()=>readCafe(agentDir),setup:()=>setupCafe(agentDir),receive:()=>receiveCafe(agentDir),pay:(live,progress)=>payCafe(agentDir,live,progress),faucet:()=>topUpCafe(agentDir),walletFaucet:()=>walletFaucetCafe(agentDir),deposit:amount=>depositCafe(agentDir,amount),reset:()=>resetCafe(agentDir),modelReady:liveAgentModelReady});
+const demoRoute=createDemoRoute({network:()=>process.env.COUNTERSIGN_NETWORK,state:()=>readCafe(agentDir),setup:()=>setupCafe(agentDir),receive:()=>receiveCafe(agentDir),pay:(live,progress)=>payCafe(agentDir,live,progress),faucet:()=>topUpCafe(agentDir),walletFaucet:()=>walletFaucetCafe(agentDir),deposit:amount=>depositCafe(agentDir,amount),setRules:rules=>setRulesCafe(agentDir,rules),renewRules:()=>renewRulesCafe(agentDir),reset:()=>resetCafe(agentDir),modelReady:liveAgentModelReady});
 let agentMutation=false;
 const source=()=>askSource(agentDir,paymentDir,process.env.COUNTERSIGN_NETWORK);
 const sandbox=new SandboxDesk(paymentDir);

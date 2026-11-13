@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,existsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE} from '../agent/demo-cafe.ts';
+import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe,walletFaucetCafe,depositCafe,RESERVE_MESSAGE,setRulesCafe,renewRulesCafe} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
 import {lookalike} from '../agent/ask/check.ts';
 
@@ -28,8 +28,28 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
   const unchanged:any=await readCafe(directory);
   assert.equal(unchanged.available,deposited.available);
   assert.deepEqual(unchanged.bank.map((e:any)=>[e.kind,e.amount]),[['faucet',parseNear('5')],['deposit',parseNear('2')]]);
+  // Your rules: the CLI's set_policy path, read back from the vault; renew keeps the limits.
+  const before:any=unchanged.policy;
+  const saved:any=await setRulesCafe(directory,{per_bill:'0.45',daily_budget:'1.7',hours:'3'});
+  assert.equal(saved.policy.per_payment_near,'0.45');assert.equal(saved.policy.rolling_24h_limit_near,'1.7');
+  assert.equal(saved.policy.min_payment_near,before.min_payment_near);
+  assert.deepEqual(saved.policy.merchants,before.merchants);
+  const hours=(Number(saved.policy.expires_at_ms)-Date.now())/3600000;assert.ok(hours>2.9&&hours<=3,'expiry about 3 hours out: '+hours);
+  await assert.rejects(()=>setRulesCafe(directory,{per_bill:'3',daily_budget:'2',hours:'3'}),/can't be more than the daily budget/);
+  await assert.rejects(()=>setRulesCafe(directory,{per_bill:'0.5',daily_budget:'2',hours:'25'}),/from 1 to 24 hours/);
+  await assert.rejects(()=>setRulesCafe(directory,{per_bill:'0.001',daily_budget:'2',hours:'1'}),/at least the minimum payment \(0\.005 NEAR\)/);
+  await assert.rejects(()=>renewRulesCafe(directory),/already last longer than 2 more hours/);
+  // Back to the café's usual limits for 1 hour, then renew for 2: later expiry, same limits.
+  const short:any=await setRulesCafe(directory,{per_bill:'0.5',daily_budget:'1.2',hours:'1'});
+  const renewed:any=await renewRulesCafe(directory);
+  assert.ok(Number(renewed.policy.expires_at_ms)>Number(short.policy.expires_at_ms));
+  assert.deepEqual([renewed.policy.per_payment_near,renewed.policy.rolling_24h_limit_near,renewed.policy.min_payment_near,renewed.policy.merchants],
+   [short.policy.per_payment_near,short.policy.rolling_24h_limit_near,short.policy.min_payment_near,short.policy.merchants]);
+  assert.ok(Number(renewed.policy.version)>Number(short.policy.version));
   const previous=process.env.COUNTERSIGN_NETWORK;process.env.COUNTERSIGN_NETWORK='testnet';
   try{
+   await assert.rejects(()=>setRulesCafe(directory,{per_bill:'0.5',daily_budget:'2',hours:'3'}),/only on the local sandbox/);
+   await assert.rejects(()=>renewRulesCafe(directory),/only on the local sandbox/);
    await assert.rejects(()=>walletFaucetCafe(directory),/only on the local sandbox/);
    await assert.rejects(()=>depositCafe(directory,'1'),/only on the local sandbox/);
   }finally{if(previous===undefined)delete process.env.COUNTERSIGN_NETWORK;else process.env.COUNTERSIGN_NETWORK=previous;}

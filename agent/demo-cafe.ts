@@ -7,6 +7,7 @@ import {SandboxDesk,parseNear} from '../app/sandbox.ts';
 import {saveJson} from '../app/local-chain.ts';
 import {signInvoice,publicKeyBase64} from '../merchant/invoice.ts';
 import {setDeskMerchantKey,setDeskPolicy,addDeskWeeklyService} from './desk-setup.ts';
+import {renewLocalPolicy} from './policy-renewal.ts';
 import {createDeskInbox,importDeskInvoice} from './desk-core.ts';
 import {readAgentState,runAgentBill,resumeAgentBill,DeskWebError} from './desk-web.ts';
 
@@ -26,6 +27,24 @@ export function parseDemoAmount(value:unknown){
  const [whole,fraction='']=value.split('.');const amount=BigInt(whole)*YOCTO+BigInt(fraction.padEnd(24,'0'));
  if(amount<=0n)throw new DeskWebError('Enter an amount greater than 0.');
  return amount;
+}
+// Your rules. The shared CLI operations (setDeskPolicy, renewLocalPolicy) accept
+// 1–1440 minutes and at most 5 NEAR per amount, inside the contract's 30-day limit.
+export const MAX_RULE_HOURS=24,MAX_RULE_YOCTO=5n*YOCTO,RENEW_MINUTES=120;
+export type DemoRules={per:bigint;daily:bigint;hours:number};
+function ruleAmount(label:string,value:unknown){
+ if(typeof value!=='string'||!/^\d{1,9}(\.\d{1,24})?$/.test(value))throw new DeskWebError(`${label}: enter an amount in NEAR, like 0.5 (up to 24 decimals).`);
+ const [whole,fraction='']=value.split('.');const amount=BigInt(whole)*YOCTO+BigInt(fraction.padEnd(24,'0'));
+ if(amount<=0n)throw new DeskWebError(`${label}: enter an amount greater than 0.`);
+ if(amount>MAX_RULE_YOCTO)throw new DeskWebError(`${label}: the local sandbox allows at most 5 NEAR.`);
+ return amount;
+}
+export function parseDemoRules(input:{per_bill?:unknown;daily_budget?:unknown;hours?:unknown}):DemoRules{
+ const per=ruleAmount('Most per bill',input.per_bill),daily=ruleAmount('Daily budget',input.daily_budget);
+ if(per>daily)throw new DeskWebError("Most per bill can't be more than the daily budget.");
+ if(typeof input.hours!=='string'||!/^\d{1,4}$/.test(input.hours)||Number(input.hours)<1||Number(input.hours)>MAX_RULE_HOURS)
+  throw new DeskWebError(`Rules can last from 1 to ${MAX_RULE_HOURS} hours.`);
+ return {per,daily,hours:Number(input.hours)};
 }
 const walletOf=async(desk:SandboxDesk)=>BigInt((await desk.owner.balance()).available.toString());
 // NEAR refunds unused gas to the signer a few blocks after a call. Wait until the
@@ -184,6 +203,34 @@ export async function depositCafe(directory:string,value:unknown){
  return readCafe(directory);
 }
 const formatYocto=(v:bigint)=>{const whole=v/YOCTO,fraction=(v%YOCTO).toString().padStart(24,'0').replace(/0+$/,'');return fraction?`${whole}.${fraction}`:String(whole);};
+// Same operation as `agent:desk policy`, keeping the pinned suppliers and minimum.
+export async function setRulesCafe(directory:string,input:DemoRules|{per_bill?:unknown;daily_budget?:unknown;hours?:unknown}){
+ requireLocalDemo();const rules='per' in input?input:parseDemoRules(input);
+ if(!config(directory).ready)throw new DeskWebError('Open the café first.');
+ await withDesk(directory,async desk=>{
+  const snapshot:any=await desk.vault.view('policy_snapshot',{});
+  const merchants=(snapshot.policy?.merchants??[]).map((m:any)=>({id:m.id,payee:m.payee}));
+  if(!merchants.length)throw new DeskWebError('No suppliers are pinned. Start a new day to set the café up again.');
+  const minimum=BigInt(snapshot.min_payment);
+  if(rules.per<minimum)throw new DeskWebError(`Most per bill must be at least the minimum payment (${formatYocto(minimum)} NEAR).`);
+  await setDeskPolicy(desk,formatYocto(rules.per),formatYocto(rules.daily),rules.hours*60,formatYocto(minimum),merchants);
+  await settleWallet(desk);
+ });
+ return readCafe(directory);
+}
+// Same operation as `agent:desk renew-policy`: a later expiry, the same limits.
+export async function renewRulesCafe(directory:string){
+ requireLocalDemo();if(!config(directory).ready)throw new DeskWebError('Open the café first.');
+ await withDesk(directory,async desk=>{
+  try{await renewLocalPolicy(desk,`demo-${Date.now()}-${randomUUID().slice(0,8)}`,RENEW_MINUTES);}
+  catch(error){
+   if(error instanceof Error&&/must extend (the current )?policy expiry/i.test(error.message))throw new DeskWebError('Your rules already last longer than 2 more hours.');
+   throw error;
+  }
+  await settleWallet(desk);
+ });
+ return readCafe(directory);
+}
 export async function backupCafe(directory:string){
  requireLocalDemo();
  if(!existsSync(directory))return null;

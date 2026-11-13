@@ -192,3 +192,44 @@ test('deposit amounts are checked in exact BigInt maths before anything is sent'
  assert.deepEqual(posts,['/api/demo/deposit']);
  assert.equal(get('#dw-deposit-amount').value,'');
 });
+
+test('your rules: prefilled form, exact checks before sending, read-only suppliers', async t => {
+ const posts:string[]=[];
+ const {get,ui}=await loadCafe(t,'rules',posts);
+ assert.equal(get('#dw-per-bill').value,'0.5');
+ assert.equal(get('#dw-daily').value,'1.2');
+ assert.equal(get('#dw-hours').value,'1');
+ assert.equal(get('#dw-rules-expired').hidden,true,'no banner while the rules are live');
+ assert.match(get('#cafe-rules').textContent,/Bean Cobeans\.test\.near.*Milk Comilk\.test\.near/);
+ const ok={per_bill:'0.5',daily_budget:'2',hours:'3'};
+ assert.equal(ui.rulesProblem(ok),null);
+ assert.equal(ui.rulesProblem({...ok,per_bill:'3'}),"Most per bill can't be more than the daily budget.");
+ assert.equal(ui.rulesProblem({...ok,per_bill:'0'}),'Most per bill: enter an amount greater than 0.');
+ assert.match(ui.rulesProblem({...ok,daily_budget:'x'}),/^Daily budget: enter an amount/);
+ assert.equal(ui.rulesProblem({...ok,hours:'25'}),'Rules can last from 1 to 24 hours.');
+ assert.equal(ui.rulesProblem({...ok,hours:'0'}),'Rules can last from 1 to 24 hours.');
+ assert.equal(ui.rulesProblem({...ok,per_bill:'0.001'},'0.005'),'Most per bill must be at least the minimum payment (0.005 NEAR).');
+ assert.equal(ui.rulesProblem({per_bill:'0.500000000000000000000001',daily_budget:'0.5',hours:'2'}),"Most per bill can't be more than the daily budget.");
+ get('#dw-per-bill').value='3';get('#dw-daily').value='2';get('#dw-hours').value='3';
+ await get('#dw-rules-form').handlers.submit({preventDefault(){}});
+ assert.equal(get('#dw-rules-error').textContent,"Most per bill can't be more than the daily budget.");
+ assert.deepEqual(posts,[]);
+ get('#dw-per-bill').value='0.5';
+ await get('#dw-rules-form').handlers.submit({preventDefault(){}});
+ assert.equal(get('#dw-rules-error').textContent,'');
+ assert.deepEqual(posts,['/api/demo/set-rules']);
+ assert.match(get('#dw-rules-saved').textContent,/^Rules saved\./);
+});
+
+test('expired rules show the banner, and renew keeps the same limits', async t => {
+ const posts:string[]=[];
+ const expiredAt=Date.now()-60000;
+ const saved=STATE.policy;(STATE as any).policy={...saved,expires_at:expiredAt,expired:true};
+ t.after(()=>{(STATE as any).policy=saved;});
+ const {get}=await loadCafe(t,'expired',posts);
+ assert.equal(get('#dw-rules-expired').hidden,false);
+ assert.match(get('#dw-rules-expired-text').textContent,/^Your rules expired at .+\. Your agent can't pay anything until you renew them\.$/);
+ assert.equal(get('#dw-hours').value,'2');
+ await get('#dw-rules-renew').handlers.click({});
+ assert.deepEqual(posts,['/api/demo/renew-rules']);
+});

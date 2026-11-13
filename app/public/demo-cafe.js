@@ -46,12 +46,17 @@ export function shortNear(yocto){
 }
 // Same rules as the server, in exact BigInt maths; returns an error message or null.
 export function depositProblem(value,walletYocto){
- let amount;
- try{amount=BigInt(parseUnits(String(value).trim(),24));}catch{return 'Enter an amount in NEAR, like 2 or 0.25 (up to 24 decimals).';}
+ const amount=toYocto(value);
+ if(amount===null)return 'Enter an amount in NEAR, like 2 or 0.25 (up to 24 decimals).';
  if(amount<=0n)return 'Enter an amount greater than 0.';
  const wallet=BigInt(walletYocto??0),limit=wallet>GAS_RESERVE?wallet-GAS_RESERVE:0n;
  if(amount>limit)return `You can deposit up to ${formatUnits(limit.toString())} NEAR. ${RESERVE_MESSAGE}`;
  return null;
+}
+// Exact NEAR → yoctoNEAR, zero allowed (callers say why zero is refused); null if malformed.
+function toYocto(value){
+ const text=String(value??'').trim();if(!/^\d{1,9}(\.\d{1,24})?$/.test(text))return null;
+ const [whole,fraction='']=text.split('.');return BigInt(whole)*YOCTO+BigInt(fraction.padEnd(24,'0'));
 }
 function balance(node,yocto){node.textContent=yocto==null?'—':shortNear(yocto);if(yocto!=null)node.setAttribute('title',formatUnits(yocto)+' NEAR');}
 let current=null;
@@ -122,10 +127,8 @@ function render(state,spending=null){
   history.append(item);
  }
  if(!state.bank?.length)history.append(el('p','Nothing yet today.','dw-muted'));
- // 02 Your rules (read only)
- rules.append(fact('Per payment',state.policy.per_payment_near+' NEAR'),fact('Daily budget',state.policy.rolling_24h_limit_near+' NEAR · rolling 24 hours'),
-  fact('Expires',new Date(state.policy.expires_at).toLocaleTimeString()),
-  fact('Suppliers','Bean Co, Milk Co and Pastry Co have pinned signing keys and payouts. Milk Co has a weekly service.'));
+ // 02 Your rules: editable limits, read-only suppliers.
+ renderRules(state);
  // 03 Morning post
  const list=mailbox(state);
  post.append(button("Receive today's invoices",()=>mutate('receive'),{tone:list.length?'secondary':'primary'}));
@@ -172,6 +175,39 @@ function render(state,spending=null){
  $('#cafe-read-at').textContent='Live chain read · '+new Date(state.read_at).toLocaleTimeString()+'. Received totals exclude initial account funding.';
  end.append(button('Refresh ledger',()=>refreshCafe(),{tone:'secondary'}),button('Start a new day',()=>mutate('reset'),{tone:'secondary'}));
 }
+const MAX_RULE_HOURS=24,MAX_RULE_YOCTO=5n*YOCTO;
+// Same messages as the server's parseDemoRules, in exact BigInt maths.
+export function rulesProblem(values,minimumNear=null){
+ const amount=(label,value)=>{
+  const v=toYocto(value);if(v===null)return [null,`${label}: enter an amount in NEAR, like 0.5 (up to 24 decimals).`];
+  if(v<=0n)return [null,`${label}: enter an amount greater than 0.`];
+  if(v>MAX_RULE_YOCTO)return [null,`${label}: the local sandbox allows at most 5 NEAR.`];
+  return [v,null];
+ };
+ const [per,perError]=amount('Most per bill',values.per_bill);if(perError)return perError;
+ const [daily,dailyError]=amount('Daily budget',values.daily_budget);if(dailyError)return dailyError;
+ if(per>daily)return "Most per bill can't be more than the daily budget.";
+ const hours=String(values.hours??'').trim();
+ if(!/^\d{1,4}$/.test(hours)||Number(hours)<1||Number(hours)>MAX_RULE_HOURS)return `Rules can last from 1 to ${MAX_RULE_HOURS} hours.`;
+ if(minimumNear!=null&&per<(toYocto(minimumNear)??0n))return `Most per bill must be at least the minimum payment (${minimumNear} NEAR).`;
+ return null;
+}
+const expiryOf=policy=>Number(policy?.expires_at_ms??new Date(policy?.expires_at).getTime());
+function renderRules(state){
+ const policy=state.policy,rules=$('#cafe-rules');rules.replaceChildren();
+ const expires=expiryOf(policy),expired=policy?.expired===true||(Number.isFinite(expires)&&expires<=Date.now());
+ const banner=$('#dw-rules-expired');banner.hidden=!expired;
+ $('#dw-rules-expired-text').textContent=expired?`Your rules expired at ${new Date(expires).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}. Your agent can't pay anything until you renew them.`:'';
+ $('#dw-per-bill').value=policy?.per_payment_near??'';
+ $('#dw-daily').value=policy?.rolling_24h_limit_near??'';
+ const left=Math.ceil((expires-Date.now())/3600000);
+ $('#dw-hours').value=String(expired||!Number.isFinite(left)?2:Math.min(MAX_RULE_HOURS,Math.max(1,left)));
+ $('#dw-rules-expiry').textContent=Number.isFinite(expires)?(expired?'Expired at ':'Current rules end at ')+new Date(expires).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'.':'';
+ const payee=id=>(policy?.merchants??[]).find(m=>m.id===id)?.payee;
+ for(const supplier of state.suppliers??[]){
+  const item=el('div','','dw-row dw-fact');item.append(el('span',supplier.name),el('strong',payee(supplier.id)??supplier.payee,'dw-mono'));rules.append(item);
+ }
+}
 function handAll(){
  if(globalThis.location&&location.hash!=='#demo/pay')location.hash='#demo/pay';
  return mutate('pay-all',{live:$('#cafe-live').checked===true});
@@ -199,6 +235,21 @@ async function mutate(action,body={},inline=null){
 }
 $('#cafe-ask').addEventListener('click',event=>ask?.(event.currentTarget));
 $('#dw-viewer-close').addEventListener('click',()=>closeViewer());
+$('#dw-rules-form').addEventListener('submit',async event=>{
+ event.preventDefault?.();if(busy)return;
+ const values={per_bill:String($('#dw-per-bill').value??'').trim(),daily_budget:String($('#dw-daily').value??'').trim(),hours:String($('#dw-hours').value??'').trim()};
+ const error=$('#dw-rules-error'),saved=$('#dw-rules-saved'),problem=rulesProblem(values,current?.policy?.min_payment_near??null);
+ error.textContent=problem??'';saved.textContent='';
+ if(problem)return;
+ if(await mutate('set-rules',values,error)){
+  const until=expiryOf(current?.policy);
+  saved.textContent='Rules saved.'+(Number.isFinite(until)?' They last until '+new Date(until).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'.':'');
+ }
+});
+$('#dw-rules-renew').addEventListener('click',async()=>{
+ $('#dw-rules-saved').textContent='';$('#dw-rules-error').textContent='';
+ if(await mutate('renew-rules',{},$('#dw-rules-error')))$('#dw-rules-saved').textContent='Rules renewed for 2 hours, with the same limits.';
+});
 $('#dw-deposit').addEventListener('submit',async event=>{
  event.preventDefault?.();if(busy)return;
  const input=$('#dw-deposit-amount'),error=$('#dw-deposit-error'),value=String(input.value??'').trim();
