@@ -189,7 +189,6 @@ body.demo-world .dw-mail-foot { margin-top: 4px; font-size: 12px; }
 body.demo-world .dw-mail-foot .dw-muted { margin: 0; font-size: 12px; }
 body.demo-world .dw-post { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr) minmax(0, 0.7fr); }
 body.demo-world .dw-doc-col #dw-invoice-actions { margin-top: 18px; }
-body.demo-world .dw-ask-later { margin: 0; font-size: 13px; }
 body.demo-world .dw-steps { margin: 12px 0 0; padding-left: 18px; color: var(--dw-muted); font-size: 13px; }
 body.demo-world .dw-steps li + li { margin-top: 10px; }
 

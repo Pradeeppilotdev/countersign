@@ -41,7 +41,8 @@ export async function setupCafe(directory:string){
    const key=await setDeskMerchantKey(desk,id,publicKeyBase64(pair.publicKey));
    cafe.suppliers.push({id,name,payee:account.accountId,baseline:(await account.balance()).total.toString(),privateKey:pair.privateKey.export({type:'pkcs8',format:'pem'}).toString(),version:key.version,domain:key.domain});save();
   }
-  const scam=await desk.worker.rootAccount.createSubAccount('scam');
+  // A lookalike of Bean Co's payout (5 for s): the tampered invoice pays here.
+  const scam=await desk.worker.rootAccount.createSubAccount('bean5');
   cafe.scam={payee:scam.accountId,baseline:(await scam.balance()).total.toString()};save();
   await setDeskPolicy(desk,'0.5','1.2',120,undefined,cafe.suppliers.map(s=>({id:s.id,payee:s.payee})));
   const now=String((await desk.vault.view('policy_snapshot',{})).now);

@@ -1,9 +1,9 @@
 import {$,el,api,button,notice} from './components.js';
 import {formatUnits,parseUnits,cafeBudgetSpent} from './state.js';
 import {invoiceDocument,shortBill,dueLine,SIGNATURE_SENTENCE} from './invoice-doc.js';
-let enabled=false,busy=false,ask=null,askBill=null,selected=null,opener=null;
+let enabled=false,busy=false,ask=null,askBill=null,askAccount=null,selected=null,opener=null;
 const root=$('#demo-cafe'),feedback=$('#cafe-feedback');
-export function setCafeAsk(callback,billCallback=null){ask=callback;askBill=billCallback;}
+export function setCafeAsk(callback,billCallback=null,accountCallback=null){ask=callback;askBill=billCallback;askAccount=accountCallback;}
 export async function enableCafe(){
  try{enabled=(await api('/api/config')).demoEnabled===true;}catch{enabled=false;}
  $('#demo-nav').hidden=!enabled;return enabled;
@@ -60,8 +60,8 @@ function renderDocument(state,list){
  const invoice=list.find(i=>i.id===selected);if(!invoice)return;
  target.append(invoiceDocument(invoice,state.mail?.issued_at));
  actions.append(button(`Hand all ${list.length} to my agent →`,()=>handAll(),{tone:'primary'}));
- if(decision(state,invoice).outcome==='rejected')actions.append(el('p',"Dave can explain this one after your agent tries it.",'dw-muted dw-ask-later'));
- else actions.append(button('Ask Dave about this invoice',event=>ask?.(event.currentTarget,`Tell me about invoice ${invoice.id}`),{tone:'secondary'}));
+ // Identical for every invoice: check the account written on it, no model involved.
+ actions.append(button('Ask Dave: would you pay this account?',event=>askAccount?.(invoice.payee,event.currentTarget),{tone:'secondary'}));
 }
 function renderMailbox(state,list){
  const bills=$('#cafe-bills');bills.replaceChildren();
@@ -141,7 +141,7 @@ function render(state,spending=null){
   }
   ledger.append(card);
  }
- const scam=el('article','','cafe-supplier');scam.append(el('h3','Scam payee'),el('code',state.scam.payee),el('strong',formatUnits(state.scam.received)+' NEAR received','dw-mono'),el('p','Live balance change since café setup.','dw-muted'));ledger.append(scam);
+ const scam=el('article','','cafe-supplier');scam.append(el('h3',state.scam.payee+' · not a supplier'),el('code',state.scam.payee),el('strong',formatUnits(state.scam.received)+' NEAR received','dw-mono'),el('p','Live balance change since café setup.','dw-muted'));ledger.append(scam);
  $('#cafe-read-at').textContent='Live chain read · '+new Date(state.read_at).toLocaleTimeString()+'. Received totals exclude initial account funding.';
  end.append(button('Refresh ledger',()=>refreshCafe(),{tone:'secondary'}),button('Start a new day',()=>mutate('reset'),{tone:'secondary'}));
 }

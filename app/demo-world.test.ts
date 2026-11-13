@@ -26,7 +26,7 @@ const invoice=(id:string,merchant:string,supplier:string,payee:string,amount:str
  ({id,merchant,supplier,payee,amount:near(amount),expires_at:String(Date.now()+3600000),week});
 const BEANS1=invoice('INV-BEANS-01-abc12345','Bean-Co','Bean Co','beans.test.near','0.4');
 const MILK1=invoice('INV-MILK-01-abc12345','Milk-Co','Milk Co','milk.test.near','0.4',1);
-const BEANS3=invoice('INV-BEANS-03-abc12345','Bean-Co','Bean Co','scam.test.near','0.4');
+const BEANS3=invoice('INV-BEANS-03-abc12345','Bean-Co','Bean Co','bean5.test.near','0.4');
 const PASTRY2=invoice('INV-PASTRY-02-abc12345','Pastry-Co','Pastry Co','pastry.test.near','0.5');
 const STATE={ready:true,vault:'cafe.test.near',available:near('4.2'),policy:{per_payment_near:'0.5',rolling_24h_limit_near:'1.2',expires_at:Date.now()+3600000,min_payment_near:'0.005'},
  mail:{issued_at:new Date().toISOString(),invoices:[BEANS3,BEANS1,MILK1,PASTRY2]},
@@ -38,7 +38,7 @@ const STATE={ready:true,vault:'cafe.test.near',available:near('4.2'),policy:{per
  ],
  suppliers:[{id:'Bean-Co',name:'Bean Co',payee:'beans.test.near',received:near('0.4'),paid_count:1,receipts:[{invoice_id:BEANS1.id,amount:near('0.4'),attempt_id:'7',payload_hash:'ab'.repeat(32),state:'Settled'}]},
   {id:'Milk-Co',name:'Milk Co',payee:'milk.test.near',received:'0',paid_count:0,receipts:[]}],
- scam:{payee:'scam.test.near',received:'0'},read_at:new Date().toISOString()};
+ scam:{payee:'bean5.test.near',received:'0'},read_at:new Date().toISOString()};
 
 function fakeDocument(t:any){
  const nodes=new Map<string,Element>();
@@ -59,7 +59,7 @@ async function loadCafe(t:any,label:string,posts:string[]=[]){
   return Response.json({ok:true,state:STATE});
  });
  const ui=await import(`./public/demo-cafe.js?case=${label}`);
- const asked:string[]=[];ui.setCafeAsk((_:any,text='How is my agent doing?')=>asked.push(text),(bill:any)=>asked.push('bill:'+bill.id));
+ const asked:string[]=[];ui.setCafeAsk((_:any,text='How is my agent doing?')=>asked.push(text),(bill:any)=>asked.push('bill:'+bill.id),(account:string)=>asked.push('account:'+account));
  assert.equal(await ui.enableCafe(),true);await ui.refreshCafe();
  return {...dom,ui,asked};
 }
@@ -84,7 +84,7 @@ test('a tampered invoice is drawn with exactly the same markup as a genuine one'
  assert.equal(shape(bad),shape(good));
  assert.deepEqual(bad.attributes['aria-label'].replace('03','01'),good.attributes['aria-label']);
  const text=bad.textContent;
- assert.match(text,/Bean Co.*Coffee roasters.*INVOICE.*BEANS-03.*Billed to.*Dave's Café.*Issued.*Due.*House roast beans, 20 kg.*Delivery.*Total due.*0\.4 NEAR.*Pay to.*scam\.test\.near.*Digitally signed by Bean Co · Ed25519/s);
+ assert.match(text,/Bean Co.*Coffee roasters.*INVOICE.*BEANS-03.*Billed to.*Dave's Café.*Issued.*Due.*House roast beans, 20 kg.*Delivery.*Total due.*0\.4 NEAR.*Pay to.*bean5\.test\.near.*Digitally signed by Bean Co · Ed25519/s);
  assert.doesNotMatch(text,/reject|tamper|invalid|warning|fake/i);
  assert.match(invoiceDocument(MILK1,STATE.mail.issued_at).textContent,/DueWeek 1/);
 });
@@ -98,15 +98,20 @@ test('the mailbox lists every delivered invoice the same way, including the one 
  assert.equal(new Set(items.map(shape)).size,1,'no tell-tale markup in the mailbox');
  assert.match(items[0].textContent,/Bean CoBEANS-03Due .*0\.4 NEAR/);
  assert.equal(items[0].attributes['aria-pressed'],'true','the first invoice is open by default');
- // The rejected one is open: its second action is the muted line, not a button.
- assert.match(get('#dw-invoice').textContent,/BEANS-03.*scam\.test\.near/s);
- assert.match(get('#dw-invoice-actions').textContent,/Hand all 4 to my agent →Dave can explain this one after your agent tries it\./);
- items[1].click();
- assert.equal(items.length,4);
+ // The rejected one is open, with exactly the same document and buttons as a good one.
+ assert.match(get('#dw-invoice').textContent,/BEANS-03.*bean5\.test\.near/s);
+ const badDoc=shape(get('#dw-invoice')),badActions=shape(get('#dw-invoice-actions'));
+ assert.equal(get('#dw-invoice-actions').textContent,'Hand all 4 to my agent →Ask Dave: would you pay this account?');
+ byText(get('#dw-invoice-actions'),'Ask Dave: would you pay this account?')!.click();
+ get('#cafe-bills').children[1].click();
  assert.equal(get('#cafe-bills').children[1].attributes['aria-pressed'],'true');
  assert.match(get('#dw-invoice').textContent,/BEANS-01.*beans\.test\.near/s);
- byText(get('#dw-invoice-actions'),'Ask Dave about this invoice')!.click();
- assert.deepEqual(asked,[`Tell me about invoice ${BEANS1.id}`]);
+ assert.equal(shape(get('#dw-invoice')),badDoc);
+ assert.equal(shape(get('#dw-invoice-actions')),badActions);
+ assert.equal(get('#dw-invoice-actions').textContent,'Hand all 4 to my agent →Ask Dave: would you pay this account?');
+ byText(get('#dw-invoice-actions'),'Ask Dave: would you pay this account?')!.click();
+ // The account check runs on the Pay to account written on each invoice.
+ assert.deepEqual(asked,['account:bean5.test.near','account:beans.test.near']);
 });
 
 test('results show one row per invoice in delivery order, with REJECTED and the signature sentence', async t => {
@@ -128,11 +133,13 @@ test('the invoice viewer opens from results and from ledger receipts, and closes
  fromResults.click();
  assert.equal(viewer.hidden,false);
  assert.equal(get('#dw-viewer-title').textContent,'Invoice BEANS-03');
- assert.match(get('#dw-viewer-body').textContent,/INVOICEBEANS-03.*scam\.test\.near/s);
+ assert.match(get('#dw-viewer-body').textContent,/INVOICEBEANS-03.*bean5\.test\.near/s);
  assert.equal(doc.activeElement,get('#dw-viewer-close'),'focus moves into the dialog');
  get('#demo-cafe').handlers.keydown({key:'Escape',preventDefault(){}});
  assert.equal(viewer.hidden,true);
  assert.equal(doc.activeElement,fromResults,'focus returns to the opener');
+ assert.ok(all(get('#cafe-ledger')).some(n=>n.tag==='h3'&&n.textContent==='bean5.test.near · not a supplier'));
+ assert.ok(!get('#cafe-ledger').textContent.includes('Scam payee'));
  const fromLedger=byText(get('#cafe-ledger'),'BEANS-01 · 0.4 NEAR')!;
  fromLedger.click();
  assert.equal(viewer.hidden,false);

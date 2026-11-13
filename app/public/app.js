@@ -466,7 +466,7 @@ const askWidget = createAskWidget({
     window.scrollTo({ top: 0, behavior: "instant" });
   },
 });
-setCafeAsk((trigger,text="How is my agent doing?")=>askWidget.open(text,trigger),(bill,trigger)=>askWidget.askForBill(bill,trigger));
+setCafeAsk((trigger,text="How is my agent doing?")=>askWidget.open(text,trigger),(bill,trigger)=>askWidget.askForBill(bill,trigger),(account,trigger)=>askWidget.checkAccount(account,trigger));
 askFromBill((bill, trigger) => askWidget.askForBill(bill, trigger));
 askWidgetView = (view) => {
   if (askWidget.setOnAskDaveView(view === "ask-dave")) askTextInput.focus();

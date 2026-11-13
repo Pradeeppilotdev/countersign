@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setupCafe,receiveCafe,payCafe,readCafe,topUpCafe,backupCafe} from '../agent/demo-cafe.ts';
 import {parseNear} from '../app/sandbox.ts';
+import {lookalike} from '../agent/ask/check.ts';
 
 test('café pays each real bill once, rejects tampering, enforces budget/week, and backs up reset data',{timeout:240000},async()=>{
  const directory=join(mkdtempSync(join(tmpdir(),'countersign-cafe-')),'agent-vault');
@@ -18,6 +19,9 @@ test('café pays each real bill once, rejects tampering, enforces budget/week, a
   // Demo mailbox copy: every delivered invoice, the tampered one as written.
   assert.equal(received.mail.invoices.length,7);
   assert.equal(received.rejected[0].payee,received.scam.payee);
+  // The tampered invoice pays a lookalike of Bean Co's payout, which Ask Dave's check catches.
+  assert.match(received.scam.payee,/^bean5\./);
+  assert.ok(lookalike(received.scam.payee,received.suppliers.find((s:any)=>s.id==='Bean-Co').payee));
   assert.equal(received.mail.invoices.find((i:any)=>i.id===received.rejected[0].id).payee,received.scam.payee);
   assert.deepEqual(received.mail.invoices.filter((i:any)=>i.merchant==='Milk-Co').map((i:any)=>i.week),[1,1]);
   assert.ok(received.mail.invoices.filter((i:any)=>i.merchant!=='Milk-Co').every((i:any)=>i.week===null));

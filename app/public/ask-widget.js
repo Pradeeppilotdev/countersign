@@ -3,7 +3,7 @@
 // Dave request/answer logic, so it answers exactly what the main view does.
 import { el, icon } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
-import { runAsk } from "./ask-shared.js";
+import { runAsk, runAccountCheck } from "./ask-shared.js";
 import { questionForBill } from "./ask-suggest.js";
 
 const HISTORY = 3,
@@ -152,6 +152,11 @@ export function createAskWidget({ onNavigate } = {}) {
     },
     askForBill(bill, trigger) {
       open(questionForBill(bill), trigger);
+    },
+    // Same read-only check as the Ask Dave view's "Would you pay this account?".
+    async checkAccount(account, trigger) {
+      open(undefined, trigger);
+      return runAccountCheck(list, account, { maxCards: HISTORY });
     },
   };
 }

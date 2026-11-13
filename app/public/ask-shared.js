@@ -113,6 +113,20 @@ export async function runAsk(container, question, { onSource, onFollowUp, maxCar
   }
 }
 
+// Runs the read-only account check (no model) and renders it as a card.
+export async function runAccountCheck(container, account, { maxCards = Infinity } = {}) {
+  const { card, head, body } = askCard("Would you pay " + account + "?");
+  container.prepend(card);
+  trimCards(container, maxCards);
+  setBusy(body, "Checking…");
+  try {
+    return applyAsk(card, head, body, await checkAccount(account), true);
+  } catch (error) {
+    setCardError(body, error.message);
+    return false;
+  }
+}
+
 // Keeps at most max cards in container, dropping the oldest first.
 export function trimCards(container, max) {
   while (container.children.length > max) container.lastElementChild.remove();
