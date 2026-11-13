@@ -61,7 +61,7 @@ export function createAskWidget({ onNavigate } = {}) {
   input.name = "text";
   input.required = true;
   input.maxLength = 500;
-  input.placeholder = "Ask about a bill, a block, the rules…";
+  input.placeholder = "Ask about a bill or rule…";
   input.setAttribute("aria-label", "Ask Dave a question");
   input.autocomplete = "off";
   submitBtn = el("button", "Ask", "button primary ask-widget-ask");

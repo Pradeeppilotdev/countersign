@@ -187,11 +187,12 @@ test('panel follow-ups use the question API and retain focus when old cards are 
   assert.equal(answers.children[0].find(n=>n.tag==='button'),undefined);
 });
 
-test('account check answers yes/no/not yet, with details folded and no visible repeated question',t=>{
+test('account check keeps its account visible beside yes/no/not yet, with details folded',t=>{
   setup(t);
   for(const [verdict,tone,opening] of [['STOP','danger','No —'],['WARN','warning','Not yet —'],['PAY','success','Yes —']] as const){
-    const {card,head,body}=askCard('Would you pay this account?',true);
-    assert.equal(head.children[0].className,'ask-card-title sr-only');
+    const {card,head,body}=askCard('beans.test.near');
+    assert.equal(head.children[0].className,'ask-card-title');
+    assert.equal(head.children[0].textContent,'beans.test.near');
     assert.equal(applyAsk(card,head,body,{ok:true,text:`${verdict}: Account not pinned.\n- Exists: yes.\nSources: chain`},true),true);
     assert.ok(head.find((n:Element)=>n.className===`badge ${tone}`));
     assert.equal(body.children[0].textContent.startsWith(opening),true);

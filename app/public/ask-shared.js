@@ -6,11 +6,11 @@ import { el, badge, api } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
 import { suggestFollowUps } from "./ask-suggest.js";
 
-export function askCard(label, isAccount = false) {
+export function askCard(label) {
   const card = el("article", "", "ask-card"),
     head = el("header", "", "ask-card-head"),
     body = el("div", "", "ask-card-body");
-  head.append(el("h3", label, isAccount ? "ask-card-title sr-only" : "ask-card-title"));
+  head.append(el("h3", label, "ask-card-title"));
   card.append(head, body);
   return { card, head, body };
 }
@@ -158,7 +158,7 @@ export async function runAsk(container, question, { onSource, onFollowUp, maxCar
 
 // Runs the read-only account check (no model) and renders it as a card.
 export async function runAccountCheck(container, account, { maxCards = Infinity } = {}) {
-  const { card, head, body } = askCard("Would you pay " + account + "?", true);
+  const { card, head, body } = askCard(account);
   container.prepend(card);
   trimCards(container, maxCards);
   setBusy(body, "Checking…");
