@@ -13,18 +13,18 @@ Countersign is a safety layer between an AI agent and a business's money. The ag
 
 1. **No install:** [Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/) to watch a replay without making payments.
 2. **Website:** Follow the [local setup](docs/local-guide.md#quick-start), run `COUNTERSIGN_PORT=4417 npm run dev`, then open `http://127.0.0.1:4417/#agent-payments` to import a signed bill.
-3. **Terminal:** After [local setup](docs/local-guide.md#quick-start), run these from the repo root. Use your supplier-signed file and its invoice ID; the supplier's signing key must already be pinned in the vault.
+3. **Terminal:** After [local setup](docs/local-guide.md#quick-start), run the signed demo from the repo root. It creates a disposable local vault, pins a supplier key, and writes `signed-invoice.json` (ID `SIGNED-001`) in the printed **Disposable verification records** directory. It imports and pays that bill once, then stops the chain. Set `DEMO_DIR` to the printed directory to inspect the same bill; the CLI restarts its local chain. Repeating import and run does not pay it again.
 
 ```sh
-npm run agent:desk -- init
-npm run agent:desk -- policy 0.5 1.2 120
-npm run agent:desk -- import path/to/signed-invoice.json
-npm run agent:desk -- run INVOICE_ID
-npm run agent:desk -- ask --check path/to/signed-invoice.json
-npm run agent:desk -- ask "How is my agent doing?"
+npm run agent:signed:demo
+DEMO_DIR=/absolute/path/printed/by/the/demo
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- import "$DEMO_DIR/signed-invoice.json"
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- run SIGNED-001
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- ask --check "$DEMO_DIR/signed-invoice.json"
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- ask "How is my agent doing?"
 ```
 
-The policy example caps each bill at 0.5 NEAR, spending in a rolling day at 1.2 NEAR, and lasts 120 minutes. To connect any MCP-compatible agent (one that can use Model Context Protocol tools), see [MCP setup](mcp/README.md).
+The demo sets a 0.1 NEAR per-bill cap and a 0.15 NEAR rolling budget for 60 minutes. For a new bill in your own vault, see [merchant-signed invoices](docs/local-guide.md#merchant-signed-invoices). To connect any MCP-compatible agent (one that can use Model Context Protocol tools), see [MCP setup](mcp/README.md).
 
 ### The parts
 
@@ -33,10 +33,6 @@ The policy example caps each bill at 0.5 NEAR, spending in a rolling day at 1.2 
 - **Desk website:** A local page for importing bills, requesting payment, and reading receipts.
 - **Ask Dave:** A read-only assistant whose financial claims are checked against the vault's records.
 - **MCP server:** A local tool server that lets an MCP-compatible agent request payment by invoice ID.
-
-Countersign pays merchant invoices from a NEAR vault. An agent can request payment for an invoice ID. For a supplier enrolled in weekly billing, even two valid signatures can authorize only one payment for the same service week.
-
-**[Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/)** — explore the weekly crash/retry and a separate public-testnet café run, with original records and explorer receipts. **Recorded demo: no new payments, wallet connections or live AI calls.**
 
 ## Two signed bills, one payment
 
