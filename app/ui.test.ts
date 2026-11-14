@@ -225,10 +225,8 @@ test("the demo world hides the product sidebar and header, and restores them out
 
 test("the demo shell links each chapter tab and exits to the product app", () => {
   const html = readFileSync(new URL("./public/index.html", import.meta.url), "utf8");
-  assert.match(html, /<a id="demo-exit" class="dw-exit" href="#agent-payments">← Back to Countersign<\/a>/);
+  assert.match(html, /<a id="demo-exit" class="dw-exit" href="#agent-payments" aria-label="Back to Countersign workspace">← Workspace<\/a>/);
   assert.match(html, /<span class="dw-mode">Local test funds<\/span>/);
-  const css = readFileSync(new URL("./public/demo-cafe.css", import.meta.url), "utf8");
-  assert.match(css, /#demo-cafe \.dw-exit \{[^}]*border: 1px solid var\(--dw-muted\)[^}]*font-size: 15px/s);
   for (const c of CHAPTERS)
     assert.match(html, new RegExp(`href="#demo/${c.id}" data-chapter="${c.id}"><span class="dw-num">${c.number}</span>${c.label}</a>`));
   for (const id of ["demo-cafe", "cafe-feedback", "cafe-actions", "cafe-summary", "cafe-ledger", "cafe-bills", "cafe-progress", "cafe-read-at", "cafe-ask"])

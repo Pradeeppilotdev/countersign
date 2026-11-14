@@ -15,7 +15,7 @@ async function readSpending(state){
  if(!state.ready)return null;
  try{const reply=await api('/api/agent/state');return reply.ok?reply.state.spending:null;}catch{return null;}
 }
-const TAGS={paid:['PAID','paid'],rejected:['REJECTED','stopped'],blocked:['STOPPED','stopped'],failed:['STOPPED','stopped'],queued:['QUEUED','neutral'],proposed:['QUEUED','neutral'],pending:['PENDING','warn']};
+const TAGS={paid:['PAID','paid'],rejected:['REJECTED','rejected'],blocked:['STOPPED','stopped'],failed:['STOPPED','stopped'],queued:['QUEUED','neutral'],proposed:['QUEUED','neutral'],pending:['PENDING','warn']};
 function tag(outcome){const [label,tone]=TAGS[outcome]??[String(outcome).toUpperCase(),'neutral'];return el('span',label,'dw-tag '+tone);}
 function row(title,detail,outcome=null){
  const item=el('div','','dw-row'),head=el('div','','dw-row-head');head.append(el('strong',title,'dw-mono'));
