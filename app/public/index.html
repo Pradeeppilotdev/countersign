@@ -61,12 +61,161 @@
         >
       </header>
       <div class="content">
-        <section id="demo-cafe" class="workspace-view" hidden aria-labelledby="cafe-title">
-          <div class="page-heading"><div><h1 id="cafe-title">Demo café</h1><p>Three suppliers. Your rules. Every payment accounted for.</p></div></div>
-          <div class="panel cafe-strip"><strong>Try it in 60 seconds</strong><ol><li>Receive today's invoices</li><li>Pay all</li><li><a href="#agent-payments">See what got blocked</a></li><li><button id="cafe-ask" class="button ghost">Ask Dave why</button></li></ol></div>
-          <div id="cafe-feedback" role="status"></div><div id="cafe-summary"></div><div id="cafe-actions" class="cafe-actions"></div><p id="cafe-progress" role="status" aria-live="polite"></p>
-          <h2>Supplier ledger</h2><p id="cafe-read-at"></p><div id="cafe-ledger" class="cafe-ledger"></div>
-          <h2>Today's invoices</h2><div id="cafe-bills"></div><h2>Rejected at intake</h2><div id="cafe-rejected"></div>
+        <section id="demo-cafe" class="workspace-view demo-shell" hidden aria-labelledby="cafe-title">
+          <header class="dw-top">
+            <div class="dw-brand">
+              <img src="/logo.svg" width="40" height="40" alt="" />
+              <div>
+                <h1 id="cafe-title">Dave's Café</h1>
+                <div class="dw-brand-meta"><span class="dw-mode">Local test funds</span><span class="dw-demo-label">Countersign demo</span></div>
+              </div>
+            </div>
+            <nav class="dw-chapters" aria-label="Demo chapters">
+              <a class="dw-tab" href="#demo/bank" data-chapter="bank"><span class="dw-num">01</span>The bank</a>
+              <a class="dw-tab" href="#demo/rules" data-chapter="rules"><span class="dw-num">02</span>Your rules</a>
+              <a class="dw-tab" href="#demo/post" data-chapter="post"><span class="dw-num">03</span>Morning post</a>
+              <a class="dw-tab" href="#demo/pay" data-chapter="pay"><span class="dw-num">04</span>Agent pays</a>
+              <a class="dw-tab" href="#demo/end" data-chapter="end"><span class="dw-num">05</span>End of day</a>
+            </nav>
+            <div class="dw-balances">
+              <div class="dw-balance"><span class="dw-label">In the vault</span><strong id="dw-vault" class="dw-value dw-green">—</strong></div>
+              <div class="dw-balance"><span class="dw-label">Dave's wallet</span><strong id="dw-wallet" class="dw-value">—</strong></div>
+            </div>
+            <a id="demo-exit" class="dw-exit" href="#agent-payments" aria-label="Back to Countersign workspace">← Workspace</a>
+          </header>
+          <div class="dw-body">
+            <div id="cafe-feedback" role="status"></div>
+            <div id="cafe-actions" class="cafe-actions"></div>
+            <section class="dw-chapter" id="dw-chapter-bank" data-chapter="bank" aria-labelledby="dw-bank-title" hidden>
+              <p class="dw-kicker">01 · The bank</p>
+              <h2 id="dw-bank-title">Two places Dave's money lives</h2>
+              <div class="dw-bank">
+                <article class="dw-bank-card" aria-labelledby="dw-wallet-title">
+                  <p class="dw-label" id="dw-wallet-title">Dave's wallet</p>
+                  <strong id="dw-bank-wallet" class="dw-bank-value">—</strong>
+                  <p class="dw-muted">Dave's own account. Only Dave can spend from it.</p>
+                  <div id="cafe-wallet-actions" class="cafe-actions"></div>
+                </article>
+                <p class="dw-bank-rule">Your agent can only pay from the vault. Money in your wallet is safe from it.</p>
+                <article class="dw-bank-card" aria-labelledby="dw-vaultcard-title">
+                  <p class="dw-label" id="dw-vaultcard-title">The vault</p>
+                  <strong id="dw-bank-vault" class="dw-bank-value dw-green">—</strong>
+                  <p class="dw-muted">What the agent may spend from, under your rules.</p>
+                  <form id="dw-deposit" class="dw-deposit" novalidate>
+                    <label for="dw-deposit-amount" class="dw-label">Amount (NEAR)</label>
+                    <div class="dw-deposit-row">
+                      <input id="dw-deposit-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="2" aria-describedby="dw-deposit-error" />
+                      <button id="dw-deposit-submit" class="button primary small" type="submit">Deposit into vault</button>
+                    </div>
+                    <p id="dw-deposit-error" class="dw-field-error" role="alert"></p>
+                  </form>
+                </article>
+              </div>
+              <div id="cafe-summary" class="dw-rows dw-bank-facts"></div>
+              <p class="dw-label dw-history-title">Today at the bank</p>
+              <div id="dw-bank-history" class="dw-rows"></div>
+            </section>
+            <section class="dw-chapter" id="dw-chapter-rules" data-chapter="rules" aria-labelledby="dw-rules-title" hidden>
+              <div id="dw-rules-expired" class="dw-banner" role="alert" hidden>
+                <p id="dw-rules-expired-text"></p>
+                <button id="dw-rules-renew" class="button primary small" type="button">Renew for 2 hours</button>
+              </div>
+              <p class="dw-kicker">02 · Your rules</p>
+              <h2 id="dw-rules-title">The rules the vault enforces</h2>
+              <p class="dw-muted">The vault enforces these rules. Your agent can't change them.</p>
+              <div class="dw-rules">
+                <form id="dw-rules-form" class="dw-rules-form" novalidate>
+                  <div class="dw-field">
+                    <label for="dw-per-bill" class="dw-label">Most per bill (NEAR)</label>
+                    <input id="dw-per-bill" name="per_bill" inputmode="decimal" autocomplete="off" aria-describedby="dw-rules-error" />
+                  </div>
+                  <div class="dw-field">
+                    <label for="dw-daily" class="dw-label">Daily budget, rolling 24 hours (NEAR)</label>
+                    <input id="dw-daily" name="daily_budget" inputmode="decimal" autocomplete="off" aria-describedby="dw-rules-error" />
+                  </div>
+                  <div class="dw-field">
+                    <label for="dw-hours" class="dw-label">Rules last for (hours)</label>
+                    <input id="dw-hours" name="hours" inputmode="numeric" autocomplete="off" aria-describedby="dw-rules-error dw-rules-expiry" />
+                  </div>
+                  <p id="dw-rules-expiry" class="dw-muted dw-rules-expiry"></p>
+                  <p id="dw-rules-error" class="dw-field-error" role="alert"></p>
+                  <p id="dw-rules-saved" class="dw-saved" role="status"></p>
+                  <button id="dw-rules-save" class="button primary small" type="submit">Save rules</button>
+                </form>
+                <div class="dw-rules-side">
+                  <p class="dw-label">Approved suppliers</p>
+                  <div id="cafe-rules" class="dw-rows"></div>
+                  <p class="dw-label dw-weekly-title">Weekly service</p>
+                  <p class="dw-weekly">Milk Co, one bill per week</p>
+                </div>
+              </div>
+            </section>
+            <section class="dw-chapter dw-grid dw-post" id="dw-chapter-post" data-chapter="post" aria-labelledby="dw-post-title" hidden>
+              <div class="dw-col">
+                <p class="dw-label">03 · Your mailbox</p>
+                <h2 id="dw-post-title" class="dw-mail-title">Today's post</h2>
+                <p class="dw-muted">They all look normal. Some aren't. Hand the pile to your agent and the vault decides.</p>
+                <div id="cafe-post-actions" class="cafe-actions"></div>
+                <div id="cafe-bills" class="dw-rows dw-mailbox"></div>
+              </div>
+              <div class="dw-col dw-main dw-doc-col">
+                <div id="dw-invoice" class="dw-invoice"></div>
+                <div id="dw-invoice-actions" class="cafe-actions"></div>
+              </div>
+              <div class="dw-col dw-aside">
+                <p class="dw-label">What happens next</p>
+                <ol class="dw-steps">
+                  <li>Your agent reads each invoice and asks the vault to pay it.</li>
+                  <li>The vault checks the supplier's signature, your rules and today's budget.</li>
+                  <li>Only invoices that pass every check are paid. The rest stop, with a reason.</li>
+                </ol>
+              </div>
+            </section>
+            <section class="dw-chapter dw-grid" id="dw-chapter-pay" data-chapter="pay" aria-labelledby="dw-pay-title" hidden>
+              <div class="dw-col dw-queue-col">
+                <p class="dw-label">Waiting to pay</p>
+                <div id="cafe-queue" class="dw-rows"></div>
+              </div>
+              <div class="dw-col dw-main">
+                <p class="dw-kicker">04 · Agent pays</p>
+                <h2 id="dw-pay-title">The agent pays, the vault decides</h2>
+                <div class="dw-counter" aria-live="polite">
+                  <p id="dw-run-counts" class="dw-counter-counts"></p>
+                  <p id="dw-run-vault" class="dw-counter-vault dw-mono"></p>
+                </div>
+                <div id="cafe-pay-actions" class="cafe-actions"></div>
+                <p id="cafe-progress" role="status" aria-live="polite"></p>
+                <button id="cafe-ask" class="button ghost small" type="button">Ask Dave how it went</button>
+              </div>
+              <div class="dw-col">
+                <p class="dw-label">Results</p>
+                <div id="cafe-results" class="dw-rows"></div>
+              </div>
+            </section>
+            <section class="dw-chapter" id="dw-chapter-end" data-chapter="end" aria-labelledby="dw-end-title" hidden>
+              <p class="dw-kicker">05 · End of day</p>
+              <h2 id="dw-end-title">How today went</h2>
+              <div id="dw-end-stats" class="dw-stats"></div>
+              <div class="dw-end">
+                <div class="dw-end-col">
+                  <p class="dw-label">Who got paid</p>
+                  <p id="cafe-read-at" class="dw-muted"></p>
+                  <div id="cafe-ledger" class="dw-rows dw-ledger"></div>
+                </div>
+                <div class="dw-end-col">
+                  <p class="dw-label">What was stopped and why</p>
+                  <div id="dw-end-stopped" class="dw-rows"></div>
+                </div>
+              </div>
+              <div id="cafe-end-actions" class="cafe-actions"></div>
+            </section>
+          </div>
+          <div id="dw-viewer" class="dw-viewer" role="dialog" aria-modal="true" aria-labelledby="dw-viewer-title" hidden>
+            <div class="dw-viewer-box">
+              <div class="dw-viewer-head"><h2 id="dw-viewer-title">Invoice</h2><button id="dw-viewer-close" class="button secondary small" type="button">Close</button></div>
+              <div id="dw-viewer-body"></div>
+            </div>
+          </div>
         </section>
         <section
           id="payments"
@@ -462,14 +611,15 @@
               </div>
               <form id="ask-question-form" class="ask-form">
                 <label for="ask-text">Your question</label
-                ><input
+                ><textarea
                   id="ask-text"
                   name="text"
                   required
                   maxlength="500"
                   placeholder="How is my agent doing?"
                   autocomplete="off"
-                />
+                  rows="1"
+                ></textarea>
                 <div class="ask-chips">
                   <button
                     type="button"
@@ -520,6 +670,7 @@
                   <h2 id="ask-answers-title">Answers</h2>
                   <p>Newest first. The source is shown with each answer.</p>
                 </div>
+                <button id="ask-clear" class="button ghost small" type="button">Clear</button>
               </div>
               <div
                 id="ask-answers"

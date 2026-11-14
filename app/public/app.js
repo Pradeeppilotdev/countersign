@@ -1,4 +1,5 @@
 import {enableCafe,refreshCafe,setCafeAsk} from './demo-cafe.js';
+import {demoRoute,applyDemoWorld,landingHash} from './demo-world.js';
 import {
   $,
   el,
@@ -19,14 +20,21 @@ import {
 } from "./state.js";
 import { refreshAgentPayments, askFromBill } from "./agent-payments.js";
 import { askSourceLabels } from "./ask-source.js";
-import { askCard, setBusy, setAnswer, setCardError, askDave, checkAccount, appendFollowUps } from "./ask-shared.js";
+import { askHistory, askIntoHistory, showHistory, questionBox } from "./ask-shared.js";
 import { createAskWidget } from "./ask-widget.js";
 mountIcons();
 let askWidgetView = null;
 const cafeEnabled=await enableCafe();
+let lastView = null;
 function navigate() {
+  const hash = landingHash(location.hash);
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+  const demo = cafeEnabled ? demoRoute(hash) : null;
+  if (demo && hash !== demo.hash)
+    history.replaceState(null, "", demo.hash);
+  applyDemoWorld(document, demo ? demo.chapter : null);
   const view =
-    cafeEnabled && (location.hash === "#demo" || !location.hash)
+    demo
       ? "demo-cafe"
       : location.hash === "#payments"
       ? "payments"
@@ -52,7 +60,9 @@ function navigate() {
         ? "Ask Dave"
         : "1Click lab";
   document.title = "Countersign · " + $("#page-label").textContent;
-  if (view === "demo-cafe") refreshCafe();
+  // Chapter tabs switch views only; the ledger is read when entering the demo.
+  if (view === "demo-cafe" && lastView !== "demo-cafe") refreshCafe();
+  lastView = view;
   if (view === "ask-dave") refreshAskSource();
   if (view === "agent-payments") refreshAgentPayments();
   if (askWidgetView) askWidgetView(view);
@@ -61,7 +71,7 @@ window.addEventListener("hashchange", navigate);
 navigate();
 document
   .querySelectorAll(
-    'a[href="#demo"],a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
+    'a[href="#demo"],a[href^="#demo/"],a[href="#payments"],a[href="#quote-lab"],a[href="#ask-dave"],a[href="#agent-payments"]',
   )
   .forEach((link) =>
     link.addEventListener("click", (event) => {
@@ -372,8 +382,7 @@ async function refreshAskSource() {
     $("#ask-account-network").textContent = "Account lookup network unavailable";
   }
 }
-let askEmpty = el("p", "Ask a question or check an account to see an answer here.", "ask-empty");
-askList.append(askEmpty);
+const askEmpty = el("p", "Ask a question or check an account to see an answer here.", "ask-empty");
 const askForm = $("#ask-question-form"),
   askTextInput = $("#ask-text"),
   askBtn = $("#ask-submit"),
@@ -382,41 +391,27 @@ const askForm = $("#ask-question-form"),
   accountInput = $("#ask-account"),
   checkBtn = $("#ask-check-button"),
   checkBtnLabel = $("#ask-check-label");
+const askQuestionBox = questionBox(askTextInput, askForm);
 
-function prependAskCard(card) {
-  if (askEmpty) {
-    askEmpty.remove();
-    askEmpty = null;
-  }
-  askList.prepend(card);
-}
-async function runAskCard(kind, label, payload, button, labelNode, busyText) {
-  const isAccount = kind === "account",
-    { card, head, body } = askCard(label);
-  prependAskCard(card);
-  setBusy(body, isAccount ? "Checking the account…" : "Asking Dave…");
+// The same history as the floating panel: answers asked in either place appear in both.
+showHistory(askHistory, askList, {
+  empty: askEmpty,
+  onFollowUp: (suggestion) => {
+    if (askBtn.disabled) return;
+    askTextInput.value = suggestion;
+    askQuestionBox.grow();
+    askTextInput.focus();
+    askForm.requestSubmit();
+  },
+});
+$("#ask-clear").addEventListener("click", () => askHistory.clear());
+async function runAskCard(kind, value, button, labelNode, busyText) {
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
   const original = labelNode.textContent;
   labelNode.textContent = busyText;
   try {
-    const data = isAccount ? await checkAccount(payload.account) : await askDave(payload.text);
-    if (data.source) {
-      const labels = showAskSource(data.source);
-      card.insertBefore(el("p", "Source: " + (isAccount ? labels.account : labels.question), "ask-sources"), body);
-    }
-    if (data.ok && data.text != null) {
-      setAnswer(head, body, data.text, isAccount);
-      if (!isAccount) appendFollowUps(card, label, data, (suggestion) => {
-        if (askBtn.disabled) return;
-        askTextInput.value = suggestion;
-        askTextInput.focus();
-        askForm.requestSubmit();
-      });
-    }
-    else setCardError(body, data.error ?? "No answer.");
-  } catch (error) {
-    setCardError(body, error.message);
+    return await askIntoHistory(askHistory, kind, value, { onSource: showAskSource });
   } finally {
     button.disabled = false;
     button.setAttribute("aria-busy", "false");
@@ -428,14 +423,20 @@ askForm.addEventListener("submit", (event) => {
   if (askBtn.disabled) return;
   const text = askTextInput.value.trim();
   if (!text) return;
-  runAskCard("question", text, { text }, askBtn, askBtnLabel, "Asking…");
+  askQuestionBox.clear();
+  runAskCard("question", text, askBtn, askBtnLabel, "Asking…").then(ok => {
+    if (!ok && !askTextInput.value.trim()) {
+      askTextInput.value = text;
+      askQuestionBox.grow();
+    }
+  });
 });
 accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (checkBtn.disabled) return;
   const account = accountInput.value.trim();
   if (!account) return;
-  runAskCard("account", "Account: " + account, { account }, checkBtn, checkBtnLabel, "Checking…");
+  runAskCard("account", account, checkBtn, checkBtnLabel, "Checking…");
 });
 document
   .querySelectorAll("#ask-dave .chip")
@@ -444,6 +445,7 @@ document
       // A question is already running: leave what the owner typed alone.
       if (askBtn.disabled) return;
       askTextInput.value = chip.dataset.example;
+      askQuestionBox.grow();
       askForm.requestSubmit();
     }),
   );
@@ -458,7 +460,7 @@ const askWidget = createAskWidget({
     window.scrollTo({ top: 0, behavior: "instant" });
   },
 });
-setCafeAsk(trigger=>askWidget.open("How is my agent doing?",trigger));
+setCafeAsk((trigger,text="How is my agent doing?")=>askWidget.open(text,trigger),(bill,trigger)=>askWidget.askForBill(bill,trigger),(account,trigger)=>askWidget.checkAccount(account,trigger));
 askFromBill((bill, trigger) => askWidget.askForBill(bill, trigger));
 askWidgetView = (view) => {
   if (askWidget.setOnAskDaveView(view === "ask-dave")) askTextInput.focus();

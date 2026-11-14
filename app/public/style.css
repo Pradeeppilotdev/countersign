@@ -1178,6 +1178,22 @@ input[aria-invalid="true"] {
 .ask-forms .panel-header {
   padding-bottom: 22px;
 }
+#ask-text,
+.ask-widget-input {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 42px;
+  max-height: calc(9em + 22px);
+  padding: 11px 12px;
+  border: 1px solid #dbe2de;
+  border-radius: 7px;
+  background: #fdfefb;
+  color: var(--ink);
+  resize: none;
+  overflow-y: auto;
+}
+#ask-text { display: block; width: 100%; }
 .ask-check {
   border-top: 1px solid var(--line);
   margin-top: 23px;
@@ -1252,6 +1268,20 @@ input[aria-invalid="true"] {
 .ask-card-body .ask-line + .ask-line {
   margin-top: 5px;
 }
+.ask-records-toggle {
+  display: block;
+  margin: 10px 0 4px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--teal-dark);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ask-records { margin-top: 7px; }
 .ask-sources {
   font-size: 10px;
   color: var(--muted);
@@ -1671,3 +1701,10 @@ input[aria-invalid="true"] {
     min-height: 40px;
   }
 }
+
+/* Account checks: readable conclusion, optional technical evidence. */
+.ask-account-decision { font-size: 14px; line-height: 1.5; font-weight: 700; margin: 0 0 8px; }
+.ask-account-reason { font-size: 12px; line-height: 1.5; margin: 0 0 8px; }
+.ask-account-note { font-size: 11px; line-height: 1.55; color: var(--muted); margin: 0 0 10px; }
+.ask-account-checks summary { cursor: pointer; color: var(--teal-dark); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; }
+.ask-account-checks .ask-records { padding-top: 9px; }

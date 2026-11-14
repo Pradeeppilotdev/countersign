@@ -3,13 +3,13 @@
 // Dave request/answer logic, so it answers exactly what the main view does.
 import { el, icon } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
-import { runAsk } from "./ask-shared.js";
+import { askHistory, askIntoHistory, showHistory, questionBox } from "./ask-shared.js";
 import { questionForBill } from "./ask-suggest.js";
 
 const HISTORY = 3,
   NOTE = "Answers from your agent vault. Dave can explain payments and rules, but can't change them.";
 
-export function createAskWidget({ onNavigate } = {}) {
+export function createAskWidget({ onNavigate, history = askHistory } = {}) {
   let button, panel, form, input, submitBtn;
   let submitting = false, opener = null;
 
@@ -30,6 +30,7 @@ export function createAskWidget({ onNavigate } = {}) {
     listTitle = el("h3", "Recent answers", "ask-widget-answers-title"),
     list = el("div", "", "ask-widget-answers ask-answer-list"),
     openLink = el("a", "Open full Ask Dave", "ask-widget-open"),
+    disclaimer = el("p", "Dave is AI and can make mistakes. Payments are always decided by the vault.", "ask-widget-disclaimer"),
     panelFoot = el("footer", "", "ask-widget-footer");
   closeBtn.type = "button";
   closeBtn.setAttribute("aria-label", "Close Ask Dave");
@@ -52,25 +53,26 @@ export function createAskWidget({ onNavigate } = {}) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-labelledby", "ask-widget-title");
   panel.hidden = true;
-  panel.append(header, hint, sourceNote, listTitle, list, panelFoot);
+  panel.append(header, hint, sourceNote, listTitle, list, disclaimer, panelFoot);
 
   form = el("form", "", "ask-widget-form");
-  input = el("input", "", "ask-widget-input");
-  input.type = "text";
+  input = el("textarea", "", "ask-widget-input");
+  input.rows = 1;
   input.name = "text";
   input.required = true;
   input.maxLength = 500;
-  input.placeholder = "Ask about a bill, a block, the rules…";
+  input.placeholder = "Ask about a bill or rule…";
   input.setAttribute("aria-label", "Ask Dave a question");
   input.autocomplete = "off";
   submitBtn = el("button", "Ask", "button primary ask-widget-ask");
   submitBtn.type = "submit";
   form.append(input, submitBtn);
+  const questionBoxControl = questionBox(input, form);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const question = input.value.trim();
-    if (!question || submitting) return;
-    return ask(question);
+    const text = input.value.trim();
+    if (!text || submitting) return;
+    return ask(text);
   });
   panel.insertBefore(form, listTitle);
   closeBtn.addEventListener("click", () => close());
@@ -88,28 +90,39 @@ export function createAskWidget({ onNavigate } = {}) {
   document.body.append(dock, panel);
   document.body.classList.add("has-dave-launcher");
 
+  // The panel shows the newest answers of the history the full page shows in full.
+  showHistory(history, list, {
+    max: HISTORY,
+    onFollowUp: (suggestion) => {
+      if (submitting) return;
+      input.value = suggestion;
+      questionBoxControl.grow();
+      input.focus();
+      ask(suggestion);
+    },
+  });
+
   async function ask(question) {
     if (submitting) return;
     submitting = true;
-    // Disabling a focused submit button must not drop keyboard focus to the page.
+    // The submitted question should not remain in the typing box while Dave replies.
+    // Restore it only if the request fails and no replacement draft was typed.
+    const submittedDraft = input.value;
+    if (input.value.trim() === question) questionBoxControl.clear();
     input.focus();
     submitBtn.disabled = true;
     try {
-      const ok = await runAsk(list, question, {
-        maxCards: HISTORY,
+      const ok = await askIntoHistory(history, "question", question, {
         onSource: (source) => {
           sourceNote.textContent =
             "Source: " + askSourceLabels(source).question;
           sourceNote.hidden = false;
         },
-        onFollowUp: (suggestion) => {
-          if (submitting) return;
-          input.value = suggestion;
-          input.focus();
-          ask(suggestion);
-        },
       });
-      if (ok && input.value.trim() === question) input.value = "";
+      if (!ok && !input.value.trim()) {
+        input.value = submittedDraft || question;
+        questionBoxControl.grow();
+      }
     } finally {
       submitting = false;
       submitBtn.disabled = false;
@@ -120,7 +133,7 @@ export function createAskWidget({ onNavigate } = {}) {
     opener = trigger;
     panel.hidden = false;
     button.setAttribute("aria-expanded", "true");
-    if (typeof prefilled === "string") input.value = prefilled;
+    if (typeof prefilled === "string") { input.value = prefilled; questionBoxControl.grow(); }
     input.focus();
   }
 
@@ -151,6 +164,11 @@ export function createAskWidget({ onNavigate } = {}) {
     },
     askForBill(bill, trigger) {
       open(questionForBill(bill), trigger);
+    },
+    // Same read-only check as the Ask Dave view's "Would you pay this account?".
+    async checkAccount(account, trigger) {
+      open(undefined, trigger);
+      return askIntoHistory(history, "account", account);
     },
   };
 }

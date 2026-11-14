@@ -66,7 +66,7 @@ Recent full runs took about 15–20 minutes on a warm toolchain (longer on a fre
 npm run dev
 ```
 
-Open http://127.0.0.1:4317 → the bare URL opens Demo café on a local network. For [Agent payments](#agent-payments-in-the-desk), open http://127.0.0.1:4317/#agent-payments. The manual payment desk and 1Click lab are under **Tools**.
+Open http://127.0.0.1:4317 → the bare URL opens [Agent payments](#agent-payments-in-the-desk) on every network. Choose Demo café from the sidebar to open the local demo. The manual payment desk and 1Click lab are under **Tools**.
 
 - Use `127.0.0.1`, not `localhost`: `localhost` returns 403.
 - If port 4317 is busy, run `COUNTERSIGN_PORT=4418 npm run dev` and open http://127.0.0.1:4418.
