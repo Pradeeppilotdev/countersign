@@ -1,5 +1,39 @@
 # Countersign
 
+## Countersign in 30 seconds
+
+Countersign is a safety layer between an AI agent and a business's money. The agent can only ask to pay an invoice; a NEAR smart-contract vault decides whether money moves. It rejects altered invoices by checking the supplier's signature, unapproved payees, duplicate bills, over-budget payments, and a second payment after a crash.
+
+### What's deployed and what runs on your machine
+
+- **Deployed:** The vault is a Rust smart contract on NEAR testnet at `countersign-vault-7d8cc5331e.testnet`. Testnet is NEAR's public testing network; its [payment receipts are public](#live-on-testnet).
+- **On your machine:** The agent, desk website, Ask Dave assistant, and MCP server are self-hosted. The payment host keeps signing keys there, so each business runs its own copy, like a wallet. By default, they use a disposable local NEAR chain, so trying them needs no real money.
+
+### Three ways to try it
+
+1. **No install:** [Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/) to watch a replay without making payments.
+2. **Website:** Follow the [local setup](docs/local-guide.md#quick-start), run `COUNTERSIGN_PORT=4417 npm run dev`, then open `http://127.0.0.1:4417/#agent-payments` to import a signed bill.
+3. **Terminal:** After [local setup](docs/local-guide.md#quick-start), run these from the repo root. Use your supplier-signed file and its invoice ID; the supplier's signing key must already be pinned in the vault.
+
+```sh
+npm run agent:desk -- init
+npm run agent:desk -- policy 0.5 1.2 120
+npm run agent:desk -- import path/to/signed-invoice.json
+npm run agent:desk -- run INVOICE_ID
+npm run agent:desk -- ask --check path/to/signed-invoice.json
+npm run agent:desk -- ask "How is my agent doing?"
+```
+
+The policy example caps each bill at 0.5 NEAR, spending in a rolling day at 1.2 NEAR, and lasts 120 minutes. To connect any MCP-compatible agent (one that can use Model Context Protocol tools), see [MCP setup](mcp/README.md).
+
+### The parts
+
+- **Vault contract + signed invoices:** The Rust vault checks each bill's supplier signature, payee, limits, and payment history.
+- **Agent:** The optional NEAR AI Cloud adapter has one payment tool: `request_payment` for an invoice ID.
+- **Desk website:** A local page for importing bills, requesting payment, and reading receipts.
+- **Ask Dave:** A read-only assistant whose financial claims are checked against the vault's records.
+- **MCP server:** A local tool server that lets an MCP-compatible agent request payment by invoice ID.
+
 Countersign pays merchant invoices from a NEAR vault. An agent can request payment for an invoice ID. For a supplier enrolled in weekly billing, even two valid signatures can authorize only one payment for the same service week.
 
 **[Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/)** — explore the weekly crash/retry and a separate public-testnet café run, with original records and explorer receipts. **Recorded demo: no new payments, wallet connections or live AI calls.**
