@@ -85,7 +85,7 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 
 [Local payment desk, contract and operator guide](docs/local-guide.md)
 
-The local desk opens on Demo café. Choose **Agent payments**, or visit http://127.0.0.1:4417/#agent-payments (with the app started on port 4417 as above), to import a supplier's signed bill, request payment and read the receipt (needs a local agent vault with a policy and a pinned supplier key). The page calls the same functions as `agent:desk import`, `run` and `resume` and adds no payment logic. The manual payment desk and dry-run 1Click lab are under **Tools**. See [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk).
+The local desk opens on **Agent payments** at http://127.0.0.1:4417/#agent-payments (with the app started on port 4417 as above) on every network. Choose **Demo café** from the sidebar to try the demo. In Agent payments, import a supplier's signed bill, request payment and read the receipt (needs a local agent vault with a policy and a pinned supplier key). The page calls the same functions as `agent:desk import`, `run` and `resume` and adds no payment logic. The manual payment desk and dry-run 1Click lab are under **Tools**. See [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk).
 
 Ask Dave also runs in the desk: open http://127.0.0.1:4417/#ask-dave (needs a local agent vault: npm run agent:desk -- init). Its questions read `work/agent-vault` (or `COUNTERSIGN_AGENT_DIR`), while the manual payment desk uses `work/local-vault` (or `COUNTERSIGN_SANDBOX_DIR`). The page and each answer identify the source account. Standalone account checks show their selected network separately; questions always read the local agent vault.
 
