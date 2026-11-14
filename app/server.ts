@@ -111,5 +111,17 @@ const server=createServer(async(req,res)=>{
  }catch(e){json(400,{ok:false,error:publicError(e)});}finally{if(ownsAgentMutation)agentMutation=false;}
 });
 server.listen(port,'127.0.0.1',()=>console.log(`Countersign: ${origin}`));
-const shutdown=()=>server.close(async()=>{await sandbox.close();workflow.close();process.exit(0);});
+let shuttingDown=false;
+const shutdown=()=>{
+ // A terminal interrupt and npm's forwarded signal can both reach this process.
+ if(shuttingDown)return;
+ shuttingDown=true;
+ server.close(()=>{
+  // Drain HTTP requests before closing their saved state or releasing the lock.
+  void sandbox.close().then(()=>{workflow.close();}).then(
+   ()=>process.exit(0),
+   error=>{console.error('Countersign shutdown failed:',error);process.exit(1);},
+  );
+ });
+};
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

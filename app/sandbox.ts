@@ -19,6 +19,7 @@ export function parseNear(value: unknown) {
 }
 export class SandboxDesk {
  releaseLock?:()=>Promise<void>;
+ private closing?:Promise<void>;
  readonly directory?:string;
  readonly recoverOnStart:boolean;
  constructor(directory?:string,options:{recoverOnStart?:boolean}={}) {this.directory=directory;this.recoverOnStart=options.recoverOnStart??true;}
@@ -103,5 +104,11 @@ export class SandboxDesk {
   const invoices=[];for(const [id,entry] of this.invoices){const payment=await this.vault.view('get_payment',{invoice_id:id});const expiry=await this.vault.view('invoice_expiry',{invoice_id:id});invoices.push({id,attempt:entry.attempt,...payment,expiresAt:expiry,expired:expiry!==null&&Date.now()>=Number(expiry)});}
   return {phase:this.phase,network:'LOCAL_SANDBOX',session:this.session,vault:this.vault.accountId,merchant:this.merchant.accountId,available:await this.vault.view('available_balance',{}),merchantReceived:(BigInt((await this.merchant.balance()).total.toString())-this.baseline).toString(),invoices,events:this.events};
  }
- async close(){await this.queue;if(this.worker)await this.worker.tearDown();await this.releaseLock?.();this.releaseLock=undefined;}
+ close(){
+  // Concurrent signal handlers and finally blocks must share the same cleanup.
+  return this.closing??=(async()=>{
+   await this.queue;if(this.worker)await this.worker.tearDown();
+   await this.releaseLock?.();this.releaseLock=undefined;
+  })();
+ }
 }
