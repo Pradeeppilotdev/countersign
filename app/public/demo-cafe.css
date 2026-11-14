@@ -145,7 +145,7 @@ body.demo-world .ask-widget-panel a { color: var(--dw-green); }
 body.demo-world .ask-widget-disclaimer { display: block; margin: 0; padding-top: 8px; border-top: 1px solid var(--dw-line); font-size: 11px; color: var(--dw-muted); }
 
 /* Narrow screens: tabs drop under the brand; chapters stack. */
-@media (max-width: 1380px) {
+@media (max-width: 1440px) {
   body.demo-world .dw-top { height: auto; grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 0; padding: 12px 24px 0; }
   body.demo-world #demo-cafe .dw-exit { height: 48px; }
   body.demo-world .dw-chapters { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; overflow-x: auto; height: 48px; margin: 8px -24px 0; padding: 0 12px; border-top: 1px solid var(--dw-line); }
