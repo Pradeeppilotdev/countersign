@@ -189,3 +189,99 @@ export function questionBox(textarea, form) {
   });
   return { grow, clear() { textarea.value = ""; grow(); } };
 }
+
+// --- One answer history, shared by the full page and the floating panel ----
+// Kept per browser tab in sessionStorage. Every read and write is guarded: when
+// storage is missing or throws, the history still works in memory for this page.
+export const HISTORY_KEY = "countersign.ask-history.v1", HISTORY_MAX = 30;
+const KINDS = new Set(["question", "account"]);
+const str = (value) => typeof value === "string" ? value : undefined;
+function cleanData(data) {
+  const out = { ok: data?.ok === true };
+  for (const key of ["text", "error"]) if (str(data?.[key]) !== undefined) out[key] = data[key];
+  const source = data?.source;
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    const kept = {};
+    for (const key of ["agentVault", "paymentVault", "accountNetwork"]) if (str(source[key]) !== undefined) kept[key] = source[key];
+    if (typeof source.separate === "boolean") kept.separate = source.separate;
+    out.source = kept;
+  }
+  return out;
+}
+const defaultStorage = () => { try { return globalThis.sessionStorage ?? null; } catch { return null; } };
+
+export function createAskHistory({ storage = defaultStorage } = {}) {
+  const store = () => { try { return typeof storage === "function" ? storage() : storage; } catch { return null; } };
+  let nextId = 0, entries = [];
+  const listeners = new Set();
+  try {
+    const parsed = JSON.parse(store()?.getItem(HISTORY_KEY) ?? "[]");
+    if (Array.isArray(parsed))
+      entries = parsed.filter((e) => e && KINDS.has(e.kind) && typeof e.label === "string" && e.data && typeof e.data === "object")
+        .slice(0, HISTORY_MAX).map((e) => ({ id: ++nextId, kind: e.kind, label: e.label, data: cleanData(e.data) }));
+  } catch { entries = []; }
+  // In-flight answers are shown but never saved: a reload must not leave a card waiting forever.
+  const save = () => {
+    try { store()?.setItem(HISTORY_KEY, JSON.stringify(entries.filter((e) => e.data).map(({ kind, label, data }) => ({ kind, label, data })))); }
+    catch { /* memory only */ }
+  };
+  const notify = () => { for (const fn of [...listeners]) fn(entries); };
+  return {
+    entries: () => entries,
+    begin(kind, label) {
+      const entry = { id: ++nextId, kind, label, data: null };
+      entries = [entry, ...entries].slice(0, HISTORY_MAX);
+      notify();
+      return entry.id;
+    },
+    finish(id, data) {
+      const at = entries.findIndex((e) => e.id === id);
+      if (at < 0) return; // cleared while it was waiting
+      entries = entries.map((e, i) => i === at ? { ...e, data: cleanData(data) } : e);
+      save(); notify();
+    },
+    clear() {
+      entries = [];
+      try { store()?.removeItem(HISTORY_KEY); } catch { /* memory only */ }
+      notify();
+    },
+    subscribe(fn) { listeners.add(fn); fn(entries); return () => listeners.delete(fn); },
+  };
+}
+export const askHistory = createAskHistory();
+
+// Asks (or checks an account) and records the answer, the busy reply or the error in history.
+export async function askIntoHistory(history, kind, value, { onSource } = {}) {
+  const isAccount = kind === "account",
+    id = history.begin(kind, isAccount ? "Account: " + value : value);
+  let data;
+  try { data = await (isAccount ? checkAccount(value) : askDave(value)); }
+  catch (error) { data = { ok: false, error: error.message }; }
+  if (data?.source && onSource) onSource(data.source);
+  history.finish(id, data);
+  return !!(data?.ok && data.text != null);
+}
+
+// Renders history into container with the same cards everywhere. A finished card is
+// built once per container and then reused, so an opened records fold stays open.
+export function showHistory(history, container, { max = HISTORY_MAX, onFollowUp, empty } = {}) {
+  const built = new Map();
+  return history.subscribe((entries) => {
+    const shown = entries.slice(0, max), cards = [];
+    for (const entry of shown) {
+      let item = built.get(entry.id);
+      if (!item || item.done !== !!entry.data) {
+        const isAccount = entry.kind === "account", { card, head, body } = askCard(entry.label);
+        if (!entry.data) setBusy(body, isAccount ? "Checking the account…" : "Asking Dave…");
+        else if (applyAsk(card, head, body, entry.data, isAccount) && !isAccount)
+          appendFollowUps(card, entry.label, entry.data, onFollowUp);
+        item = { card, done: !!entry.data };
+        built.set(entry.id, item);
+      }
+      cards.push(item.card);
+    }
+    for (const id of [...built.keys()]) if (!shown.some((e) => e.id === id)) built.delete(id);
+    if (!cards.length && empty) cards.push(empty);
+    container.replaceChildren(...cards);
+  });
+}

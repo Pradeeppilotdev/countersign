@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAskWidget} from './public/ask-widget.js';
-import {askCard, applyAsk, questionBox, splitAnswer} from './public/ask-shared.js';
+import {askCard, applyAsk, questionBox, splitAnswer, createAskHistory, showHistory, HISTORY_KEY, HISTORY_MAX} from './public/ask-shared.js';
 import {readFileSync} from 'node:fs';
 
 // Exercise the real browser modules with HTTP mocked, without a model or chain.
@@ -37,7 +37,7 @@ class Element {
   }
   event(name:string,extra={}){return this.handlers[name]?.({currentTarget:this,preventDefault(){},...extra});}
 }
-function setup(t:any){
+function setup(t:any,history=createAskHistory({storage:null})){
   const body=new Element('body'), handlers:Record<string,Function>={};
   const dom={body,activeElement:body,createElement:(tag:string)=>new Element(tag),createElementNS:(_:string,tag:string)=>new Element(tag),
     querySelector:(selector:string)=>selector==='[data-view="ask-dave"]'?body.find(n=>n.attributes['data-view']==='ask-dave'):null,addEventListener:(name:string,fn:Function)=>handlers[name]=fn};
@@ -46,12 +46,12 @@ function setup(t:any){
   t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else delete (globalThis as any).document;});
   const fullInput=new Element('input');body.append(fullInput);
   const navLink=new Element('a');navLink.setAttribute('data-view','ask-dave');body.append(navLink);
-  const widget=createAskWidget({onNavigate:()=>{widget.setOnAskDaveView(true);fullInput.focus();}});
+  const widget=createAskWidget({history,onNavigate:()=>{widget.setOnAskDaveView(true);fullInput.focus();}});
   const panel=widget.panel as Element, button=widget.button as Element;
   const input=panel.find(n=>n.tag==='textarea')!, form=panel.find(n=>n.tag==='form')!;
   const answers=panel.find(n=>n.className.includes('ask-widget-answers '))!;
   const bill=new Element('button');body.append(bill);
-  return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput,navLink};
+  return {widget,panel,button,input,form,answers,bill,dom,handlers,fullInput,navLink,history};
 }
 const reply=(text:string,ok=true)=>({ok,json:async()=>ok?{ok:true,text}:{ok:false,error:text}} as Response);
 
@@ -233,4 +233,74 @@ test('Ask leaves newly typed draft alone when the previous answer completes',asy
   resolveRequest(reply('Your vault holds 4.6 NEAR.'));
   await pending;
   assert.equal(input.value,'What are my rules?');
+});
+
+// --- One shared answer history ------------------------------------------------
+class MemoryStorage{data=new Map<string,string>();getItem(k:string){return this.data.get(k)??null;}setItem(k:string,v:string){this.data.set(k,String(v));}removeItem(k:string){this.data.delete(k);}}
+const titles=(list:Element)=>list.children.map(c=>c.find(n=>n.tag==='h3')?.textContent);
+function page(history:any){const list=new Element('div'),empty=new Element('p');empty.textContent='Ask a question or check an account to see an answer here.';showHistory(history,list,{empty});return {list,empty};}
+
+test('an answer asked in the panel appears on the full page, newest first, with the same card',async t=>{
+  const history=createAskHistory({storage:new MemoryStorage()});
+  const {widget,input,form,answers}=setup(t,history);widget.open();
+  const full=page(history);
+  assert.deepEqual(full.list.children,[full.empty]);
+  t.mock.method(globalThis,'fetch',async(_u:string,o:any)=>reply('Answer to '+JSON.parse(o.body).text+'\nSources: vault at block 9'));
+  input.value='How much do I have?';await form.event('submit');
+  input.value='What are my rules?';await form.event('submit');
+  assert.deepEqual(titles(full.list),['What are my rules?','How much do I have?']);
+  assert.deepEqual(titles(answers),titles(full.list));
+  assert.equal(full.list.children[0].textContent,answers.children[0].textContent);
+  // And the other way round: an answer recorded from the full page shows in the panel.
+  const id=history.begin('account','Account: beans.test.near');
+  history.finish(id,{ok:true,text:'PAY: Pinned supplier.\nSources: chain'});
+  assert.equal(titles(answers)[0],'Account: beans.test.near');assert.equal(titles(full.list)[0],'Account: beans.test.near');
+});
+
+test('a reload keeps the history; in-flight answers are not saved; it is capped at 30',async t=>{
+  const storage=new MemoryStorage(),history=createAskHistory({storage});
+  t.mock.method(globalThis,'fetch',async()=>reply('[INV-1] Paid.\nSources: vault'));
+  const {input,form,widget}=setup(t,history);widget.open();
+  input.value='Was INV-1 paid?';await form.event('submit');
+  history.begin('question','Still waiting');
+  const reloaded=createAskHistory({storage}),full=page(reloaded);
+  assert.deepEqual(titles(full.list),['Was INV-1 paid?']);
+  assert.match(full.list.textContent,/\[INV-1\] Paid\./);
+  for(let i=0;i<HISTORY_MAX+5;i++){const n=reloaded.begin('question','Q'+i);reloaded.finish(n,{ok:true,text:'A'+i});}
+  assert.equal(reloaded.entries().length,30);assert.equal(JSON.parse(storage.getItem(HISTORY_KEY)!).length,30);
+  assert.equal(titles(full.list)[0],'Q34');
+  // Saved data is never trusted as markup, and junk entries are dropped.
+  storage.setItem(HISTORY_KEY,JSON.stringify([{kind:'question',label:'<b>x</b>',data:{ok:true,text:'<img src=x>'}},{kind:'evil',label:'y',data:{}},null]));
+  const odd=page(createAskHistory({storage}));
+  assert.deepEqual(titles(odd.list),['<b>x</b>']);assert.equal(odd.list.find(n=>n.tag==='img'||n.tag==='b'),undefined);
+});
+
+test('Clear empties both the page and the panel, and the saved copy',async t=>{
+  const storage=new MemoryStorage(),history=createAskHistory({storage});
+  const {input,form,answers,widget}=setup(t,history);widget.open();const full=page(history);
+  t.mock.method(globalThis,'fetch',async()=>reply('Answer'));
+  input.value='How is my agent doing?';await form.event('submit');
+  assert.equal(answers.children.length,1);
+  history.clear();
+  assert.equal(answers.children.length,0);assert.deepEqual(full.list.children,[full.empty]);
+  assert.equal(storage.getItem(HISTORY_KEY),null);
+  assert.deepEqual(createAskHistory({storage}).entries(),[]);
+  const html=readFileSync(new URL('./public/index.html',import.meta.url),'utf8'),app=readFileSync(new URL('./public/app.js',import.meta.url),'utf8');
+  assert.match(html,/<button id="ask-clear"[^>]*type="button">Clear<\/button>/);
+  assert.match(app,/#ask-clear"\)\.addEventListener\("click", \(\) => askHistory\.clear\(\)\)/);
+});
+
+test('storage that throws never breaks asking: the history falls back to memory',async t=>{
+  const broken={getItem(){throw Error('denied');},setItem(){throw Error('quota');},removeItem(){throw Error('denied');}};
+  for(const storage of [broken,()=>{throw Error('SecurityError');}]){
+    const history=createAskHistory({storage});
+    const {input,form,answers,widget}=setup(t,history);widget.open();const full=page(history);
+    t.mock.method(globalThis,'fetch',async()=>reply('Your vault holds 4.6 NEAR.'));
+    input.value='How much do I have?';await form.event('submit');
+    assert.equal(input.value,'');
+    assert.deepEqual(titles(answers),['How much do I have?']);assert.deepEqual(titles(full.list),['How much do I have?']);
+    assert.match(full.list.textContent,/4\.6 NEAR/);
+    history.clear();assert.deepEqual(full.list.children,[full.empty]);
+    (globalThis.fetch as any).mock.restore();
+  }
 });

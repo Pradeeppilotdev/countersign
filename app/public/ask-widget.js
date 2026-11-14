@@ -3,13 +3,13 @@
 // Dave request/answer logic, so it answers exactly what the main view does.
 import { el, icon } from "./components.js";
 import { askSourceLabels } from "./ask-source.js";
-import { runAsk, runAccountCheck, questionBox } from "./ask-shared.js";
+import { askHistory, askIntoHistory, showHistory, questionBox } from "./ask-shared.js";
 import { questionForBill } from "./ask-suggest.js";
 
 const HISTORY = 3,
   NOTE = "Answers from your agent vault. Dave can explain payments and rules, but can't change them.";
 
-export function createAskWidget({ onNavigate } = {}) {
+export function createAskWidget({ onNavigate, history = askHistory } = {}) {
   let button, panel, form, input, submitBtn;
   let submitting = false, opener = null;
 
@@ -90,6 +90,18 @@ export function createAskWidget({ onNavigate } = {}) {
   document.body.append(dock, panel);
   document.body.classList.add("has-dave-launcher");
 
+  // The panel shows the newest answers of the history the full page shows in full.
+  showHistory(history, list, {
+    max: HISTORY,
+    onFollowUp: (suggestion) => {
+      if (submitting) return;
+      input.value = suggestion;
+      questionBoxControl.grow();
+      input.focus();
+      ask(suggestion);
+    },
+  });
+
   async function ask(question) {
     if (submitting) return;
     submitting = true;
@@ -100,19 +112,11 @@ export function createAskWidget({ onNavigate } = {}) {
     input.focus();
     submitBtn.disabled = true;
     try {
-      const ok = await runAsk(list, question, {
-        maxCards: HISTORY,
+      const ok = await askIntoHistory(history, "question", question, {
         onSource: (source) => {
           sourceNote.textContent =
             "Source: " + askSourceLabels(source).question;
           sourceNote.hidden = false;
-        },
-        onFollowUp: (suggestion) => {
-          if (submitting) return;
-          input.value = suggestion;
-          questionBoxControl.grow();
-          input.focus();
-          ask(suggestion);
         },
       });
       if (!ok && !input.value.trim()) {
@@ -164,7 +168,7 @@ export function createAskWidget({ onNavigate } = {}) {
     // Same read-only check as the Ask Dave view's "Would you pay this account?".
     async checkAccount(account, trigger) {
       open(undefined, trigger);
-      return runAccountCheck(list, account, { maxCards: HISTORY });
+      return askIntoHistory(history, "account", account);
     },
   };
 }

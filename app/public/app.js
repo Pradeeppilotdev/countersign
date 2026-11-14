@@ -20,7 +20,7 @@ import {
 } from "./state.js";
 import { refreshAgentPayments, askFromBill } from "./agent-payments.js";
 import { askSourceLabels } from "./ask-source.js";
-import { askCard, setBusy, setAnswer, setCardError, askDave, checkAccount, appendFollowUps, questionBox } from "./ask-shared.js";
+import { askHistory, askIntoHistory, showHistory, questionBox } from "./ask-shared.js";
 import { createAskWidget } from "./ask-widget.js";
 mountIcons();
 let askWidgetView = null;
@@ -380,8 +380,7 @@ async function refreshAskSource() {
     $("#ask-account-network").textContent = "Account lookup network unavailable";
   }
 }
-let askEmpty = el("p", "Ask a question or check an account to see an answer here.", "ask-empty");
-askList.append(askEmpty);
+const askEmpty = el("p", "Ask a question or check an account to see an answer here.", "ask-empty");
 const askForm = $("#ask-question-form"),
   askTextInput = $("#ask-text"),
   askBtn = $("#ask-submit"),
@@ -392,49 +391,30 @@ const askForm = $("#ask-question-form"),
   checkBtnLabel = $("#ask-check-label");
 const askQuestionBox = questionBox(askTextInput, askForm);
 
-function prependAskCard(card) {
-  if (askEmpty) {
-    askEmpty.remove();
-    askEmpty = null;
-  }
-  askList.prepend(card);
-}
-async function runAskCard(kind, label, payload, button, labelNode, busyText) {
-  const isAccount = kind === "account",
-    { card, head, body } = askCard(label, isAccount);
-  let success = false;
-  prependAskCard(card);
-  setBusy(body, isAccount ? "Checking the account…" : "Asking Dave…");
+// The same history as the floating panel: answers asked in either place appear in both.
+showHistory(askHistory, askList, {
+  empty: askEmpty,
+  onFollowUp: (suggestion) => {
+    if (askBtn.disabled) return;
+    askTextInput.value = suggestion;
+    askQuestionBox.grow();
+    askTextInput.focus();
+    askForm.requestSubmit();
+  },
+});
+$("#ask-clear").addEventListener("click", () => askHistory.clear());
+async function runAskCard(kind, value, button, labelNode, busyText) {
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
   const original = labelNode.textContent;
   labelNode.textContent = busyText;
   try {
-    const data = isAccount ? await checkAccount(payload.account) : await askDave(payload.text);
-    if (data.source) {
-      const labels = showAskSource(data.source);
-      card.insertBefore(el("p", "Source: " + (isAccount ? labels.account : labels.question), "ask-sources"), body);
-    }
-    if (data.ok && data.text != null) {
-      setAnswer(head, body, data.text, isAccount);
-      success = true;
-      if (!isAccount) appendFollowUps(card, label, data, (suggestion) => {
-        if (askBtn.disabled) return;
-        askTextInput.value = suggestion;
-        askQuestionBox.grow();
-        askTextInput.focus();
-        askForm.requestSubmit();
-      });
-    }
-    else setCardError(body, data.error ?? "No answer.");
-  } catch (error) {
-    setCardError(body, error.message);
+    return await askIntoHistory(askHistory, kind, value, { onSource: showAskSource });
   } finally {
     button.disabled = false;
     button.setAttribute("aria-busy", "false");
     labelNode.textContent = original;
   }
-  return success;
 }
 askForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -442,7 +422,7 @@ askForm.addEventListener("submit", (event) => {
   const text = askTextInput.value.trim();
   if (!text) return;
   askQuestionBox.clear();
-  runAskCard("question", text, { text }, askBtn, askBtnLabel, "Asking…").then(ok => {
+  runAskCard("question", text, askBtn, askBtnLabel, "Asking…").then(ok => {
     if (!ok && !askTextInput.value.trim()) {
       askTextInput.value = text;
       askQuestionBox.grow();
@@ -454,7 +434,7 @@ accountForm.addEventListener("submit", (event) => {
   if (checkBtn.disabled) return;
   const account = accountInput.value.trim();
   if (!account) return;
-  runAskCard("account", "Account: " + account, { account }, checkBtn, checkBtnLabel, "Checking…");
+  runAskCard("account", account, checkBtn, checkBtnLabel, "Checking…");
 });
 document
   .querySelectorAll("#ask-dave .chip")
