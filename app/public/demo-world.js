@@ -8,6 +8,7 @@ export const CHAPTERS = [
   { id: "end", number: "05", label: "End of day" },
 ];
 export const DEFAULT_CHAPTER = "post";
+export const landingHash = (hash) => hash || "#agent-payments";
 
 // null: not a demo hash. Otherwise the chapter to show and its canonical hash.
 export function demoRoute(hash) {

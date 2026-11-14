@@ -30,7 +30,7 @@ body.demo-world #demo-cafe :focus-visible { outline: 2px solid var(--dw-green); 
 
 /* Top bar */
 body.demo-world .dw-top {
-  height: 72px; display: grid; grid-template-columns: auto 1fr auto; align-items: stretch; gap: 24px;
+  height: 72px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: stretch; gap: 24px;
   padding: 0 32px; border-bottom: 1px solid var(--dw-line); background: var(--dw-bg);
 }
 body.demo-world .dw-brand { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
@@ -39,8 +39,12 @@ body.demo-world .dw-mode { color: var(--dw-green); }
 body.demo-world #cafe-title { font-size: 16px; white-space: nowrap; }
 body.demo-world .dw-slash { color: var(--dw-muted); font-weight: 400; }
 body.demo-world .dw-accent { color: var(--dw-green); }
-body.demo-world #demo-cafe .dw-exit { color: var(--dw-muted); font-size: 11px; text-decoration: none; }
-body.demo-world #demo-cafe .dw-exit:hover { color: var(--dw-text); text-decoration: underline; }
+body.demo-world #demo-cafe .dw-exit {
+  display: flex; align-items: center; justify-content: center; align-self: stretch;
+  padding: 0 16px; border: 1px solid var(--dw-muted); white-space: nowrap;
+  color: var(--dw-text); font-size: 15px; font-weight: 700; text-decoration: none;
+}
+body.demo-world #demo-cafe .dw-exit:hover { background: var(--dw-surface-2); border-color: var(--dw-green); }
 body.demo-world .dw-chapters { display: flex; justify-content: center; align-items: stretch; gap: 4px; min-width: 0; }
 body.demo-world #demo-cafe .dw-tab {
   display: flex; align-items: center; gap: 8px; padding: 0 14px; white-space: nowrap;
@@ -141,8 +145,9 @@ body.demo-world .ask-widget-panel a { color: var(--dw-green); }
 body.demo-world .ask-widget-disclaimer { display: block; margin: 0; padding-top: 8px; border-top: 1px solid var(--dw-line); font-size: 11px; color: var(--dw-muted); }
 
 /* Narrow screens: tabs drop under the brand; chapters stack. */
-@media (max-width: 1180px) {
-  body.demo-world .dw-top { height: auto; grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; padding: 12px 24px 0; }
+@media (max-width: 1380px) {
+  body.demo-world .dw-top { height: auto; grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 0; padding: 12px 24px 0; }
+  body.demo-world #demo-cafe .dw-exit { height: 48px; }
   body.demo-world .dw-chapters { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; overflow-x: auto; height: 48px; margin: 8px -24px 0; padding: 0 12px; border-top: 1px solid var(--dw-line); }
 }
 @media (max-width: 900px) {
@@ -155,7 +160,9 @@ body.demo-world .ask-widget-disclaimer { display: block; margin: 0; padding-top:
 }
 @media (max-width: 600px) {
   body.demo-world .dw-top { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 0; }
-  body.demo-world .dw-balances { justify-content: space-between; gap: 16px; margin-top: 10px; }
+  body.demo-world #demo-cafe .dw-exit { grid-row: 2; justify-self: start; }
+  body.demo-world .dw-balances { grid-row: 3; justify-content: space-between; gap: 16px; margin-top: 10px; }
+  body.demo-world .dw-chapters { grid-row: 4; }
   body.demo-world .dw-balance { align-items: flex-start; }
   body.demo-world .dw-value { font-size: 17px; }
   body.demo-world .dw-chapters { margin: 10px -16px 0; padding: 0 4px; }

@@ -170,7 +170,14 @@ test("café budget note follows the vault's rolling remaining figure", () => {
 
 // --- Demo world: chapter routing and the separate shell -------------------
 import { readFileSync } from "node:fs";
-import { CHAPTERS, demoRoute, applyDemoWorld } from "./public/demo-world.js";
+import { CHAPTERS, demoRoute, applyDemoWorld, landingHash } from "./public/demo-world.js";
+
+test("the bare URL opens Agent payments on every network", () => {
+  assert.equal(landingHash(""), "#agent-payments");
+  assert.equal(demoRoute(landingHash("")), null);
+  assert.equal(landingHash("#demo"), "#demo");
+  assert.equal(landingHash("#ask-dave"), "#ask-dave");
+});
 
 test("demo hashes route to the five chapters; bare #demo opens the morning post", () => {
   assert.deepEqual(
@@ -218,7 +225,10 @@ test("the demo world hides the product sidebar and header, and restores them out
 
 test("the demo shell links each chapter tab and exits to the product app", () => {
   const html = readFileSync(new URL("./public/index.html", import.meta.url), "utf8");
-  assert.match(html, /<a id="demo-exit"[^>]*href="#agent-payments"[^>]*>Exit demo → Countersign app<\/a>/);
+  assert.match(html, /<a id="demo-exit" class="dw-exit" href="#agent-payments">← Back to Countersign<\/a>/);
+  assert.match(html, /<span class="dw-mode">Local test funds<\/span>/);
+  const css = readFileSync(new URL("./public/demo-cafe.css", import.meta.url), "utf8");
+  assert.match(css, /#demo-cafe \.dw-exit \{[^}]*border: 1px solid var\(--dw-muted\)[^}]*font-size: 15px/s);
   for (const c of CHAPTERS)
     assert.match(html, new RegExp(`href="#demo/${c.id}" data-chapter="${c.id}"><span class="dw-num">${c.number}</span>${c.label}</a>`));
   for (const id of ["demo-cafe", "cafe-feedback", "cafe-actions", "cafe-summary", "cafe-ledger", "cafe-bills", "cafe-progress", "cafe-read-at", "cafe-ask"])

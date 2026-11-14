@@ -1,5 +1,5 @@
 import {enableCafe,refreshCafe,setCafeAsk} from './demo-cafe.js';
-import {demoRoute,applyDemoWorld} from './demo-world.js';
+import {demoRoute,applyDemoWorld,landingHash} from './demo-world.js';
 import {
   $,
   el,
@@ -27,8 +27,10 @@ let askWidgetView = null;
 const cafeEnabled=await enableCafe();
 let lastView = null;
 function navigate() {
-  const demo = cafeEnabled ? demoRoute(location.hash || "#demo") : null;
-  if (demo && location.hash !== demo.hash)
+  const hash = landingHash(location.hash);
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+  const demo = cafeEnabled ? demoRoute(hash) : null;
+  if (demo && hash !== demo.hash)
     history.replaceState(null, "", demo.hash);
   applyDemoWorld(document, demo ? demo.chapter : null);
   const view =
