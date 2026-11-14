@@ -2,7 +2,7 @@
 
 ## Countersign in 30 seconds
 
-Countersign is a safety layer between an AI agent and a business's money. The agent can only ask to pay an invoice; a NEAR smart-contract vault decides whether money moves. It rejects altered invoices by checking the supplier's signature, unapproved payees, duplicate bills, over-budget payments, and a second payment after a crash.
+Countersign is a safety layer between an AI agent and a business's money. The agent can only ask to pay an invoice; a NEAR smart-contract vault decides whether money moves. On the signed-invoice path, it checks the supplier's signature and rejects altered invoices, unapproved payees, duplicate bills, over-budget payments, and repeat execution after a crash.
 
 ### What's deployed and what runs on your machine
 
@@ -92,7 +92,7 @@ Ask Dave also runs in the desk: open http://127.0.0.1:4417/#ask-dave (needs a lo
 ## Known limitations
 
 - A merchant in the policy without a pinned signing key can be paid without a supplier signature. The payment still goes only to the pinned payee, within the per-payment cap and the daily budget.
-- Renewing the policy invalidates bills that were approved but not yet paid. The owner cancels them and submits them again.
+- Renewing the policy invalidates policy approvals that have not been dispatched; in-flight payments keep their holds and settlement tracking. The owner can cancel eligible old approvals, but cancelled invoice and supplier bill IDs stay used: the same signed bill cannot simply be submitted again.
 - Outside weekly services, a supplier who signs the same real bill under two different bill IDs can be paid twice.
 - The public testnet vault's receipts are historical. Its policy expired on 10 November 2026.
 - The machine running the agent host holds the owner and executor keys and is trusted.
