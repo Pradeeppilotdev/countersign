@@ -1,5 +1,6 @@
-/* The café shares the product's colours and controls. Payment decisions stay
-   in the existing flow; only demo routes use this layout. */
+/* Visual reference: Tessel Finance (framer.com/marketplace/templates/tessel-finance/).
+   Original layout using shared Countersign colours, controls and icons.
+   Payment decisions stay in the existing flow; only demo routes use this layout. */
 body.demo-world {
   --dw-bg: var(--canvas); --dw-surface: var(--surface); --dw-surface-2: #f1f5f1;
   --dw-line: #dde4df; --dw-text: var(--ink); --dw-muted: #62736f;
@@ -202,15 +203,22 @@ body.demo-world .dw-row-actions .button { min-height: 36px !important; font-size
 /* Daily summary: totals, receipts and exceptions in distinct cards. */
 body.demo-world .dw-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 24px 0 28px; }
 body.demo-world .dw-stat { padding: 22px; min-width: 0; border: 1px solid var(--dw-line); border-radius: 16px; background: white; }
-body.demo-world .dw-stat:first-child { background: #eaf4ed; border-color: #c8dfd0; }
-body.demo-world .dw-stat:first-child strong { color: var(--dw-green); }
-body.demo-world .dw-stat strong { display: block; font-size: 23px; font-weight: 750; line-height: 1.3; letter-spacing: -.6px; overflow-wrap: anywhere; }
-body.demo-world .dw-stat:last-child strong { font-size: 19px; letter-spacing: -.4px; }
-body.demo-world .dw-stat span { display: block; font-size: 12px; margin-top: 5px; }
+body.demo-world .dw-stat-label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dw-muted); }
+body.demo-world .dw-stat-label .icon { width: 15px; height: 15px; flex-shrink: 0; }
+body.demo-world .dw-stat strong { display: block; margin-top: 9px; font-size: 32px; font-weight: 700; line-height: 1.3; letter-spacing: -.8px; overflow-wrap: anywhere; }
+body.demo-world .dw-stat:last-child strong { font-size: 24px; letter-spacing: -.4px; }
+body.demo-world .dw-stat-detail { display: block; font-size: 12px; margin-top: 6px; color: var(--dw-muted); }
+body.demo-world .dw-stat:first-child { background: var(--teal-dark); border-color: var(--teal-dark); }
+body.demo-world .dw-stat:first-child strong { color: #fff; }
+body.demo-world .dw-stat:first-child .dw-stat-label, body.demo-world .dw-stat:first-child .dw-stat-detail { color: #cde5db; }
 body.demo-world .dw-end { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 body.demo-world #cafe-read-at { font-size: 11px; padding-bottom: 6px; }
 body.demo-world .dw-ledger-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
 body.demo-world #demo-cafe .dw-ledger-links .dw-link { color: var(--dw-green); font-size: 11px; font-weight: 650; }
+body.demo-world .dw-ledger-row:not(:last-child) { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; }
+body.demo-world .dw-supplier-mark { grid-column: 1; grid-row: 1 / 4; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--dw-line); border-radius: 10px; background: #f7f8f3; color: var(--dw-green); }
+body.demo-world .dw-supplier-mark .icon { width: 17px; height: 17px; }
+body.demo-world .dw-ledger-row > .dw-row-head, body.demo-world .dw-ledger-row > p, body.demo-world .dw-ledger-row > .dw-ledger-links { grid-column: 2; }
 body.demo-world .dw-ledger-row:last-child { margin-top: 18px; padding: 14px; border-radius: 10px; background: #f4f5ef; }
 body.demo-world .dw-ledger-row:last-child .dw-row-head { display: block; }
 body.demo-world .dw-ledger-row:last-child strong { display: block; font-size: 12px; }
@@ -259,9 +267,9 @@ body.demo-world .ask-widget-panel { font-family: var(--dw-sans); }
   body.demo-world .dw-fact { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   body.demo-world .dw-stats { gap: 10px; margin: 22px 0; }
   body.demo-world .dw-stat { padding: 16px; border-radius: 12px; }
-  body.demo-world .dw-stat strong { font-size: 19px; }
-  body.demo-world .dw-stat:last-child strong { font-size: 16px; }
-  body.demo-world .dw-stat span { font-size: 11px; }
+  body.demo-world .dw-stat strong { font-size: 24px; }
+  body.demo-world .dw-stat:last-child strong { font-size: 18px; }
+  body.demo-world .dw-stat-label, body.demo-world .dw-stat-detail { font-size: 11px; }
   body.demo-world .dw-row-head { gap: 8px; }
   body.demo-world .dw-row-head strong { font-size: 13px; }
   body.demo-world #dw-chapter-pay > .dw-main, body.demo-world #dw-chapter-pay > .dw-queue-col,

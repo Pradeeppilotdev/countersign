@@ -291,7 +291,7 @@ test('End of day totals match the ledger and list what was stopped and why', asy
  const totals=ui.endTotals(STATE,ui.resultOrder(STATE,STATE.mail.invoices));
  const ledgerSum=STATE.suppliers.reduce((s:bigint,x:any)=>s+BigInt(x.received),0n).toString();
  assert.deepEqual(totals,{paid:ledgerSum,suppliers:2,stopped:1,rejected:1,vault_start:near('5'),vault_now:near('4.2')});
- assert.deepEqual(get('#dw-end-stats').children.map(c=>c.textContent),['Paid 0.8 NEARto 2 suppliers','Stopped 1bill','Rejected 1at intake','Vault: 5 → 4.2 NEARsince the first run today']);
+ assert.deepEqual(get('#dw-end-stats').children.map(c=>c.textContent),['Paid0.8 NEARto 2 suppliers','Stopped1bill','Rejected1at intake','Vault5 → 4.2 NEARsince the first run today']);
  assert.match(get('#cafe-ledger').textContent,/Bean Co0\.4 NEAR1 bill paid · beans\.test\.nearBEANS-01 · 0\.4 NEAR/);
  assert.ok(byText(get('#cafe-ledger'),'MILK-01 · 0.4 NEAR'),'each paid invoice opens the viewer');
  assert.deepEqual(rowTitles(get('#dw-end-stopped')),['Bean Co · BEANS-03REJECTED','Pastry Co · PASTRY-02STOPPED']);
@@ -305,6 +305,6 @@ test('End of day totals match the ledger and list what was stopped and why', asy
 test('older café records without a starting balance show only the current balance',async t=>{
  const {get,ui}=await loadCafe(t,'unknown-start');
  assert.equal(ui.endTotals(STATE,ui.resultOrder(STATE,STATE.mail.invoices)).vault_start,null);
- assert.match(get('#dw-end-stats').textContent,/Vault: 4\.2 NEARcurrent available balance/);
+ assert.match(get('#dw-end-stats').textContent,/Vault4\.2 NEARcurrent available balance/);
  assert.doesNotMatch(get('#dw-end-stats').textContent,/→|since the first run/);
 });

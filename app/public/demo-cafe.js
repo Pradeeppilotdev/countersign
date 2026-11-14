@@ -1,4 +1,4 @@
-import {$,el,api,button,notice} from './components.js';
+import {$,el,api,button,notice,icon} from './components.js';
 import {formatUnits,parseUnits,cafeBudgetSpent} from './state.js';
 import {invoiceDocument,shortBill,dueLine,SIGNATURE_SENTENCE} from './invoice-doc.js';
 let enabled=false,busy=false,ask=null,askBill=null,askAccount=null,selected=null,opener=null;
@@ -236,16 +236,22 @@ export function endTotals(state,ordered){
 function renderEnd(state,ordered){
  const totals=endTotals(state,ordered),stats=$('#dw-end-stats'),ledger=$('#cafe-ledger'),stopped=$('#dw-end-stopped');
  stats.replaceChildren();stopped.replaceChildren();
- const stat=(value,label)=>{const item=el('div','','dw-stat');item.append(el('strong',value,'dw-mono'),el('span',label,'dw-muted'));stats.append(item);};
- stat(`Paid ${formatUnits(totals.paid)} NEAR`,`to ${totals.suppliers} ${totals.suppliers===1?'supplier':'suppliers'}`);
- stat(`Stopped ${totals.stopped}`,totals.stopped===1?'bill':'bills');
- stat(`Rejected ${totals.rejected}`,'at intake');
- if(totals.vault_start===null)stat(`Vault: ${formatUnits(totals.vault_now)} NEAR`,'current available balance');
- else stat(`Vault: ${formatUnits(totals.vault_start)} → ${formatUnits(totals.vault_now)} NEAR`,'since the first run today');
+ const stat=(label,value,detail,iconName)=>{
+  const item=el('div','','dw-stat'),heading=el('span','','dw-stat-label');
+  heading.append(icon(iconName),el('span',label));
+  item.append(heading,el('strong',value,'dw-mono'),el('span',detail,'dw-stat-detail'));
+  stats.append(item);
+ };
+ stat('Paid',`${formatUnits(totals.paid)} NEAR`,`to ${totals.suppliers} ${totals.suppliers===1?'supplier':'suppliers'}`,'check-circle');
+ stat('Stopped',String(totals.stopped),totals.stopped===1?'bill':'bills','shield');
+ stat('Rejected',String(totals.rejected),'at intake','alert');
+ if(totals.vault_start===null)stat('Vault',`${formatUnits(totals.vault_now)} NEAR`,'current available balance','wallet');
+ else stat('Vault',`${formatUnits(totals.vault_start)} → ${formatUnits(totals.vault_now)} NEAR`,'since the first run today','wallet');
  for(const supplier of state.suppliers){
   const item=el('div','','dw-row dw-ledger-row'),head=el('div','','dw-row-head');
   head.append(el('strong',supplier.name),el('strong',formatUnits(supplier.received)+' NEAR','dw-mono dw-green'));
-  item.append(head,el('p',supplier.paid_count+(supplier.paid_count===1?' bill paid':' bills paid')+' · '+supplier.payee,'dw-muted'));
+  const mark=el('span','','dw-supplier-mark');mark.setAttribute('aria-hidden','true');mark.append(icon('store'));
+  item.append(mark,head,el('p',supplier.paid_count+(supplier.paid_count===1?' bill paid':' bills paid')+' · '+supplier.payee,'dw-muted'));
   const links=el('div','','dw-ledger-links');
   for(const receipt of supplier.receipts){
    const invoice=invoiceFor(receipt.invoice_id,{id:receipt.invoice_id,merchant:supplier.id,supplier:supplier.name,payee:supplier.payee,amount:receipt.amount,expires_at:null,week:null});
