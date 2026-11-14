@@ -1,8 +1,40 @@
 # Countersign
 
-Countersign pays merchant invoices from a NEAR vault. An agent can request payment for an invoice ID. For a supplier enrolled in weekly billing, even two valid signatures can authorize only one payment for the same service week.
+## Countersign in 30 seconds
 
-**[Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/)** — explore the weekly crash/retry and a separate public-testnet café run, with original records and explorer receipts. **Recorded demo: no new payments, wallet connections or live AI calls.**
+Countersign is a safety layer between an AI agent and a business's money. The agent can only ask to pay an invoice; a NEAR smart-contract vault decides whether money moves. It rejects altered invoices by checking the supplier's signature, unapproved payees, duplicate bills, over-budget payments, and a second payment after a crash.
+
+### What's deployed and what runs on your machine
+
+- **Deployed:** The vault is a Rust smart contract on NEAR testnet at `countersign-vault-7d8cc5331e.testnet`. Testnet is NEAR's public testing network; its [payment receipts are public](#live-on-testnet).
+- **On your machine:** The agent, desk website, Ask Dave assistant, and MCP server are self-hosted. The payment host keeps signing keys there, so each business runs its own copy, like a wallet. By default, they use a disposable local NEAR chain, so trying them needs no real money.
+
+### Three ways to try it
+
+1. **No install:** [Open the recorded Demo café](https://pradeeppilotdev.github.io/countersign/) to watch a replay without making payments.
+2. **Website:** After the [local setup](docs/local-guide.md#quick-start), run `COUNTERSIGN_PORT=4417 npm run dev` and open `http://127.0.0.1:4417/#demo` for a one-click café run: suppliers send signed bills, and each bill shows PAID or STOPPED with its reason. To pay your own signed bills, set up an agent vault with `npm run agent:desk -- init` (plus a policy and a pinned supplier key, see [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk)), then use `http://127.0.0.1:4417/#agent-payments`.
+3. **Terminal:** After [local setup](docs/local-guide.md#quick-start), run the signed demo from the repo root. It creates a disposable local vault, pins a supplier key, and writes `signed-invoice.json` (ID `SIGNED-001`) in the printed **Disposable verification records** directory. It imports and pays that bill once, then stops the chain. Set `DEMO_DIR` to the printed directory to inspect the same bill; the CLI restarts its local chain. Repeating import and run does not pay it again.
+
+```sh
+npm run agent:signed:demo
+DEMO_DIR=/absolute/path/printed/by/the/demo
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- import "$DEMO_DIR/signed-invoice.json"
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- run SIGNED-001
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- ask --check "$DEMO_DIR/signed-invoice.json"
+COUNTERSIGN_AGENT_DIR="$DEMO_DIR" npm run agent:desk -- ask --facts
+```
+
+`ask --facts` prints the vault's verified records and needs no key. A plain-English question (`ask "How is my agent doing?"`) needs `NEAR_AI_API_KEY` and `NEAR_AI_MODEL` set for NEAR AI Cloud.
+
+The demo sets a 0.1 NEAR per-bill cap and a 0.15 NEAR rolling budget for 60 minutes. For a new bill in your own vault, see [merchant-signed invoices](docs/local-guide.md#merchant-signed-invoices). To connect any MCP-compatible agent (one that can use Model Context Protocol tools), see [MCP setup](mcp/README.md).
+
+### The parts
+
+- **Vault contract + signed invoices:** The Rust vault checks each bill's supplier signature, payee, limits, and payment history.
+- **Agent:** The optional NEAR AI Cloud adapter has one payment tool: `request_payment` for an invoice ID.
+- **Desk website:** A local page for importing bills, requesting payment, and reading receipts.
+- **Ask Dave:** A read-only assistant whose financial claims are checked against the vault's records.
+- **MCP server:** A local tool server that lets an MCP-compatible agent request payment by invoice ID.
 
 ## Two signed bills, one payment
 
@@ -53,9 +85,17 @@ The demo executes native NEAR transfers on a disposable local chain. It uses fix
 
 [Local payment desk, contract and operator guide](docs/local-guide.md)
 
-The local desk opens on Demo café. Choose **Agent payments**, or visit http://127.0.0.1:4317/#agent-payments, to import a supplier's signed bill, request payment and read the receipt (needs a local agent vault with a policy and a pinned supplier key). The page calls the same functions as `agent:desk import`, `run` and `resume` and adds no payment logic. The manual payment desk and dry-run 1Click lab are under **Tools**. See [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk).
+The local desk opens on **Agent payments** at http://127.0.0.1:4417/#agent-payments (with the app started on port 4417 as above) on every network. Choose **Demo café** from the sidebar to try the demo. In Agent payments, import a supplier's signed bill, request payment and read the receipt (needs a local agent vault with a policy and a pinned supplier key). The page calls the same functions as `agent:desk import`, `run` and `resume` and adds no payment logic. The manual payment desk and dry-run 1Click lab are under **Tools**. See [Agent payments in the desk](docs/local-guide.md#agent-payments-in-the-desk).
 
-Ask Dave also runs in the desk: open http://127.0.0.1:4317/#ask-dave (needs a local agent vault: npm run agent:desk -- init). Its questions read `work/agent-vault` (or `COUNTERSIGN_AGENT_DIR`), while the manual payment desk uses `work/local-vault` (or `COUNTERSIGN_SANDBOX_DIR`). The page and each answer identify the source account. Standalone account checks show their selected network separately; questions always read the local agent vault.
+Ask Dave also runs in the desk: open http://127.0.0.1:4417/#ask-dave (needs a local agent vault: npm run agent:desk -- init). Its questions read `work/agent-vault` (or `COUNTERSIGN_AGENT_DIR`), while the manual payment desk uses `work/local-vault` (or `COUNTERSIGN_SANDBOX_DIR`). The page and each answer identify the source account. Standalone account checks show their selected network separately; questions always read the local agent vault.
+
+## Known limitations
+
+- A merchant in the policy without a pinned signing key can be paid without a supplier signature. The payment still goes only to the pinned payee, within the per-payment cap and the daily budget.
+- Renewing the policy invalidates bills that were approved but not yet paid. The owner cancels them and submits them again.
+- Outside weekly services, a supplier who signs the same real bill under two different bill IDs can be paid twice.
+- The public testnet vault's receipts are historical. Its policy expired on 10 November 2026.
+- The machine running the agent host holds the owner and executor keys and is trusted.
 
 ## Public testnet vault
 

@@ -47,8 +47,9 @@ for(const failedOperation of ['refresh','setup'])test(`café refresh replaces a 
  finish(Response.json({ok:true,state:{ready:true,vault:'cafe.test.near',available:'4960000000000000000000000',policy:{per_payment_near:'0.5',rolling_24h_limit_near:'1.2',expires_at:Date.now()+3600000},suppliers:[],scam:{payee:'scam.test.near',received:'0'},bills:[],rejected:[],read_at:new Date().toISOString()}}));
  await refreshing;
  assert.match(get('#cafe-summary').textContent,/4\.96 test NEAR available/);
- assert.equal(feedback.textContent,'Ledger refreshed.');
- assert.equal(feedback.children[0].className,'notice success');
+ // The demo shows a status line only for errors: a good read clears it.
+ assert.equal(feedback.textContent,'');
+ assert.equal(feedback.children.length,0);
  assert.equal(get('#demo-cafe').attributes['aria-busy'],'false');
  respond=async()=>Response.json({ok:false,error:'Ledger is temporarily unavailable'});
  await ui.refreshCafe();

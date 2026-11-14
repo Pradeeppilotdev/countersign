@@ -1,5 +1,5 @@
 import {createDemoRoute} from './demo-route.ts';
-import {readCafe,setupCafe,receiveCafe,payCafe,topUpCafe,resetCafe} from '../agent/demo-cafe.ts';
+import {readCafe,setupCafe,receiveCafe,payCafe,payCafeBill,topUpCafe,walletFaucetCafe,depositCafe,setRulesCafe,renewRulesCafe,retryCafeBill,resetCafe} from '../agent/demo-cafe.ts';
 import {publicError,validateDeskPolicy} from './errors.ts';
 import { SandboxDesk } from './sandbox.ts';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +20,7 @@ const assets: Record<string,[string,string]>={
  '/sandbox.js':['public/sandbox.js','text/javascript'], '/style.css':['public/style.css','text/css'],
  '/components.js':['public/components.js','text/javascript'], '/state.js':['public/state.js','text/javascript'],
  '/agent-payments.js':['public/agent-payments.js','text/javascript'], '/agent-payments.css':['public/agent-payments.css','text/css'],
- '/demo-cafe.js':['public/demo-cafe.js','text/javascript'], '/demo-cafe.css':['public/demo-cafe.css','text/css'],
+ '/demo-cafe.js':['public/demo-cafe.js','text/javascript'], '/demo-world.js':['public/demo-world.js','text/javascript'], '/invoice-doc.js':['public/invoice-doc.js','text/javascript'], '/demo-cafe.css':['public/demo-cafe.css','text/css'],
  '/ask-source.js':['public/ask-source.js','text/javascript'],
  '/ask-shared.js':['public/ask-shared.js','text/javascript'], '/ask-widget.js':['public/ask-widget.js','text/javascript'], '/ask-suggest.js':['public/ask-suggest.js','text/javascript'],
  '/ask-widget.css':['public/ask-widget.css','text/css'],
@@ -32,7 +32,7 @@ const paymentDir=resolve(process.env.COUNTERSIGN_SANDBOX_DIR ?? process.env.AEGI
 const agentDir=resolve(process.env.COUNTERSIGN_AGENT_DIR??fileURLToPath(new URL('../work/agent-vault/',import.meta.url)));
 const agentRoute=createAgentRoute({state:()=>readAgentState(agentDir),importBill:invoice=>importAgentBill(agentDir,invoice),
  run:(id,live)=>runAgentBill(agentDir,id,live),resume:id=>resumeAgentBill(agentDir,id),modelReady:liveAgentModelReady,error:agentWebError});
-const demoRoute=createDemoRoute({network:()=>process.env.COUNTERSIGN_NETWORK,state:()=>readCafe(agentDir),setup:()=>setupCafe(agentDir),receive:()=>receiveCafe(agentDir),pay:(live,progress)=>payCafe(agentDir,live,progress),faucet:()=>topUpCafe(agentDir),reset:()=>resetCafe(agentDir),modelReady:liveAgentModelReady});
+const demoRoute=createDemoRoute({network:()=>process.env.COUNTERSIGN_NETWORK,state:()=>readCafe(agentDir),setup:()=>setupCafe(agentDir),receive:()=>receiveCafe(agentDir),pay:(live,progress)=>payCafe(agentDir,live,progress),payOne:id=>payCafeBill(agentDir,id),faucet:()=>topUpCafe(agentDir),walletFaucet:()=>walletFaucetCafe(agentDir),deposit:amount=>depositCafe(agentDir,amount),setRules:rules=>setRulesCafe(agentDir,rules),renewRules:()=>renewRulesCafe(agentDir),retry:id=>retryCafeBill(agentDir,id),reset:()=>resetCafe(agentDir),modelReady:liveAgentModelReady});
 let agentMutation=false;
 const source=()=>askSource(agentDir,paymentDir,process.env.COUNTERSIGN_NETWORK);
 const sandbox=new SandboxDesk(paymentDir);
