@@ -1,0 +1,56 @@
+name: Linux shutdown preflight
+
+on:
+  push:
+    branches: [codex/linux-shutdown]
+
+permissions:
+  contents: read
+
+jobs:
+  node24-shutdown:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.22.2'
+          cache: npm
+      - name: Install and build the local payment harness
+        run: |
+          npm ci --ignore-scripts
+          rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
+          RUSTUP_TOOLCHAIN=1.99.1 cargo build --locked --manifest-path contract/Cargo.toml --target wasm32-unknown-unknown --release
+          mkdir -p work/sandbox-bin
+          curl --fail --silent --show-error --location --retry 3 \
+            https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/2.14.0/near-sandbox.tar.gz \
+            --output work/near-sandbox.tar.gz
+          echo 'a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691  work/near-sandbox.tar.gz' | sha256sum --check
+          tar -xzf work/near-sandbox.tar.gz --strip-components=1 -C work/sandbox-bin
+          chmod +x work/sandbox-bin/near-sandbox
+      - name: Confirm the old launch command reproduces the Linux failure
+        run: |
+          cp package.json "$RUNNER_TEMP/fixed-package.json"
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); p.scripts.dev=p.scripts.dev.replace(/^exec /,""); fs.writeFileSync("package.json",JSON.stringify(p,null,2));'
+          set +e
+          npm run test:restart > "$RUNNER_TEMP/shutdown-before.log" 2>&1
+          before_status=$?
+          set -e
+          cp "$RUNNER_TEMP/fixed-package.json" package.json
+          test "$before_status" -ne 0
+          grep -F "'SIGTERM' !== null" "$RUNNER_TEMP/shutdown-before.log"
+          echo 'PASS: the old shell-based launch reproduces the same failure on Linux/Node 24.'
+      - name: Verify the fixed launch drains requests and preserves saved data
+        run: npm run test:restart | tee "$RUNNER_TEMP/shutdown-after.log"
+      - name: Verify the existing fast regression checks
+        run: node --disable-warning=ExperimentalWarning --test agent/*.test.ts executor/*.test.ts app/*.test.ts oneclick/*.test.ts merchant/*.test.ts
+      - name: Save only verification logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-shutdown-preflight
+          path: ${{ runner.temp }}/shutdown-*.log
+          retention-days: 7
