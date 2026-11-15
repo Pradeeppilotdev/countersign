@@ -9,7 +9,7 @@
     "test:sandbox": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 integration/*.test.ts",
     "test:oneclick": "node --disable-warning=ExperimentalWarning --test oneclick/*.test.ts",
     "oneclick": "node --disable-warning=ExperimentalWarning oneclick/cli.ts",
-    "dev": "node --disable-warning=ExperimentalWarning app/server.ts",
+    "dev": "exec node --disable-warning=ExperimentalWarning app/server.ts",
     "test:app": "node --disable-warning=ExperimentalWarning --test app/*.test.ts",
     "test:agent": "node --disable-warning=ExperimentalWarning --test agent/*.test.ts",
     "test:agent:sandbox": "node --disable-warning=ExperimentalWarning --test integration/agent.test.ts",

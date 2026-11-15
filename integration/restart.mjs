@@ -49,7 +49,9 @@ async function stopDuringRequest(){
   req=request(base+'/api/sandbox/authorize',{method:'POST',headers:{Origin:base,'Content-Type':'application/json',Expect:'100-continue','Content-Length':Buffer.byteLength(body)}},res=>{
    let value='';res.on('data',d=>value+=d);res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(value)}));
   });
-  req.on('error',reject);req.on('continue',continued.resolve);req.flushHeaders();
+  req.on('error',error=>{continued.reject(error);reject(error);});
+  req.setTimeout(30000,()=>req.destroy(Error('Shutdown request timed out')));
+  req.on('continue',continued.resolve);req.flushHeaders();
  });
  try{
   await continued.promise;
@@ -69,7 +71,12 @@ async function stopDuringRequest(){
   assert.deepEqual(await exited(p),{code:0,signal:null},p.log);child=null;
   assert.doesNotMatch(p.log,/ERELEASED|Lock is already released|shutdown failed/);
   assert.equal(existsSync(directory+'.lock'),false);
- }finally{req.destroy();}
+ }finally{
+  req.destroy();
+  // An assertion failure also aborts the held request. Observe that rejection
+  // so a secondary socket error cannot hide the original shutdown failure.
+  await response.catch(()=>{});
+ }
 }
 function attempts(){
  const db=new DatabaseSync(join(directory,'attempts.db'),{readOnly:true});
