@@ -44,7 +44,7 @@ The demo sets a 0.1 NEAR per-bill cap and a 0.15 NEAR rolling budget for 60 minu
 
 [![Recorded weekly payment. The merchant receives 0.04 local test NEAR and both retries add zero.](docs/demo/weekly-payment-preview.gif)](docs/demo/weekly-payment.mp4?raw=1)
 
-[90-second narrated replay of the terminal run (MP4)](docs/demo/weekly-payment.mp4?raw=1) · [Attack results and recorded balances](docs/attack-results/README.md)
+[90-second narrated replay of the terminal run (MP4)](docs/demo/weekly-payment.mp4?raw=1) · [Attack results and recorded balances](docs/attack-results/README.md) · [Original demo post](https://x.com/Pradeeppilot2k5/status/2121584397363327332) · [X: @Counter_sign_](https://x.com/Counter_sign_)
 
 **Try it from an agent.** Connect a local MCP client to a disposable café vault, request both signed bills by ID, and inspect the vault receipt. [MCP setup and crash test](mcp/README.md)
 
