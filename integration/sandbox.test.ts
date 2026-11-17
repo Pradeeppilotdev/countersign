@@ -3,11 +3,11 @@ import {deployVault} from '../app/deploy-vault.ts';
 import { vaultAdapters } from '../executor/vault.ts';
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { Worker } from 'near-workspaces';
+import { LocalSandboxWorker } from '../app/sandbox-worker.ts';
 import { Executor, commitment } from '../executor/core.ts';
 
 test('vault enforces authorization, budget, transfer and replay protection', { timeout: 120_000 }, async () => {
- const worker = await Worker.init();
+ const worker = await LocalSandboxWorker.init({network:'sandbox',rm:true});
  try {
   const root = worker.rootAccount;
   const owner = await root.createSubAccount('owner');

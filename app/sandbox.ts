@@ -1,7 +1,7 @@
 import {requireUpgradeVerified} from './upgrade-state.ts';
 import {readVaultControls} from './vault-controls.ts';
 import {deployVault} from './deploy-vault.ts';
-import { SandboxWorker } from 'near-workspaces';
+import { LocalSandboxWorker } from './sandbox-worker.ts';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
@@ -42,7 +42,7 @@ export class SandboxDesk {
    if(!existsSync(binary)||!existsSync(wasm))throw Error('Local sandbox binary or compiled contract is missing.');
    process.env.NEAR_SANDBOX_BIN_PATH=fileURLToPath(new URL('./sandbox-launcher/near-sandbox',import.meta.url));process.env.NEAR_SANDBOX_BINARY_PATH=fileURLToPath(new URL('./sandbox-launcher/',import.meta.url));
    // Explicit class creates a fresh local chain; no network selector, external URL or user keys.
-   this.worker=this.directory?await localChain(this.directory):await SandboxWorker.init({network:'sandbox',rm:true});
+   this.worker=this.directory?await localChain(this.directory):await LocalSandboxWorker.init({network:'sandbox',rm:true});
    const rpc=new URL(this.worker.provider.connection.url);
    if(rpc.hostname!=='127.0.0.1'||rpc.protocol!=='http:')throw Error('Non-local RPC rejected.');
    if(this.directory&&existsSync(join(this.directory,'desk.json'))){
